@@ -1,11 +1,58 @@
 import { Vector2 } from 'three';
 import type { Material, WebGLProgramParametersWithUniforms } from 'three';
 
-// Matches PS1Pipeline's default 320x240 render target. If you drive the
-// pipeline at the 480x360 setting, update the uniform after compile:
-// `material.userData.ps1Shader?.uniforms.uSnapRes.value.set(480, 360)`.
-const DEFAULT_SNAP_RES_X = 320;
-const DEFAULT_SNAP_RES_Y = 240;
+// ---------------------------------------------------------------------------
+// Snap-resolution registry
+//
+// `PS1Pipeline`'s render-target size (320x240 or 480x360, via `opts.width`)
+// and this module's `uSnapRes` vertex-snap uniform must agree — vertex
+// snapping quantizes to a grid, and if that grid doesn't match the actual
+// low-res render target, geometry snaps to the wrong resolution. Rather than
+// hardcode the same literal in two files, `PS1Pipeline`'s constructor calls
+// `setSnapResolution()` with its chosen size, making it the single source of
+// truth. See `src/ps1/README.md` for the full writeup.
+// ---------------------------------------------------------------------------
+
+let defaultSnapResX = 320;
+let defaultSnapResY = 240;
+
+// Materials patched so far, so `setSnapResolution()` can retroactively fix up
+// ones that already compiled. WeakRefs so the registry never keeps a
+// disposed material alive.
+const patchedMaterials = new Set<WeakRef<Material>>();
+
+/**
+ * Sets the snap resolution used by vertex snapping (`uSnapRes`):
+ *
+ * 1. Updates the default applied to any material `patchMaterial()`-ed after
+ *    this call.
+ * 2. Retroactively updates the `uSnapRes` uniform on every material that was
+ *    already patched *and* has already compiled at least once (i.e. has a
+ *    `userData.ps1Shader` stashed — see `patchMaterial` below). Materials
+ *    patched but not yet compiled will simply pick up the new default the
+ *    first time they compile.
+ *
+ * `PS1Pipeline`'s constructor calls this with its own render-target size, so
+ * as long as patched materials share a `PS1Pipeline` instance (the normal
+ * case), `uSnapRes` can never silently drift out of sync with the target
+ * resolution actually being rendered.
+ */
+export function setSnapResolution(width: number, height: number): void {
+  defaultSnapResX = width;
+  defaultSnapResY = height;
+
+  for (const ref of patchedMaterials) {
+    const mat = ref.deref();
+    if (!mat) {
+      // Material was garbage-collected; stop tracking it.
+      patchedMaterials.delete(ref);
+      continue;
+    }
+    const shader = mat.userData.ps1Shader as WebGLProgramParametersWithUniforms | undefined;
+    const uSnapRes = shader?.uniforms.uSnapRes as { value: Vector2 } | undefined;
+    uSnapRes?.value.set(width, height);
+  }
+}
 
 /**
  * Patches a three.js Material's shader (via `onBeforeCompile`) with two of
@@ -13,7 +60,9 @@ const DEFAULT_SNAP_RES_Y = 240;
  *
  * 1. Vertex snapping — quantizes clip-space vertex positions to a coarse
  *    grid (`uSnapRes`), producing the wobble/jitter of the PS1's lack of
- *    sub-pixel-precision vertex transforms.
+ *    sub-pixel-precision vertex transforms. `uSnapRes` defaults to whatever
+ *    `setSnapResolution()` was last called with (see above); `PS1Pipeline`
+ *    keeps this in sync with its own render-target size.
  * 2. Affine UVs — recomputes an unperspective-corrected UV in the fragment
  *    shader, producing the classic warped-texture look of the PS1's affine
  *    (non-perspective-correct) texture mapping. Only wired into the base
@@ -21,8 +70,10 @@ const DEFAULT_SNAP_RES_Y = 240;
  *    kit-bashed environment art this pipeline targets.
  */
 export function patchMaterial(mat: Material): void {
+  patchedMaterials.add(new WeakRef(mat));
+
   mat.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
-    shader.uniforms.uSnapRes = { value: new Vector2(DEFAULT_SNAP_RES_X, DEFAULT_SNAP_RES_Y) };
+    shader.uniforms.uSnapRes = { value: new Vector2(defaultSnapResX, defaultSnapResY) };
 
     shader.vertexShader = shader.vertexShader
       .replace(
@@ -60,16 +111,36 @@ export function patchMaterial(mat: Material): void {
     );
 
     // `shader.map` reflects whether this material has a diffuse texture
-    // bound for this compile; only rewrite the map UV when it's relevant.
+    // bound for this compile; only rewrite the map sampling when relevant.
+    //
+    // NOTE: `vMapUv` (declared by three's `uv_pars_fragment` chunk) is a
+    // varying, and varyings are read-only in fragment shaders — assigning to
+    // it (`vMapUv = uv;`) is a hard GLSL compile error ("'assign' : l-value
+    // required"), not merely bad style. Instead, we replace the whole
+    // `#include <map_fragment>` chunk with a copy of three's own
+    // `map_fragment.glsl.js` (r183) that samples `map` with our local
+    // affine-corrected `uv` instead of `vMapUv`. Everything else (the
+    // `DECODE_VIDEO_TEXTURE` handling, multiplying into `diffuseColor`) is
+    // reproduced verbatim so behavior otherwise matches stock three.
     if (shader.map) {
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <map_fragment>',
-        ['  vMapUv = uv;', '  #include <map_fragment>'].join('\n'),
+        [
+          '#ifdef USE_MAP',
+          '  vec4 sampledDiffuseColor = texture2D( map, uv );',
+          '  #ifdef DECODE_VIDEO_TEXTURE',
+          '    sampledDiffuseColor = sRGBTransferEOTF( sampledDiffuseColor );',
+          '  #endif',
+          '  diffuseColor *= sampledDiffuseColor;',
+          '#endif',
+        ].join('\n'),
       );
     }
 
     // Standard three.js onBeforeCompile idiom: stash the compiled shader so
-    // callers can reach the uniforms afterwards (e.g. to override uSnapRes).
+    // callers can reach the uniforms afterwards (e.g. `setSnapResolution`
+    // above, which uses this to retroactively fix up already-compiled
+    // materials).
     mat.userData.ps1Shader = shader;
   };
 

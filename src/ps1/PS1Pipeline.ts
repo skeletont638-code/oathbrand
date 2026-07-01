@@ -16,6 +16,7 @@ import {
 } from 'three';
 import type { IUniform, Texture } from 'three';
 import { bayer4x4 } from './bayer';
+import { setSnapResolution } from './patchMaterial';
 import { UPSCALE_FRAGMENT_SHADER, UPSCALE_VERTEX_SHADER } from './upscale.frag';
 
 export interface PS1PipelineOptions {
@@ -97,6 +98,13 @@ export class PS1Pipeline {
       magFilter: NearestFilter,
       depthBuffer: true,
     });
+
+    // Single source of truth for `patchMaterial()`'s vertex-snap grid: keeps
+    // `uSnapRes` in sync with this pipeline's actual render-target size,
+    // both for materials patched after this point and (retroactively) for
+    // any patched earlier. See `src/ps1/patchMaterial.ts` and
+    // `src/ps1/README.md`.
+    setSnapResolution(targetWidth, targetHeight);
 
     this.uniforms = {
       tDiffuse: { value: this.target.texture },

@@ -62,6 +62,22 @@ The shader samples a tiny baked `DataTexture` of `bayer4x4()`'s 16
 thresholds (tiled via `RepeatWrapping`) and does
 `floor(color * 31 + threshold) / 31` per channel before writing the pixel.
 
+### Keeping `uSnapRes` in sync with the render target
+
+`uSnapRes` (the grid vertex snapping quantizes to) has to match the
+pipeline's actual render-target resolution, or geometry snaps to the wrong
+grid than what's actually being rendered. Rather than hardcode the same
+literal in both `PS1Pipeline.ts` and `patchMaterial.ts`, `patchMaterial.ts`
+keeps a small module-level registry: `PS1Pipeline`'s constructor calls
+`setSnapResolution(width, height)` with its own target size, which updates
+the default used by every `patchMaterial()` call from then on *and*
+retroactively fixes the `uSnapRes` uniform on any material already patched
+(and already compiled). In practice this means: construct your
+`PS1Pipeline` before (or after — order doesn't matter) calling
+`patchMaterial()` on your materials, and they'll always agree with whatever
+resolution the pipeline was built with, even at the non-default 480×360
+setting.
+
 ## Usage
 
 ```ts
@@ -69,7 +85,7 @@ import { PS1Pipeline } from './ps1/PS1Pipeline';
 import { patchMaterial } from './ps1/patchMaterial';
 
 const pipeline = new PS1Pipeline(renderer); // or { width: 360 } for 480x360
-patchMaterial(someMesh.material); // opt in to vertex-snap + affine UV
+patchMaterial(someMesh.material); // opt in to vertex-snap + affine UV; uSnapRes tracks `pipeline`'s resolution automatically
 
 function animate() {
   requestAnimationFrame(animate);
