@@ -55,7 +55,21 @@ No HP bar, no minimap, no compass. A burning sigil visible on the knight's hand/
 2. **OATH BROKEN** — turn away with the crown. Hard cut, title card: *OATH BROKEN*. Sets up series lore.
 3. **HOLLOW** (hidden) — arrive with a dead brand. The dragon's eye does not open. Nothing happens. Slow fade. Title card: *(none — silence, then credits)*.
 
-Endings screen shows which of 3 slots have been seen (?, ?, ?) to drive replay/theory content.
+Endings screen shows which of **4** slots have been seen (?, ?, ?, ?) to drive replay/theory content. The fourth is NG+-only (§4b).
+
+## 4b. Replayability — the Second Vigil (NG+) and depth systems
+
+**Owner directive (2026-07-01): make it a game people return to.** Same castle, deepened — not widened.
+
+- **The Second Vigil (NG+):** after any ending, CONTINUE offers *"Keep the vigil again."* The world reloads **changed**: (a) 10–14 hand-authored **anomalies** — a statue faces a new direction, a second moon, a door that wasn't there, a banner already burning (Exit 8 grammar; each is a screenshot/theory magnet); (b) remixed enemy placement (data-driven variant table per zone); (c) ~8 new inscriptions that recontextualize the first run (the queen knew; the herald lied); (d) the **Queen's Garden** — a hidden zone (behind an Undercroft illusory wall) only open in NG+.
+- **Ending 4 — THE OATH UNMADE (true ending, NG+ only):** in the Queen's Garden lies the queen's own guttered brand. Carry it to the Summit and offer BOTH crown and brand: the dragon speaks (the only time), the cycle breaks. Requires having seen the garden + a live brand.
+- **Banner visions:** each first kneel at a banner plays one short scripted memory-vision of the night Vael fell (color bleeds back, courtiers flicker, then ash) — checkpointing IS the storytelling. One vision per banner (~6), sequenced by zone order, they assemble the full tragedy.
+- **Named cast (feeds series canon):** Queen **Maren of Vael** · **Ser Callun, the Forsworn** (first knight) · **Edda the herald** (whose account doesn't add up — NG+ payoff) · the dragon **Vhaelis, the Flame That Lends**.
+- **Ghost NPC — the Ash-Priest:** met three times (Ashen Gate, Ramparts, Summit stair). Short text dialogue, Souls-grammar recurring stranger; his final line differs per pending ending. One model, three placements, big narrative return.
+- **Secrets:** 2–3 illusory walls (brand flickers blue near them — teaches itself); a secret weapon (**Callun's broken tachi** — dropped only if the Forsworn is defeated without guarding once; faster, and whispers); one optional brand-wraith hunt (kill all 7 wraiths → extra lore stone).
+- **Lore count raised to ~25** pieces (was ~15), several written as direct series tie-ins.
+
+Scope guard: NG+ is data-driven variation over the same six zones + one hidden zone — no new systems beyond a variant loader + vision player. First-run length unchanged (25–35 min); full completion (4 endings, garden, secrets) ≈ 90 min across runs.
 
 ## 5. Map — six zones, interconnected
 
