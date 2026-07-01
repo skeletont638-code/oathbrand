@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { PS1Pipeline } from './ps1/PS1Pipeline';
+import { patchMaterial } from './ps1/patchMaterial';
 import './style.css';
 
 function hasWebGL(): boolean {
@@ -38,8 +40,11 @@ function startScene(): void {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   document.body.appendChild(renderer.domElement);
 
+  const pipeline = new PS1Pipeline(renderer);
+
   const geometry = new THREE.BoxGeometry(1, 1, 1);
   const material = new THREE.MeshLambertMaterial({ color: 0x8a7a5a });
+  patchMaterial(material); // demonstrates the vertex-snap + affine-uv tricks
   const cube = new THREE.Mesh(geometry, material);
   scene.add(cube);
 
@@ -51,13 +56,14 @@ function startScene(): void {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    pipeline.resize();
   });
 
   function animate(): void {
     requestAnimationFrame(animate);
     cube.rotation.x += 0.005;
     cube.rotation.y += 0.008;
-    renderer.render(scene, camera);
+    pipeline.render(scene, camera);
   }
   animate();
 }
