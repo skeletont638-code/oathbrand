@@ -1,7 +1,14 @@
 import * as THREE from 'three';
+import { TUNING } from './content/tuning';
 import { Game } from './engine/Game';
+import { installScreenshotKey } from './engine/screenshot';
+import { Controller } from './player/Controller';
+import { Interactor } from './player/Interactor';
+import type { Interactable } from './player/Interactor';
 import { PS1Pipeline } from './ps1/PS1Pipeline';
 import { createDevHud } from './ui/devHud';
+import { hidePrompt, showPrompt } from './ui/prompt';
+import type { BuiltZone } from './world/ZoneBuilder';
 import { ZoneManager } from './world/ZoneManager';
 import type { ZoneDef } from './world/zoneDef';
 import './style.css';
@@ -47,10 +54,50 @@ const TEST_ZONE: ZoneDef = {
   props: [{ kind: 'crate', at: [4, 1], rotY: 0.35 }],
   lights: [{ at: [1, 2] }, { at: [4, 4] }],
   enemies: [],
-  lore: [],
+  // A readable note on the crate so the interact prompt has a live target.
+  lore: [{ id: 'crate-note', at: [4, 1], text: 'The ash keeps no oaths.' }],
   doors: [],
   ambience: [],
 };
+
+/** World-space center of the zone's `S` cell (player start). */
+function findSpawn(def: ZoneDef): { x: number; z: number } {
+  for (let row = 0; row < def.grid.length; row++) {
+    const col = def.grid[row].indexOf('S');
+    if (col !== -1) {
+      return { x: (col + 0.5) * def.cell, z: (row + 0.5) * def.cell };
+    }
+  }
+  return { x: def.cell * 1.5, z: def.cell * 1.5 }; // fail soft: first floor-ish cell
+}
+
+/** Everything the context prompt can target in a built zone. */
+function collectInteractables(built: BuiltZone): Interactable[] {
+  const items: Interactable[] = built.lore.map((l) => ({
+    id: l.spot.id,
+    verb: 'READ',
+    x: l.position.x,
+    z: l.position.z,
+  }));
+  for (const door of built.doors) {
+    items.push({
+      id: door.def.id,
+      verb: 'OPEN',
+      x: door.position.x,
+      z: door.position.z,
+    });
+  }
+  if (built.banner) {
+    items.push({
+      id: 'banner',
+      verb: 'KNEEL',
+      x: built.banner.position.x,
+      z: built.banner.position.z,
+      label: built.banner.name,
+    });
+  }
+  return items;
+}
 
 async function startScene(): Promise<void> {
   const scene = new THREE.Scene();
@@ -78,19 +125,42 @@ async function startScene(): Promise<void> {
   const game = new Game();
   const zones = new ZoneManager({ scene, bus: game.bus, resolve: () => TEST_ZONE });
   game.register(zones);
-  await zones.load('ashen-gate', false);
+  const built = await zones.load('ashen-gate', false);
+
+  // First-person player. Camera reads the controller pose every frame;
+  // 'YXZ' keeps yaw level when pitched (no roll creep).
+  const controller = new Controller({ game, canvas: renderer.domElement });
+  const spawn = findSpawn(TEST_ZONE);
+  controller.pos.set(spawn.x, 0, spawn.z);
+  camera.rotation.order = 'YXZ';
+  const eyeY = TUNING.player.height * 0.9;
+
+  const interactor = new Interactor(controller);
+  const interactables = collectInteractables(built);
+
+  // Dev-only: F9 saves the canvas as shot-<zone>-<timestamp>.png.
+  const shots = installScreenshotKey({
+    canvas: renderer.domElement,
+    zone: () => zones.current,
+  });
 
   // Dev-only escape hatch (?dev=1) so tooling/manual QA can poke at the
   // renderer and zone manager (e.g. verify renderer.info doesn't grow
   // across zone transitions). Never present in normal play.
   if (hud) {
-    (window as unknown as Record<string, unknown>).__oathbrand = { renderer, zones, scene };
+    (window as unknown as Record<string, unknown>).__oathbrand = {
+      renderer,
+      zones,
+      scene,
+      game,
+      controller,
+    };
   }
 
-  // Slow auto-orbit around the room center; player controls arrive in Task 7.
-  const center = new THREE.Vector3(6, 0.9, 6);
-  const orbitRadius = 3.1;
-  let angle = 0;
+  // Until Task 18's menus land, jump straight into play so the room is
+  // immediately walkable (boot → title → playing).
+  game.transition('title');
+  game.transition('playing');
 
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -105,18 +175,23 @@ async function startScene(): Promise<void> {
     const dt = Math.min(now - last, 100); // clamp tab-switch jumps
     last = now;
 
-    game.update(dt);
+    // Simulation is gated on 'playing' (pause freezes world + player);
+    // rendering continues so the paused frame stays on screen.
+    if (game.state === 'playing') {
+      game.update(dt);
+      controller.update(dt, built.collider);
+      const target = interactor.nearest(interactables);
+      if (target) showPrompt(target.verb, target.label);
+      else hidePrompt();
+    }
 
-    angle += dt * 0.00018;
-    camera.position.set(
-      center.x + Math.cos(angle) * orbitRadius,
-      1.7,
-      center.z + Math.sin(angle) * orbitRadius,
-    );
-    camera.lookAt(center);
+    camera.rotation.y = controller.yaw;
+    camera.rotation.x = controller.pitch;
+    camera.position.set(controller.pos.x, controller.pos.y + eyeY, controller.pos.z);
 
     hud?.begin();
     pipeline.render(scene, camera);
+    shots?.afterRender();
     hud?.end(zones.current);
   }
   requestAnimationFrame(frame);
