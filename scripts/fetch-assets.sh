@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# OATHBRAND asset pipeline — fetch CC0 sources, curate kit, process textures, verify.
+#
+# Usage: bash scripts/fetch-assets.sh
+#
+# Downloads go to .assets-cache/ (gitignored). Only the curated, processed
+# subset lands in assets/ (git-tracked). Every source is CC0 — see
+# assets/LICENSES.md. Sources are pinned (commit SHA / sha256) for
+# reproducibility.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+CACHE=.assets-cache
+mkdir -p "$CACHE/polypizza"
+
+# --- KayKit Dungeon Remastered 1.0 (CC0) ------------------------------------
+DUNGEON_REPO=https://github.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0
+DUNGEON_SHA=b0ca9bd96a8072ab36a3a5464f00ed1e06a16d07
+if [ ! -d "$CACHE/kaykit-dungeon-remastered" ]; then
+  echo "fetching KayKit Dungeon Remastered..."
+  git clone --depth 1 "$DUNGEON_REPO" "$CACHE/kaykit-dungeon-remastered"
+fi
+got=$(git -C "$CACHE/kaykit-dungeon-remastered" rev-parse HEAD)
+[ "$got" = "$DUNGEON_SHA" ] || echo "WARN: dungeon pack HEAD $got != pinned $DUNGEON_SHA (upstream moved; diff before trusting)"
+
+# --- KayKit Character Pack: Skeletons 1.0 (CC0) ------------------------------
+SKELETON_REPO=https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0
+SKELETON_SHA=15b62b9bad122f72926c10fb14d622c73819fa54
+if [ ! -d "$CACHE/kaykit-skeletons" ]; then
+  echo "fetching KayKit Skeletons..."
+  git clone --depth 1 "$SKELETON_REPO" "$CACHE/kaykit-skeletons"
+fi
+got=$(git -C "$CACHE/kaykit-skeletons" rev-parse HEAD)
+[ "$got" = "$SKELETON_SHA" ] || echo "WARN: skeleton pack HEAD $got != pinned $SKELETON_SHA (upstream moved; diff before trusting)"
+
+# NOTE: KayKit's separate "Character Animations" pack is itch.io-only, but it
+# is NOT needed: the Skeletons pack GLBs ship with all 95 animation clips
+# embedded (verified — clip list in .superpowers/sdd/task-5-report.md).
+
+# --- Quaternius "Crown" via poly.pizza (CC0) ---------------------------------
+# https://poly.pizza/m/i0PZVuVlYv — CC0, by Quaternius
+CROWN_URL=https://static.poly.pizza/1381b02a-8310-437b-a2a7-82cab0a94a4c.glb
+CROWN_SHA256=c2b598cfd997ab367e2036a77d186cc02f5d2a0410209e49237b55d383c68e88
+if [ ! -f "$CACHE/polypizza/crown.glb" ]; then
+  echo "fetching Quaternius crown (poly.pizza)..."
+  curl -fsSL -A "Mozilla/5.0" "$CROWN_URL" -o "$CACHE/polypizza/crown.glb"
+fi
+echo "$CROWN_SHA256  $CACHE/polypizza/crown.glb" | sha256sum -c - >/dev/null \
+  || { echo "ERROR: crown.glb checksum mismatch — refusing to use it." >&2; exit 1; }
+
+# --- curate -> process textures -> verify ------------------------------------
+python3 scripts/curate-assets.py
+python3 scripts/downsample-textures.py
+node scripts/verify-gltf.mjs
+
+echo "asset pipeline complete."

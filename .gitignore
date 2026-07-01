@@ -1,5 +1,8 @@
 .superpowers/
 
+# raw asset-pack downloads (curated subset lives in assets/)
+.assets-cache/
+
 # dependencies
 node_modules
 
@@ -23,3 +26,6 @@ npm-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+# python bytecode (asset scripts)
+__pycache__/
