@@ -18,20 +18,20 @@ DUNGEON_REPO=https://github.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0
 DUNGEON_SHA=b0ca9bd96a8072ab36a3a5464f00ed1e06a16d07
 if [ ! -d "$CACHE/kaykit-dungeon-remastered" ]; then
   echo "fetching KayKit Dungeon Remastered..."
-  git clone --depth 1 "$DUNGEON_REPO" "$CACHE/kaykit-dungeon-remastered"
+  git clone --depth 1 --no-checkout "$DUNGEON_REPO" "$CACHE/kaykit-dungeon-remastered"
+  git -C "$CACHE/kaykit-dungeon-remastered" fetch --depth 1 origin "$DUNGEON_SHA"
+  git -C "$CACHE/kaykit-dungeon-remastered" checkout --detach "$DUNGEON_SHA" || { echo "ERROR: pinned SHA $DUNGEON_SHA unavailable for $DUNGEON_REPO" >&2; exit 1; }
 fi
-got=$(git -C "$CACHE/kaykit-dungeon-remastered" rev-parse HEAD)
-[ "$got" = "$DUNGEON_SHA" ] || echo "WARN: dungeon pack HEAD $got != pinned $DUNGEON_SHA (upstream moved; diff before trusting)"
 
 # --- KayKit Character Pack: Skeletons 1.0 (CC0) ------------------------------
 SKELETON_REPO=https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0
 SKELETON_SHA=15b62b9bad122f72926c10fb14d622c73819fa54
 if [ ! -d "$CACHE/kaykit-skeletons" ]; then
   echo "fetching KayKit Skeletons..."
-  git clone --depth 1 "$SKELETON_REPO" "$CACHE/kaykit-skeletons"
+  git clone --depth 1 --no-checkout "$SKELETON_REPO" "$CACHE/kaykit-skeletons"
+  git -C "$CACHE/kaykit-skeletons" fetch --depth 1 origin "$SKELETON_SHA"
+  git -C "$CACHE/kaykit-skeletons" checkout --detach "$SKELETON_SHA" || { echo "ERROR: pinned SHA $SKELETON_SHA unavailable for $SKELETON_REPO" >&2; exit 1; }
 fi
-got=$(git -C "$CACHE/kaykit-skeletons" rev-parse HEAD)
-[ "$got" = "$SKELETON_SHA" ] || echo "WARN: skeleton pack HEAD $got != pinned $SKELETON_SHA (upstream moved; diff before trusting)"
 
 # NOTE: KayKit's separate "Character Animations" pack is itch.io-only, but it
 # is NOT needed: the Skeletons pack GLBs ship with all 95 animation clips
