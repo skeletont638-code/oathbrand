@@ -67,6 +67,10 @@ export function patchMaterial(mat: Material): void {
         ['  vMapUv = uv;', '  #include <map_fragment>'].join('\n'),
       );
     }
+
+    // Standard three.js onBeforeCompile idiom: stash the compiled shader so
+    // callers can reach the uniforms afterwards (e.g. to override uSnapRes).
+    mat.userData.ps1Shader = shader;
   };
 
   // onBeforeCompile's body isn't part of three's program cache key, so two
