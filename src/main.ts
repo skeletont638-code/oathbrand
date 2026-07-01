@@ -2,10 +2,14 @@ import * as THREE from 'three';
 import { TUNING } from './content/tuning';
 import { Game } from './engine/Game';
 import { installScreenshotKey } from './engine/screenshot';
+import { Brand } from './player/Brand';
 import { Controller } from './player/Controller';
 import { Interactor } from './player/Interactor';
 import type { Interactable } from './player/Interactor';
 import { PS1Pipeline } from './ps1/PS1Pipeline';
+import { loadGame, saveGame } from './save/save';
+import type { SaveData } from './save/save';
+import { createBrandHud } from './ui/brandHud';
 import { createDevHud } from './ui/devHud';
 import { hidePrompt, showPrompt } from './ui/prompt';
 import type { BuiltZone } from './world/ZoneBuilder';
@@ -138,6 +142,43 @@ async function startScene(): Promise<void> {
   const interactor = new Interactor(controller);
   const interactables = collectInteractables(built);
 
+  // The Oath-Brand: embers-as-health, threat pulse, hollowing desaturation,
+  // and the rekindle→save checkpoint loop. No enemies exist yet (Task 9+),
+  // so the distance providers report nothing near.
+  const brandHud = createBrandHud(TUNING.brand.maxEmbers);
+  const brand = new Brand({
+    bus: game.bus,
+    pipeline,
+    onSave: (bannerId) => {
+      // Merge over any prior save so progression fields survive checkpoints.
+      const prev = loadGame();
+      const data: SaveData = {
+        version: 1,
+        zone: zones.current,
+        bannerId,
+        embers: brand.embers,
+        flags: prev?.flags ?? [],
+        endingsSeen: prev?.endingsSeen ?? [],
+        loreRead: prev?.loreRead ?? [],
+        visionsSeen: prev?.visionsSeen ?? [],
+        ngPlus: prev?.ngPlus ?? false,
+      };
+      saveGame(data);
+    },
+    nearestEnemyM: () => null,
+    nearestIllusoryM: () => null,
+  });
+  game.register(brand);
+
+  // Brand → HUD: embers/hollow are event-driven; pulse is pushed per frame
+  // below (it decays to zero silently, which no event announces).
+  game.bus.on('ember-lost', (e) => brandHud.setEmbers(e.remaining));
+  game.bus.on('player-hollowed', () => brandHud.setHollow(true));
+  game.bus.on('player-rekindled', () => {
+    brandHud.setHollow(false);
+    brandHud.setEmbers(brand.embers);
+  });
+
   // Dev-only: F9 saves the canvas as shot-<zone>-<timestamp>.png.
   const shots = installScreenshotKey({
     canvas: renderer.domElement,
@@ -154,7 +195,15 @@ async function startScene(): Promise<void> {
       scene,
       game,
       controller,
+      brand,
+      pipeline,
     };
+    // Dev-only brand test keys (until combat/banners land): H burns an
+    // ember, R kneels at a phantom banner. Manual QA for hollowing/desat.
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'KeyH') brand.damage(1);
+      else if (e.code === 'KeyR') brand.rekindle('dev-banner');
+    });
   }
 
   // Until Task 18's menus land, jump straight into play so the room is
@@ -180,6 +229,7 @@ async function startScene(): Promise<void> {
     if (game.state === 'playing') {
       game.update(dt);
       controller.update(dt, built.collider);
+      brandHud.setPulse(brand.pulse, brand.blueFlicker);
       const target = interactor.nearest(interactables);
       if (target) showPrompt(target.verb, target.label);
       else hidePrompt();
