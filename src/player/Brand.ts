@@ -51,8 +51,16 @@ export class Brand implements Subsystem {
 
   private hollowed = false;
 
+  /** Kills counted toward the ember-wisp rule (+1 ember per 3 kills). */
+  private kills = 0;
+
   constructor(private readonly deps: BrandDeps) {
     this.applyDesaturation();
+    // Design call (Task 9): the kill counter lives INSIDE Brand, wired by
+    // self-subscribing to 'enemy-slain' — main wiring cannot forget it and
+    // tests get the rule for free by sharing a bus. Callers must NOT also
+    // invoke onEnemySlain() manually, or kills double-count.
+    deps.bus.on('enemy-slain', () => this.onEnemySlain());
   }
 
   get hollow(): boolean {
@@ -74,6 +82,21 @@ export class Brand implements Subsystem {
       this.hollowed = true;
       this.deps.bus.emit({ type: 'player-hollowed' });
     }
+    this.applyDesaturation();
+  }
+
+  /**
+   * Ember-wisp rule: every 3rd kill returns +1 ember (with `ember-gained`),
+   * but only if embers < max AND not hollow — the hollowed brand is dark;
+   * kneeling at a banner is the only way back. Kills keep counting either
+   * way, so the cadence never drifts.
+   */
+  onEnemySlain(): void {
+    this.kills += 1;
+    if (this.kills % 3 !== 0) return;
+    if (this.hollowed || this.embers >= TUNING.brand.maxEmbers) return;
+    this.embers += 1;
+    this.deps.bus.emit({ type: 'ember-gained', total: this.embers });
     this.applyDesaturation();
   }
 
