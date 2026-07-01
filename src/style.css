@@ -1,0 +1,32 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #1a1a1d;
+}
+
+canvas {
+  display: block;
+}
+
+.webgl-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 2rem;
+  background: #1a1a1d;
+  color: #cfc9b8;
+  font-family: ui-serif, Georgia, serif;
+  font-size: 1.25rem;
+  text-align: center;
+}
