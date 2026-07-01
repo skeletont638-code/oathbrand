@@ -179,10 +179,14 @@ assets/              — gltf/textures/audio (CC0 manifest with per-file source+
 - GitHub Pages from Actions. itch.io mirror later (post-launch, owner's call).
 - `src/ps1/` gets its own README (the starrable reusable artifact).
 
-## 15. Out of scope (YAGNI — explicitly cut)
+## 15. Design tooling (owner-approved 2026-07-01)
+
+The game is fully 3D (first-person). No marketplace plugin improves 3D game visuals — the world's look is carried by the PS1 pipeline + art direction in this spec. For 2D surfaces (title screen, menus, HUD, title cards, inscriptions, README): the **frontend-design** skill is mandatory, and the **ui-ux-pro-max** plugin gets re-enabled by the owner only during the UI-polish phase (it is currently disabled for latency; the builder announces when that phase starts). Blender MCP considered and cut for v1 (shader hides model simplicity by design). `hyperframes` plugin bookmarked for post-launch trailer production, not the game.
+
+## 16. Out of scope (YAGNI — explicitly cut)
 
 Multiplayer/leaderboards; gamepad support (post-launch nice-to-have); localization; difficulty settings; inventory/equipment systems; leveling/stats; procedural generation; corpse runs; jump-scare horror design; NPC dialogue trees (inscriptions only); Steam release; custom 3D character authoring; WebGPU/`retroPass` path (revisit when mobile Safari support matures).
 
-## 16. Open questions
+## 17. Open questions
 
 None blocking. Tuning values in §3/§6 are initial and expected to change in playtesting.
