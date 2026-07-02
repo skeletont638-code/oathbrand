@@ -20,6 +20,7 @@
  */
 import {
   BoxGeometry,
+  Color,
   ConeGeometry,
   Group,
   Mesh,
@@ -101,6 +102,10 @@ export const ANOMALIES: Anomaly[] = [
   // ── THE ASHEN GATE ──────────────────────────────────────────────────────
   {
     // A war-banner on the north wall, already alight — a fire that answers no one.
+    // No NEW PointLight: ashen-gate is deliberately trimmed to exactly 4 torches
+    // (its zone light budget — see ashenGate.ts), so we retint the nearest existing
+    // torch toward the burning-banner orange instead of adding a 5th light. Same
+    // move as throne-black-torch below — recolor a built light, don't grow the count.
     id: 'gate-banner-burning',
     zone: 'ashen-gate',
     apply(built) {
@@ -110,10 +115,15 @@ export const ANOMALIES: Anomaly[] = [
         new MeshBasicMaterial({ color: 0xff7a2a, fog: true, transparent: true, opacity: 0.92 }),
       );
       cloth.position.set(x, 1.5, z + 0.4);
-      const glow = new PointLight(0xff6a20, 4, 7);
-      glow.position.set(x, 1.6, z + 0.6);
-      glow.castShadow = false;
-      built.group.add(cloth, glow);
+      // Pull the nearest torch toward the burning-cloth orange and bump it a touch,
+      // so the banner reads as fire-lit. ZoneManager captures this intensity as the
+      // flicker base, so the retinted flame still breathes like the others.
+      const light = nearestLight(built, 1, 3);
+      if (light) {
+        light.color.lerp(new Color(0xff6a20), 0.6);
+        light.intensity += 3;
+      }
+      built.group.add(cloth);
     },
   },
   {
