@@ -22,11 +22,13 @@ import type { SaveData } from './save/save';
 import { kitPieceUrl } from './world/assets';
 import { createBrandHud } from './ui/brandHud';
 import { createDevHud } from './ui/devHud';
+import { showCard } from './ui/card';
 import { flashDenied, hidePrompt, showPrompt } from './ui/prompt';
 import type { BuiltZone, PlacedDoor } from './world/ZoneBuilder';
 import { ZoneManager } from './world/ZoneManager';
+import { kickOpen, takeItem } from './world/mechanics';
 import type { ZoneDef } from './world/zoneDef';
-import { canPass, doorEntry, doorSpan, pairedDoor } from './world/zoneGraph';
+import { canPass, doorEntry, doorSpan, lockFlag, pairedDoor } from './world/zoneGraph';
 import { VistaDirector } from './world/vista';
 import './style.css';
 
@@ -54,6 +56,14 @@ const ENEMY_SCALE = 0.7;
 const WISP_MS = 1200;
 /** Fog far-plane when a zone doesn't set its own `fogFarM`. */
 const DEFAULT_FOG_FAR = 16;
+/** Ambient-light floor when a zone doesn't set its own `ambientFloor`. */
+const DEFAULT_AMBIENT = 0.35;
+/** Shortcut gate: how far it swings open (rad) and how fast (rad/s). */
+const GATE_OPEN_ANGLE = -1.4;
+const GATE_SWING_SPEED = 3.2;
+/** Landing-dip on the undercroft drop: start crouch (m) + recovery (m/s). */
+const FALL_DIP_M = 1.3;
+const FALL_DIP_RECOVER = 2.4;
 
 /**
  * The game starts at the Ashen Gate's `S`. Dev builds (`?dev=1`) may jump
@@ -78,14 +88,19 @@ function findSpawn(def: ZoneDef): { x: number; z: number } {
   return { x: def.cell * 1.5, z: def.cell * 1.5 }; // fail soft: first floor-ish cell
 }
 
-/** Everything the context prompt can target in a built zone. */
-function collectInteractables(built: BuiltZone): Interactable[] {
+/** Everything the context prompt can target in a built zone. Already-taken
+ * items (their flag set) drop out so their prompt/mesh don't linger. */
+function collectInteractables(built: BuiltZone, flags: Set<GameFlag>): Interactable[] {
   const items: Interactable[] = built.lore.map((l) => ({
     id: l.spot.id,
     verb: 'READ',
     x: l.position.x,
     z: l.position.z,
   }));
+  for (const item of built.items) {
+    if (flags.has(item.spot.flag)) continue; // already taken
+    items.push({ id: item.spot.id, verb: 'TAKE', x: item.position.x, z: item.position.z });
+  }
   for (const door of built.doors) {
     items.push({
       id: door.def.id,
@@ -127,8 +142,11 @@ async function startScene(): Promise<void> {
   const pipeline = new PS1Pipeline(renderer);
   const hud = createDevHud(renderer);
 
-  // Faint ash-grey ambient so unlit geometry reads as shape, not void.
-  scene.add(new THREE.AmbientLight(0x8a8a92, 0.35));
+  // Faint ash-grey ambient so unlit geometry reads as shape, not void. The
+  // intensity is rebound per zone in enterZone() (the Undercroft floors it to
+  // 0.06 so its unlit east half stays black for the wraith showcase).
+  const ambient = new THREE.AmbientLight(0x8a8a92, DEFAULT_AMBIENT);
+  scene.add(ambient);
 
   const game = new Game();
 
@@ -216,7 +234,18 @@ async function startScene(): Promise<void> {
       }
       return best;
     },
-    nearestIllusoryM: () => null,
+    // The brand guttering blue near a hidden way (spec §): fed from the
+    // current zone's doors locked 'illusory' (the undercroft's false wall to
+    // the Queen's Garden). Distance in XZ; nearest wins, null when none near.
+    nearestIllusoryM: () => {
+      let best: number | null = null;
+      for (const door of built.doors) {
+        if (door.def.lock !== 'illusory') continue;
+        const d = Math.hypot(door.position.x - controller.pos.x, door.position.z - controller.pos.z);
+        if (best === null || d < best) best = d;
+      }
+      return best;
+    },
   });
   game.register(brand);
 
@@ -264,6 +293,11 @@ async function startScene(): Promise<void> {
     wisps.push({ mesh, material, ttl: WISP_MS });
   });
 
+  // Gatekey glint: one shared emissive shape sits on each un-taken item's
+  // pedestal (removed when the item is taken). Life-size-ish, ~waist height.
+  const keyGeo = new THREE.BoxGeometry(0.14, 0.42, 0.14);
+  const keyMat = new THREE.MeshBasicMaterial({ color: 0xffcf6a });
+
   // Per-swing hit bookkeeping + a reusable enemy context (no per-frame
   // allocs). `collider` is re-pointed at each new zone by enterZone().
   let lastSwing = 0;
@@ -282,6 +316,22 @@ async function startScene(): Promise<void> {
 
   /** Door-span trigger cells of the current zone, "row,col" → placed door. */
   let doorCells = new Map<string, PlacedDoor>();
+
+  /** Glint meshes for the current zone's un-taken items, by item id. */
+  let itemMeshes: { id: string; mesh: THREE.Mesh }[] = [];
+
+  /** The current zone's kick-open gate leaf (hinged), or null when none / it
+   *  is already open. Swings when `opening` is set. */
+  let shortcutGate: {
+    hinge: THREE.Group;
+    leaf: THREE.Mesh;
+    material: THREE.Material;
+    opening: boolean;
+    angle: number;
+  } | null = null;
+
+  /** Landing-dip camera offset (m), eased to 0 after the undercroft drop. */
+  let fallDip = 0;
 
   function clearEnemies(): void {
     for (const { view } of enemies) {
@@ -303,6 +353,61 @@ async function startScene(): Promise<void> {
     for (const mesh of boltMeshes) scene.remove(mesh);
     boltMeshes.length = 0; // geometry/material are shared and live on
     bolts = new ProjectilePool({ bus: game.bus, defense: combat });
+  }
+
+  function clearItemMeshes(): void {
+    for (const it of itemMeshes) scene.remove(it.mesh); // geo/mat are shared
+    itemMeshes = [];
+  }
+
+  function clearGate(): void {
+    if (!shortcutGate) return;
+    scene.remove(shortcutGate.hinge);
+    shortcutGate.leaf.geometry.dispose();
+    shortcutGate.material.dispose();
+    shortcutGate = null;
+  }
+
+  /** Place a glint on each un-taken item's pedestal (skip taken ones). */
+  function spawnItemMeshes(): void {
+    for (const item of built.items) {
+      if (flags.has(item.spot.flag)) continue;
+      const mesh = new THREE.Mesh(keyGeo, keyMat);
+      mesh.position.set(item.position.x, 1.3, item.position.z);
+      scene.add(mesh);
+      itemMeshes.push({ id: item.spot.id, mesh });
+    }
+  }
+
+  /** Build the closed gate leaf for a `kick` door, unless it is already open.
+   *  The leaf spans the doorway; kicking it swings the hinge (spawnGate is
+   *  followed by an in-frame ease). */
+  function spawnGate(): void {
+    const kickDoor = built.doors.find((d) => d.def.kick);
+    if (!kickDoor || kickDoor.def.lock === undefined) return;
+    if (flags.has(lockFlag(kickDoor.def.lock))) return; // already open
+    const hinge = new THREE.Group();
+    hinge.position.set(kickDoor.position.x - built.cellM / 2, 0, kickDoor.position.z);
+    const material = new THREE.MeshStandardMaterial({
+      color: 0x26262b,
+      metalness: 0.55,
+      roughness: 0.5,
+    });
+    const leaf = new THREE.Mesh(new THREE.BoxGeometry(built.cellM, 2.2, 0.16), material);
+    leaf.position.set(built.cellM / 2, 1.1, 0); // pivot on the hinge edge
+    hinge.add(leaf);
+    scene.add(hinge);
+    shortcutGate = { hinge, leaf, material, opening: false, angle: 0 };
+  }
+
+  /** Merge progression flags into an existing save the moment they change
+   *  (gatekey taken / gate kicked). With no checkpoint yet nothing is written
+   *  — the in-memory flag set still gates the whole run; the flags bank at the
+   *  next kneel. */
+  function persistProgress(): void {
+    const prev = loadGame();
+    if (!prev) return;
+    saveGame({ ...prev, zone: zones.current, flags: [...flags], ngPlus });
   }
 
   function spawnEnemies(): void {
@@ -355,8 +460,9 @@ async function startScene(): Promise<void> {
     activeDef = zoneOrThrow(zones.current);
     baseFogFar = activeDef.fogFarM ?? DEFAULT_FOG_FAR;
     fog.far = baseFogFar;
+    ambient.intensity = activeDef.ambientFloor ?? DEFAULT_AMBIENT;
     enemyCtx.collider = built.collider;
-    interactables = collectInteractables(built);
+    interactables = collectInteractables(built, flags);
     doorCells = new Map();
     for (const door of built.doors) {
       for (const [row, col] of doorSpan(activeDef, door.def)) {
@@ -364,9 +470,13 @@ async function startScene(): Promise<void> {
       }
     }
     clearWisps();
+    clearItemMeshes();
+    clearGate();
     clearEnemies();
     resetBolts(); // before spawnEnemies — archers capture the new pool
     spawnEnemies();
+    spawnItemMeshes();
+    spawnGate();
   }
 
   // --- door transitions (Task 11) ------------------------------------------
@@ -397,6 +507,9 @@ async function startScene(): Promise<void> {
         }
         controller.pitch = 0;
         enterZone();
+        // The undercroft is entered by DROPPING in from the hall — a brief
+        // landing crouch that eases back up (spec's "one-way drop").
+        if (zones.current === 'undercroft' && from === 'great-hall') fallDip = FALL_DIP_M;
       } finally {
         transitioning = false;
       }
@@ -453,6 +566,15 @@ async function startScene(): Promise<void> {
       },
       get transitioning() {
         return transitioning;
+      },
+      get itemMeshes() {
+        return itemMeshes;
+      },
+      get shortcutGate() {
+        return shortcutGate;
+      },
+      get fallDip() {
+        return fallDip;
       },
     };
     // Dev-only brand test keys: H burns an ember, R kneels at a phantom
@@ -553,29 +675,60 @@ async function startScene(): Promise<void> {
       }
       vista.update(dt);
 
+      // Shortcut gate swing (after a kick) + landing-dip recovery.
+      if (shortcutGate?.opening && shortcutGate.angle > GATE_OPEN_ANGLE) {
+        shortcutGate.angle = Math.max(
+          GATE_OPEN_ANGLE,
+          shortcutGate.angle - (GATE_SWING_SPEED * dt) / 1000,
+        );
+        shortcutGate.hinge.rotation.y = shortcutGate.angle;
+      }
+      if (fallDip > 0) fallDip = Math.max(0, fallDip - (FALL_DIP_RECOVER * dt) / 1000);
+
       brandHud.setPulse(brand.pulse, brand.blueFlicker);
       const target = interactor.nearest(interactables);
       if (target) showPrompt(target.verb, target.label);
       else hidePrompt();
 
-      // E on a door: pass if it opens, ember-red 'SEALED' rebuke if not.
-      // (READ/KNEEL actions land with the lore/checkpoint tasks.)
+      // E on a target (Task 12 adds TAKE + kick-open; READ/KNEEL land later):
+      //  - TAKE: pick up a lore-item (the Gatekey), set its flag, show the
+      //    inscription, remove the glint, persist.
+      //  - OPEN a passable door: transition. A `kick` gate (the ramparts
+      //    shortcut) sets its lock flag instead of denying — swings, unseals
+      //    the hall twin for good, persists. Otherwise: ember-red 'SEALED'.
       const pressedE = controller.consumeAction();
-      if (pressedE && target?.verb === 'OPEN') {
+      if (pressedE && target?.verb === 'TAKE') {
+        const item = built.items.find((it) => it.spot.id === target.id);
+        if (item && takeItem(item.spot, flags)) {
+          showCard(item.spot.card);
+          persistProgress();
+          const glint = itemMeshes.find((x) => x.id === item.spot.id);
+          if (glint) scene.remove(glint.mesh);
+          itemMeshes = itemMeshes.filter((x) => x.id !== item.spot.id);
+          interactables = collectInteractables(built, flags);
+        }
+      } else if (pressedE && target?.verb === 'OPEN') {
         const door = built.doors.find((d) => d.def.id === target.id);
         if (door) {
           if (canPass(door.def, flags) && hasZone(door.def.to)) goThrough(door);
-          else flashDenied();
+          else if (kickOpen(door.def, flags)) {
+            game.bus.emit({ type: 'door-opened', doorId: door.def.id });
+            persistProgress();
+            showCard('The gate gives with a shriek of iron. The hall waits below.');
+            if (shortcutGate) shortcutGate.opening = true;
+            interactables = collectInteractables(built, flags);
+          } else flashDenied();
         }
       }
     }
 
     camera.rotation.y = controller.yaw;
     camera.rotation.x = controller.pitch;
-    // The vista's lift rides on top of the eye height (0 when idle).
+    // The vista's lift rides on top of the eye height (0 when idle); the
+    // undercroft drop subtracts a brief landing crouch (fallDip → 0).
     camera.position.set(
       controller.pos.x,
-      controller.pos.y + eyeY + vista.camLift,
+      controller.pos.y + eyeY + vista.camLift - fallDip,
       controller.pos.z,
     );
     fog.far = baseFogFar + vista.fogFarBoost;

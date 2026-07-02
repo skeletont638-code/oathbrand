@@ -10,22 +10,25 @@ import type { ZoneId } from '../types';
 import type { ZoneDef } from '../../world/zoneDef';
 import { ASHEN_GATE } from './ashenGate';
 import { GREAT_HALL } from './greatHall';
+import { UNDERCROFT } from './undercroft';
+import { RAMPARTS } from './ramparts';
 
 /** Every built zone, by id. Partial until all seven land (see above). */
 export const ZONES: Partial<Record<ZoneId, ZoneDef>> = {
   'ashen-gate': ASHEN_GATE,
   'great-hall': GREAT_HALL,
+  undercroft: UNDERCROFT,
+  ramparts: RAMPARTS,
 };
 
 /**
  * Zones the design names but later tasks build: doors may already target
- * them (great-hall's 2/3/4/5). Until a target ships, its doors refuse to
- * open in-game (main.ts treats an unbuilt destination as sealed).
- * T12: undercroft + ramparts · T15: throne · T16: summit + queens-garden.
+ * them (great-hall's throne door 4; the undercroft's illusory garden wall).
+ * Until a target ships, its doors refuse to open in-game (main.ts treats an
+ * unbuilt destination as sealed). T15: throne · T16: summit + queens-garden.
+ * (T12 landed undercroft + ramparts, so they left this allowlist.)
  */
 export const FUTURE_ZONE_IDS: ReadonlySet<ZoneId> = new Set<ZoneId>([
-  'undercroft',
-  'ramparts',
   'throne',
   'summit',
   'queens-garden',

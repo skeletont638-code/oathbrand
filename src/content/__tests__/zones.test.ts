@@ -52,14 +52,21 @@ describe('zone registry', () => {
     expect(ZONES['great-hall']).toBeDefined();
   });
 
+  it('registers the two Task 12 zones', () => {
+    expect(ZONES['undercroft']).toBeDefined();
+    expect(ZONES['ramparts']).toBeDefined();
+  });
+
   it('zoneOrThrow returns registered zones and throws on unbuilt ids', () => {
     expect(zoneOrThrow('ashen-gate').id).toBe('ashen-gate');
-    expect(() => zoneOrThrow('undercroft')).toThrow(/undercroft/);
+    // 'throne' is still unbuilt (T15); undercroft/ramparts now resolve.
+    expect(() => zoneOrThrow('throne')).toThrow(/throne/);
   });
 
   it('hasZone mirrors registration', () => {
     expect(hasZone('great-hall')).toBe(true);
-    expect(hasZone('ramparts')).toBe(false);
+    expect(hasZone('undercroft')).toBe(true);
+    expect(hasZone('throne')).toBe(false);
   });
 
   it('future-zone allowlist never overlaps registered zones', () => {
@@ -74,6 +81,33 @@ describe('zone registry', () => {
   it('door ids are unique game-wide', () => {
     const ids = entries.flatMap(([, def]) => def.doors.map((d) => d.id));
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('item pickup ids are unique game-wide', () => {
+    const ids = entries.flatMap(([, def]) => (def.items ?? []).map((i) => i.id));
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('every pair edge id is two-ended between built zones (never triple)', () => {
+    // A passage's `pair` id is shared by its two door ends. When both ends'
+    // zones are built it must appear on exactly TWO doors; a lone end is only
+    // allowed when it targets a not-yet-built zone (the hall's throne door
+    // pairs 'hall-throne' with no partner until T15 builds the throne).
+    const byPair = new Map<string, ZoneId[]>();
+    for (const [, def] of entries) {
+      for (const d of def.doors) {
+        if (!d.pair) continue;
+        byPair.set(d.pair, [...(byPair.get(d.pair) ?? []), d.to]);
+      }
+    }
+    for (const [pair, targets] of byPair) {
+      expect(targets.length, `pair "${pair}" reused on ${targets.length} doors`).toBeLessThanOrEqual(2);
+      for (const to of targets) {
+        if (hasZone(to)) {
+          expect(targets.length, `pair "${pair}" targets built ${to} but is single-ended`).toBe(2);
+        }
+      }
+    }
   });
 
   it('vista ids are unique game-wide', () => {
@@ -197,6 +231,19 @@ describe.each(entries)('zone %s', (id, def) => {
       expect(isPlainFloor(def, spot.at), `lore ${spot.id} off-floor`).toBe(true);
       expect(spot.text.length).toBeGreaterThan(0);
     }
+  });
+
+  it('item pickups (when present) sit on plain floor with an inscription', () => {
+    for (const item of def.items ?? []) {
+      expect(isPlainFloor(def, item.at), `item ${item.id} off-floor`).toBe(true);
+      expect(item.card.length, `item ${item.id} has no card`).toBeGreaterThan(0);
+    }
+  });
+
+  it('ambient floor (when set) is a 0..1 fraction', () => {
+    if (def.ambientFloor === undefined) return;
+    expect(def.ambientFloor).toBeGreaterThanOrEqual(0);
+    expect(def.ambientFloor).toBeLessThanOrEqual(1);
   });
 
   it('enemy spawns (base and NG+) sit on plain floor cells', () => {

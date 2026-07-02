@@ -16,6 +16,11 @@ const LOCK_FLAG: Record<NonNullable<DoorDef['lock']>, GameFlag> = {
   illusory: 'garden-found', // illusory walls pass freely once revealed
 };
 
+/** The save flag that satisfies a given lock kind. */
+export function lockFlag(lock: NonNullable<DoorDef['lock']>): GameFlag {
+  return LOCK_FLAG[lock];
+}
+
 /** No lock → always passes; otherwise the lock's flag must be set. */
 export function canPass(door: DoorDef, flags: Set<GameFlag>): boolean {
   return door.lock === undefined || flags.has(LOCK_FLAG[door.lock]);

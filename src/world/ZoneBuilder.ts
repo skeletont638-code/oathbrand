@@ -19,7 +19,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { patchMaterial } from '../ps1/patchMaterial';
 import { GridCollider } from './collision';
 import type { AssetCache } from './assets';
-import type { DoorDef, EnemySpawn, LoreSpot, TileKind, ZoneDef } from './zoneDef';
+import type { DoorDef, EnemySpawn, ItemSpot, LoreSpot, TileKind, ZoneDef } from './zoneDef';
 
 /** One kit piece placed on the grid. `x`/`z` are world meters, `rotY` yaw. */
 export interface Placement {
@@ -47,6 +47,12 @@ export interface PlacedLore {
   position: Vector3;
 }
 
+/** A takeable world item resolved to world space (the Gatekey pedestal). */
+export interface PlacedItem {
+  spot: ItemSpot;
+  position: Vector3;
+}
+
 export interface BuiltZone {
   group: Group;
   collider: GridCollider;
@@ -57,6 +63,8 @@ export interface BuiltZone {
   doors: PlacedDoor[];
   banner?: PlacedBanner;
   lore: PlacedLore[];
+  /** Takeable world-item pickups resolved to world space. */
+  items: PlacedItem[];
   /** Torch PointLights (children of `group`), exposed for flicker updates. */
   lights: PointLight[];
 }
@@ -355,6 +363,7 @@ export class ZoneBuilder {
       doors: def.doors.map((d) => ({ def: d, position: toWorld(d.at) })),
       banner,
       lore: def.lore.map((spot) => ({ spot, position: toWorld(spot.at) })),
+      items: (def.items ?? []).map((spot) => ({ spot, position: toWorld(spot.at) })),
       lights,
     };
   }

@@ -84,6 +84,28 @@ export interface DoorDef {
   lock?: 'gatekey' | 'shortcut' | 'throne' | 'ngplus' | 'illusory';
   /** Edge id shared by both ends of a passage (see PAIRING above). */
   pair?: string;
+  /**
+   * Kicked open from THIS side: interacting sets the door's lock flag (see
+   * `kickOpen` in mechanics.ts) instead of denying, permanently unsealing
+   * both ends of the passage. The Ramparts shortcut gate — openable from the
+   * ramparts, never from the hall (the hall twin has no `kick`, so it waits
+   * on the flag). Meaningless without a `lock`.
+   */
+  kick?: boolean;
+}
+
+/**
+ * A picked-up world item (a "lore-item"): the `at` cell shows a prompt
+ * (`TAKE`); taking it sets `flag` once and surfaces `card` as an inscription
+ * plate. The Gatekey of Vael lives on the undercroft pedestal.
+ */
+export interface ItemSpot {
+  id: string;
+  at: GridPos;
+  /** Set once when the item is taken (persisted in the save flags). */
+  flag: GameFlag;
+  /** Inscription shown on pickup. */
+  card: string;
 }
 
 /**
@@ -124,9 +146,17 @@ export interface ZoneDef {
   enemies: EnemySpawn[];
   banner?: Banner;
   lore: LoreSpot[];
+  /** Takeable world items (pedestal pickups); the Gatekey lives here. */
+  items?: ItemSpot[];
   doors: DoorDef[];
   illusory?: IllusoryWall[];
   ambience: string[];
+  /**
+   * Ambient-light intensity floor for this zone (main.ts drives the scene
+   * AmbientLight from it). Default 0.35 (lit halls); the Undercroft crypt
+   * uses 0.06 so its unlit east half stays black for the wraith showcase.
+   */
+  ambientFloor?: number;
   /** One-shot scripted vista (spec §9); ashen-gate carries clip #1. */
   vista?: VistaDef;
   /** Fog far-plane for this zone, meters. Default 16 (main.ts); the

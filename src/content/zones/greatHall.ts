@@ -9,7 +9,7 @@
  *
  * Grid is the authored layout from the plan — copied VERBATIM; do not
  * "fix" it. Annotations honored: doors 1→ashen-gate 2→undercroft(drop)
- * 3→ramparts 4→throne(lock throne) 5→shortcut(lock shortcut) · banner yes
+ * 3→ramparts 4→throne(lock gatekey — T12) 5→shortcut(lock shortcut) · banner yes
  * (vision 2, T14) · 3 lore · 3 soldiers + 1 archer (NG+: +1 wraith).
  */
 import type { ZoneDef } from '../../world/zoneDef';
@@ -76,7 +76,10 @@ export const GREAT_HALL: ZoneDef = {
     { id: 'hall-to-gate', at: [9, 9], to: 'ashen-gate', pair: 'gate-hall' },
     { id: 'hall-to-undercroft', at: [1, 5], to: 'undercroft', pair: 'hall-undercroft' },
     { id: 'hall-to-ramparts', at: [1, 16], to: 'ramparts', pair: 'hall-ramparts' },
-    { id: 'hall-throne-door', at: [7, 6], to: 'throne', lock: 'throne', pair: 'hall-throne' },
+    // The Gatekey (taken in the Undercroft) opens the Throne approach (T12
+    // changed this lock from 'throne' → 'gatekey'). The 'throne'/'throne-open'
+    // lock is now unused — kept in the graph for a possible T15 boss-gate.
+    { id: 'hall-throne-door', at: [7, 6], to: 'throne', lock: 'gatekey', pair: 'hall-throne' },
     // Shortcut gate: same wall, opens from the Ramparts side (flag
     // 'shortcut-open'); its ramparts twin must reuse pair 'hall-shortcut'.
     { id: 'hall-shortcut', at: [7, 11], to: 'ramparts', lock: 'shortcut', pair: 'hall-shortcut' },
