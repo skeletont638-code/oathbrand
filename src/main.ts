@@ -45,6 +45,7 @@ import { selectEnding, EndingDirector } from './engine/endings';
 import type { EndingId } from './content/types';
 import { showTitleCard, hideTitleCard } from './ui/titleCard';
 import { setBlackout, rollCredits, showVigilContinues } from './ui/credits';
+import { AudioManager } from './audio/AudioManager';
 import './style.css';
 
 function hasWebGL(): boolean {
@@ -321,6 +322,28 @@ async function startScene(): Promise<void> {
   });
   game.register(brand);
 
+  // --- Task 17: the dread mixer -------------------------------------------
+  // The whole soundscape (synth beds + threat heartbeat + stone reverb + SFX).
+  // Registered LAST, so it ticks after the Brand each frame. It subscribes to
+  // the bus itself (zone-entered → crossfade beds, brand-pulse → threat duck +
+  // heartbeat, door-opened [deduped], player-hit, cues, vista swell). `occluded`
+  // hands it the current zone's wall raycast for positional low-pass; `built`
+  // is rebound per zone so the closure always sees the live collider.
+  const audio = new AudioManager({
+    bus: game.bus,
+    ambienceFor: (zone) => zoneOrThrow(zone as ZoneId).ambience,
+    occluded: (sx, sz) => built.collider.raycastWall(controller.pos, { x: sx, z: sz }),
+  });
+  game.register(audio);
+  // The AudioContext may only be created/resumed after a user gesture (autoplay
+  // policy). Seed the opening zone's beds now — setZoneLayers buffers them until
+  // the context is live — then wake the audio on the first pointer/key press
+  // (the click-to-play / pointer-lock gesture).
+  audio.setZoneLayers(activeDef.ambience);
+  const wakeAudio = (): void => audio.init(true);
+  window.addEventListener('pointerdown', wakeAudio, { once: true });
+  window.addEventListener('keydown', wakeAudio, { once: true });
+
   // Skinned enemy templates, loaded ONCE — zone rebuilds re-clone from
   // these (wraiths wear the warrior rig as a ghost; archers get the
   // crossbow clip set and fire into the shared bolt pool).
@@ -432,6 +455,9 @@ async function startScene(): Promise<void> {
   const boltGeo = new THREE.BoxGeometry(0.07, 0.07, 0.55);
   const boltMat = new THREE.MeshBasicMaterial({ color: 0xe8d8b0 });
   const boltMeshes: THREE.Mesh[] = [];
+  /** Prior active-state per pooled bolt, so a fresh shot (inactive→active) fires
+   *  the positional bow twang once, at the firing archer (Task 17). */
+  const boltWasActive: boolean[] = [];
   function syncBolts(pool: ProjectilePool): void {
     while (boltMeshes.length < pool.items.length) {
       const mesh = new THREE.Mesh(boltGeo, boltMat);
@@ -445,7 +471,11 @@ async function startScene(): Promise<void> {
       if (bolt.active) {
         mesh.position.copy(bolt.pos);
         mesh.rotation.y = Math.atan2(bolt.dir.x, bolt.dir.z);
+        // Rising edge = a bolt just launched → a bow twang at its spawn (the
+        // archer), 3-D panned and wall-occluded via AudioManager.positional.
+        if (!boltWasActive[i]) audio.positional(mesh, 'bow');
       }
+      boltWasActive[i] = bolt.active;
     });
   }
 
@@ -1208,6 +1238,7 @@ async function startScene(): Promise<void> {
       brand,
       pipeline,
       combat,
+      audio,
       enemies,
       flags,
       vista,
@@ -1315,8 +1346,9 @@ async function startScene(): Promise<void> {
 
       // Combat: guard mirrors the held button; latched presses start actions.
       combat.tryGuard(controller.input.guardHeld);
-      if (controller.consumeLight()) combat.tryLight();
-      if (controller.consumeHeavy()) combat.tryHeavy();
+      // A cue fires only when the swing actually starts (tryLight/Heavy true).
+      if (controller.consumeLight() && combat.tryLight()) audio.cue('swing-light');
+      if (controller.consumeHeavy() && combat.tryHeavy()) audio.cue('swing-heavy');
       if (controller.consumeStep()) combat.tryStep();
       combat.update(dt);
 
@@ -1572,6 +1604,9 @@ async function startScene(): Promise<void> {
       controller.pos.y + eyeY + vista.camLift - fallDip - kneel.camSink,
       controller.pos.z,
     );
+    // Keep the audio listener on the camera every rendered frame (even in
+    // endings/menus) so positional panning + occlusion stay true (Task 17).
+    audio.setListener(controller.pos.x, camera.position.y, controller.pos.z, controller.yaw);
     // While a memory plays, its intimate fog replaces the vista/base far-plane.
     fog.far = visionPlayer.active ? visionFogFar : baseFogFar + vista.fogFarBoost;
 

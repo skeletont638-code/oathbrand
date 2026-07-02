@@ -10,7 +10,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "assets": "bash scripts/fetch-assets.sh",
-    "assets:verify": "node scripts/verify-gltf.mjs"
+    "assets:verify": "node scripts/verify-gltf.mjs",
+    "audio:fetch": "bash scripts/fetch-audio.sh"
   },
   "dependencies": {
     "three": "^0.183.2"
