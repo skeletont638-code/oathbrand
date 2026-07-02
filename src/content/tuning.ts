@@ -8,8 +8,11 @@ export const TUNING = {
   enemies: {
     soldier: { hp: 3, speed: 1.6, aggroM: 9, alertMs: 600, // "notice" beat before the chase starts
                attack: { damage: 1, windupMs: 700, activeMs: 200, recoverMs: 900, rangeM: 1.8 } },
-    archer:  { hp: 2, speed: 1.4, aggroM: 14, repositionM: 5, shot: { damage: 1, speedM: 7, windupMs: 900, cooldownMs: 2200 } },
-    wraith:  { hp: 2, speed: 2.3, aggroM: 11, lunge: { damage: 1, windupMs: 500, activeMs: 260, recoverMs: 1100, rangeM: 2.6 } },
+    // maxRangeM (Task 10): bolts despawn past this flight distance — no
+    // infinite projectiles; comfortably beyond the archer's 14m aggro.
+    archer:  { hp: 2, speed: 1.4, aggroM: 14, repositionM: 5, shot: { damage: 1, speedM: 7, windupMs: 900, cooldownMs: 2200, maxRangeM: 24 } },
+    // alertMs (Task 10): the wraith's notice beat, mirroring the soldier's.
+    wraith:  { hp: 2, speed: 2.3, aggroM: 11, alertMs: 400, lunge: { damage: 1, windupMs: 500, activeMs: 260, recoverMs: 1100, rangeM: 2.6 } },
     forsworn:{ hp: 24, phaseAt: [16, 8], speed: 1.9 },
   },
 } as const;
