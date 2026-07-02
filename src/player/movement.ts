@@ -20,6 +20,12 @@ export interface InputState {
   stickY: number;
   /** Latched by E / the touch action button; the consumer clears it. */
   interact: boolean;
+  /** Combat (Task 9). Latches cleared by the consumer, like `interact`;
+   *  `guardHeld` mirrors the live Shift state (guard is a held stance). */
+  light: boolean;
+  heavy: boolean;
+  guardHeld: boolean;
+  step: boolean;
 }
 
 /** Stick displacements below this magnitude are treated as idle. */

@@ -28,6 +28,18 @@ const templates = new Map<string, Group>();
 let loader: GLTFLoader | undefined;
 
 /**
+ * Served URL of a kit GLB, for loaders that need the raw glTF — e.g. the
+ * skinned skeletons (Task 9), whose animations this template cache does
+ * not keep. Unknown names throw, same as `loadKitPieces`.
+ */
+export async function kitPieceUrl(name: string): Promise<string> {
+  const key = `/assets/kit/${name}.glb`;
+  const resolveUrl = KIT_URLS[key];
+  if (!resolveUrl) throw new Error(`Unknown kit piece "${name}" (no ${key})`);
+  return resolveUrl();
+}
+
+/**
  * Ensure every named piece is loaded, then return the shared cache.
  * Unknown names (no matching `assets/kit/<name>.glb`) throw immediately.
  */

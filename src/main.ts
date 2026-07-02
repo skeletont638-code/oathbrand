@@ -2,13 +2,19 @@ import * as THREE from 'three';
 import { TUNING } from './content/tuning';
 import { Game } from './engine/Game';
 import { installScreenshotKey } from './engine/screenshot';
+import { EnemyView, loadSkeleton } from './entities/animator';
+import type { EnemyCtx } from './entities/Enemy';
+import { Soldier } from './entities/Soldier';
 import { Brand } from './player/Brand';
+import { Combat, inArc } from './player/Combat';
 import { Controller } from './player/Controller';
 import { Interactor } from './player/Interactor';
 import type { Interactable } from './player/Interactor';
+import { moveVector } from './player/movement';
 import { PS1Pipeline } from './ps1/PS1Pipeline';
 import { loadGame, saveGame } from './save/save';
 import type { SaveData } from './save/save';
+import { kitPieceUrl } from './world/assets';
 import { createBrandHud } from './ui/brandHud';
 import { createDevHud } from './ui/devHud';
 import { hidePrompt, showPrompt } from './ui/prompt';
@@ -36,17 +42,24 @@ function showFallback(message: string): void {
 }
 
 /**
- * Hardcoded TEST zone until authored zone data lands: a 6×6 room with two
- * wall torches and a crate, player spawn at the center. Exercises the whole
- * chain: ASCII grid → gridToPlacements → merged, `patchMaterial`-patched kit
- * meshes → PS1Pipeline. The kit pieces are textured, so this room also covers
- * the "patched material with a bound map" GLSL path that the old
- * checkerboard-cube canary existed to guard.
+ * Hardcoded TEST zone until authored zone data lands: a 6×12 torch-lit hall.
+ * The player spawns at the south end; ONE Hollow Soldier (Task 9) waits at
+ * the north end, ~14m away — outside its 9m aggro radius, so the fight
+ * starts on the player's approach: aggro → telegraph → swing. Exercises the
+ * whole chain: ASCII grid → gridToPlacements → merged, `patchMaterial`-
+ * patched kit meshes → PS1Pipeline, plus the skinned-enemy path (GLB clips
+ * through entities/animator).
  */
 const TEST_ZONE: ZoneDef = {
   id: 'ashen-gate',
   grid: [
     '######',
+    '#....#',
+    '#....#',
+    '#....#',
+    '#....#',
+    '#....#',
+    '#....#',
     '#....#',
     '#....#',
     '#..S.#',
@@ -55,14 +68,19 @@ const TEST_ZONE: ZoneDef = {
   ],
   cell: 2,
   tiles: {},
-  props: [{ kind: 'crate', at: [4, 1], rotY: 0.35 }],
-  lights: [{ at: [1, 2] }, { at: [4, 4] }],
-  enemies: [],
+  props: [{ kind: 'crate', at: [8, 1], rotY: 0.35 }],
+  lights: [{ at: [1, 2] }, { at: [5, 1] }, { at: [9, 4] }],
+  enemies: [{ kind: 'soldier', at: [2, 2] }],
   // A readable note on the crate so the interact prompt has a live target.
-  lore: [{ id: 'crate-note', at: [4, 1], text: 'The ash keeps no oaths.' }],
+  lore: [{ id: 'crate-note', at: [8, 1], text: 'The ash keeps no oaths.' }],
   doors: [],
   ambience: [],
 };
+
+/** KayKit skeletons are 2.6m tall at scale 1 — 0.7 fits the 2m-wall halls. */
+const SOLDIER_SCALE = 0.7;
+/** Ember-wisp lifetime (death mote drifting up from a slain enemy), ms. */
+const WISP_MS = 1200;
 
 /** World-space center of the zone's `S` cell (player start). */
 function findSpawn(def: ZoneDef): { x: number; z: number } {
@@ -142,9 +160,44 @@ async function startScene(): Promise<void> {
   const interactor = new Interactor(controller);
   const interactables = collectInteractables(built);
 
+  // Player combat kit (Task 9): LMB light / RMB heavy / Shift guard / Space
+  // quick-step. The step steers along the current move input; with no input
+  // Combat falls back to a backstep.
+  const combat = new Combat({
+    pose: controller,
+    collider: () => built.collider,
+    stepDir: (out) => moveVector(controller.input, controller.yaw, out),
+  });
+
+  // Enemies: logic (Soldier FSM) + view (skinned GLB clone driven by the
+  // animator). The player's guard is injected as the soldiers' MeleeDefense.
+  const enemies: { logic: Soldier; view: EnemyView }[] = [];
+  const soldierSpawns = built.spawns.filter((s) => s.kind === 'soldier');
+  if (soldierSpawns.length > 0) {
+    const template = await loadSkeleton(await kitPieceUrl('skeleton-warrior'));
+    const soldierAttack = TUNING.enemies.soldier.attack;
+    soldierSpawns.forEach((spawn, i) => {
+      const soldier = new Soldier({
+        id: `${zones.current}-soldier-${i}`,
+        bus: game.bus,
+        defense: combat,
+      });
+      const [row, col] = spawn.at;
+      soldier.pos.set((col + 0.5) * TEST_ZONE.cell, 0, (row + 0.5) * TEST_ZONE.cell);
+      const view = new EnemyView(
+        soldier,
+        template,
+        SOLDIER_SCALE,
+        soldierAttack.windupMs + soldierAttack.activeMs,
+      );
+      scene.add(view.root);
+      enemies.push({ logic: soldier, view });
+    });
+  }
+
   // The Oath-Brand: embers-as-health, threat pulse, hollowing desaturation,
-  // and the rekindle→save checkpoint loop. No enemies exist yet (Task 9+),
-  // so the distance providers report nothing near.
+  // and the rekindle→save checkpoint loop. The pulse now tracks the nearest
+  // living enemy for real.
   const brandHud = createBrandHud(TUNING.brand.maxEmbers);
   const brand = new Brand({
     bus: game.bus,
@@ -165,10 +218,37 @@ async function startScene(): Promise<void> {
       };
       saveGame(data);
     },
-    nearestEnemyM: () => null,
+    nearestEnemyM: () => {
+      let best: number | null = null;
+      for (const { logic } of enemies) {
+        if (!logic.alive) continue;
+        const d = Math.hypot(logic.pos.x - controller.pos.x, logic.pos.z - controller.pos.z);
+        if (best === null || d < best) best = d;
+      }
+      return best;
+    },
     nearestIllusoryM: () => null,
   });
   game.register(brand);
+
+  // Enemy hits (already guard-filtered by Combat) burn embers; every 3rd
+  // kill returns one as a wisp (Brand self-subscribes to enemy-slain).
+  game.bus.on('player-hit', (e) => brand.damage(e.damage));
+  game.bus.on('ember-gained', (e) => brandHud.setEmbers(e.total));
+
+  // Ember wisp: a small hot mote rises from each slain enemy — the visible
+  // half of the +1-per-3-kills rule (the counter itself lives in Brand).
+  const wispGeo = new THREE.SphereGeometry(0.09, 6, 5);
+  const wisps: { mesh: THREE.Mesh; material: THREE.MeshBasicMaterial; ttl: number }[] = [];
+  game.bus.on('enemy-slain', (e) => {
+    const source = enemies.find((en) => en.logic.id === e.enemyId);
+    if (!source) return;
+    const material = new THREE.MeshBasicMaterial({ color: 0xffa050, transparent: true });
+    const mesh = new THREE.Mesh(wispGeo, material);
+    mesh.position.set(source.logic.pos.x, 1.0, source.logic.pos.z);
+    scene.add(mesh);
+    wisps.push({ mesh, material, ttl: WISP_MS });
+  });
 
   // Brand → HUD: embers/hollow are event-driven; pulse is pushed per frame
   // below (it decays to zero silently, which no event announces).
@@ -197,6 +277,8 @@ async function startScene(): Promise<void> {
       controller,
       brand,
       pipeline,
+      combat,
+      enemies,
     };
     // Dev-only brand test keys (until combat/banners land): H burns an
     // ember, R kneels at a phantom banner. Manual QA for hollowing/desat.
@@ -218,6 +300,16 @@ async function startScene(): Promise<void> {
     pipeline.resize();
   });
 
+  // Per-swing hit bookkeeping + a reusable enemy context (no per-frame allocs).
+  let lastSwing = 0;
+  const hitThisSwing = new Set<Soldier>();
+  const enemyCtx: EnemyCtx = {
+    playerPos: controller.pos,
+    playerHollow: false,
+    collider: built.collider,
+    canSeePlayer: false,
+  };
+
   let last = performance.now();
   function frame(now: number): void {
     requestAnimationFrame(frame);
@@ -229,6 +321,46 @@ async function startScene(): Promise<void> {
     if (game.state === 'playing') {
       game.update(dt);
       controller.update(dt, built.collider);
+
+      // Combat: guard mirrors the held button; latched presses start actions.
+      combat.tryGuard(controller.input.guardHeld);
+      if (controller.consumeLight()) combat.tryLight();
+      if (controller.consumeHeavy()) combat.tryHeavy();
+      if (controller.consumeStep()) combat.tryStep();
+      combat.update(dt);
+
+      // Player swing sweeps enemies (once per enemy per swing) BEFORE they
+      // think — a killing blow cancels the victim's simultaneous hit.
+      const arc = combat.hitArc();
+      if (arc && combat.swingId !== lastSwing) {
+        lastSwing = combat.swingId;
+        hitThisSwing.clear();
+      }
+      for (const { logic } of enemies) {
+        if (!logic.alive) continue;
+        if (arc && !hitThisSwing.has(logic) && inArc(arc, logic.pos, logic.radius)) {
+          hitThisSwing.add(logic);
+          logic.takeHit(arc.damage);
+        }
+        enemyCtx.playerHollow = brand.hollow;
+        enemyCtx.canSeePlayer = !built.collider.raycastWall(logic.pos, controller.pos);
+        logic.update(dt, enemyCtx);
+      }
+      for (const { view } of enemies) view.update(dt); // incl. death anims
+
+      // Wisps drift up and gutter out.
+      for (let i = wisps.length - 1; i >= 0; i--) {
+        const w = wisps[i];
+        w.ttl -= dt;
+        w.mesh.position.y += dt / 1000;
+        w.material.opacity = Math.max(0, w.ttl / WISP_MS);
+        if (w.ttl <= 0) {
+          scene.remove(w.mesh);
+          w.material.dispose();
+          wisps.splice(i, 1);
+        }
+      }
+
       brandHud.setPulse(brand.pulse, brand.blueFlicker);
       const target = interactor.nearest(interactables);
       if (target) showPrompt(target.verb, target.label);

@@ -2,7 +2,9 @@
  * First-person player controller.
  *
  * Desktop: WASD/arrows move relative to yaw; pointer-lock mouse look with
- * pitch clamped ±75°; losing pointer lock while playing (Esc) auto-pauses
+ * pitch clamped ±75°; combat (Task 9) on LMB = light, RMB = heavy,
+ * Shift (held) = guard, Space = quick-step — mouse buttons only register
+ * while pointer-locked; losing pointer lock while playing (Esc) auto-pauses
  * via `Game.transition('paused')`; clicking the canvas (re)locks — and
  * resumes from pause first, so the same click both unpauses and locks.
  *
@@ -50,6 +52,10 @@ export class Controller {
     stickX: 0,
     stickY: 0,
     interact: false,
+    light: false,
+    heavy: false,
+    guardHeld: false,
+    step: false,
   };
 
   private readonly game: Game;
@@ -63,6 +69,7 @@ export class Controller {
     this.canvas = opts.canvas;
     this.bindKeyboard();
     this.bindPointerLock();
+    this.bindCombatMouse();
     if ('ontouchstart' in window) {
       this.buildTouchUi(opts.touchParent ?? document.body);
     }
@@ -94,6 +101,27 @@ export class Controller {
     return pressed;
   }
 
+  /** True if LMB (light attack) was pressed since last consume. */
+  consumeLight(): boolean {
+    const pressed = this.input.light;
+    this.input.light = false;
+    return pressed;
+  }
+
+  /** True if RMB (heavy attack) was pressed since last consume. */
+  consumeHeavy(): boolean {
+    const pressed = this.input.heavy;
+    this.input.heavy = false;
+    return pressed;
+  }
+
+  /** True if Space (quick-step) was pressed since last consume. */
+  consumeStep(): boolean {
+    const pressed = this.input.step;
+    this.input.step = false;
+    return pressed;
+  }
+
   // --- desktop input ---------------------------------------------------
 
   private bindKeyboard(): void {
@@ -121,6 +149,13 @@ export class Controller {
         break;
       case 'KeyE':
         if (down) this.input.interact = true;
+        break;
+      case 'Space':
+        if (down && !e.repeat && this.game.state === 'playing') this.input.step = true;
+        break;
+      case 'ShiftLeft':
+      case 'ShiftRight':
+        this.input.guardHeld = down && this.game.state === 'playing';
         break;
       default:
         return; // unhandled key: leave default behavior alone
@@ -158,6 +193,19 @@ export class Controller {
     });
   }
 
+  /** Combat mouse buttons (Task 9): LMB = light, RMB = heavy. Only while
+   * pointer-locked and playing, so the click that (re)locks never swings. */
+  private bindCombatMouse(): void {
+    document.addEventListener('mousedown', (e) => {
+      if (document.pointerLockElement !== this.canvas) return;
+      if (this.game.state !== 'playing') return;
+      if (e.button === 0) this.input.light = true;
+      else if (e.button === 2) this.input.heavy = true;
+    });
+    // RMB is an attack, not a browser menu.
+    this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
   private resetInput(): void {
     this.input.forward = false;
     this.input.back = false;
@@ -166,6 +214,10 @@ export class Controller {
     this.input.stickX = 0;
     this.input.stickY = 0;
     this.input.interact = false;
+    this.input.light = false;
+    this.input.heavy = false;
+    this.input.guardHeld = false;
+    this.input.step = false;
   }
 
   // --- touch input -------------------------------------------------------

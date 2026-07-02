@@ -19,6 +19,10 @@ function input(partial: Partial<InputState> = {}): InputState {
     stickX: 0,
     stickY: 0,
     interact: false,
+    light: false,
+    heavy: false,
+    guardHeld: false,
+    step: false,
     ...partial,
   };
 }
