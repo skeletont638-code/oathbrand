@@ -45,6 +45,16 @@ vW = gl_Position.w;
 vec2 uv = vAffine / vW;
 ```
 
+**Scope: base map only.** This affine `uv` is wired into just the base `map`
+(diffuse) sampler — `patchMaterial()` replaces three's `map_fragment` chunk
+with a copy that reads our local `uv` instead of the perspective-correct
+`vMapUv`. That is the common case for the kit-bashed environment art this
+pipeline targets, and the warp reads best on big flat floors and walls
+anyway. Any normal / roughness / emissive maps a material carries keep
+three's perspective-correct sampling; matching them would mean rewriting each
+of those map chunks the same way (and `vMapUv` is a read-only varying, so you
+can't just reassign it — you replace the chunk).
+
 ### 3. Dither + color quantize
 
 The upscale pass quantizes color to RGB555 (5 bits/channel, 32 levels) and
