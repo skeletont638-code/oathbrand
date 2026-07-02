@@ -9,6 +9,17 @@
  */
 import type { EndingId, GameFlag, ZoneId } from '../content/types';
 
+/**
+ * Greater Vael Drop 1 dread state that survives reloads (Task 3): which glitch
+ * gimmicks have been seen (fidelity scarcity — a seen glitch renders shorter)
+ * and how many Watcher sightings the drop has spent. OPTIONAL and additive, so
+ * every v1 save round-trips unchanged (absent ⇒ a fresh dread ledger).
+ */
+export interface DreadSave {
+  glitchSeen: string[];
+  watcherSightings: number;
+}
+
 export interface SaveData {
   version: 1;
   zone: ZoneId;
@@ -19,6 +30,8 @@ export interface SaveData {
   loreRead: string[];
   visionsSeen: string[];
   ngPlus: boolean;
+  /** Greater Vael dread ledger (Task 3); absent on v1/castle-only saves. */
+  greaterVael?: DreadSave;
 }
 
 export const SAVE_KEY = 'oathbrand.save.v1';
@@ -53,8 +66,17 @@ function isSaveData(v: unknown): v is SaveData {
     o.endingsSeen.every((x) => typeof x === 'number') &&
     isStringArray(o.loreRead) &&
     isStringArray(o.visionsSeen) &&
-    typeof o.ngPlus === 'boolean'
+    typeof o.ngPlus === 'boolean' &&
+    isDreadSave(o.greaterVael)
   );
+}
+
+/** The optional dread ledger: absent is valid; if present it must be well-formed. */
+function isDreadSave(v: unknown): v is DreadSave | undefined {
+  if (v === undefined) return true;
+  if (typeof v !== 'object' || v === null) return false;
+  const o = v as Record<string, unknown>;
+  return isStringArray(o.glitchSeen) && typeof o.watcherSightings === 'number';
 }
 
 export function saveGame(d: SaveData): void {

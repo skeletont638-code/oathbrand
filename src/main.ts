@@ -2,10 +2,14 @@ import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { TUNING } from './content/tuning';
 import type { GameFlag, ZoneId } from './content/types';
-import { hasZone, zoneOrThrow } from './content/zones';
+import { hasZone, zoneOrThrow, ZONES } from './content/zones';
 import { DEV_EXTERIOR_ZONE } from './world/devExterior';
 import { skyFogColor } from './world/exteriorSky';
 import { Game } from './engine/Game';
+import { DreadDirector } from './engine/DreadDirector';
+import type { DreadCtx, ScareActivation } from './engine/DreadDirector';
+import { ScreenScareKit } from './engine/ScreenScareKit';
+import { setSnapResolution } from './ps1/patchMaterial';
 import { installScreenshotKey } from './engine/screenshot';
 import { ARCHER_CLIPS, EnemyView, ForswornView, WraithView, loadSkeleton } from './entities/animator';
 import { Archer } from './entities/Archer';
@@ -38,7 +42,7 @@ import { dialogueSequence } from './content/dialogue';
 import type { BuiltZone, PlacedDoor } from './world/ZoneBuilder';
 import { ZoneManager } from './world/ZoneManager';
 import { kickOpen, takeItem } from './world/mechanics';
-import type { ZoneDef } from './world/zoneDef';
+import type { GridPos, HagThresholdDef, ScareBeat, ZoneDef } from './world/zoneDef';
 import { canPass, doorEntry, doorSpan, lockFlag, pairedDoor } from './world/zoneGraph';
 import { VistaDirector } from './world/vista';
 import { buildDragon, disposeDragon } from './world/dragon';
@@ -160,6 +164,39 @@ function fogCellFar(def: ZoneDef, row: number, col: number): number | undefined 
     }
   }
   return undefined;
+}
+
+/** A tiny seeded PRNG (mulberry32) — the DreadDirector's per-run randomness
+ *  (the false-pulse crossing the seed picks) is deterministic under it. */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Gather every EXTERIOR zone's scare authoring for one run-scoped DreadDirector
+ *  (the per-drop caps — 10 beats, 2×/gimmick, 6 Watchers — must span the whole
+ *  drop, so there is ONE director, not one per zone). Castle/interior zones
+ *  contribute nothing, which is exactly why they never get scares. Empty today
+ *  (no exterior zone authors beats yet); auto-populates as Tasks 9–12 land. */
+function exteriorScareData(): { scares: ScareBeat[]; anchors: GridPos[]; hag: HagThresholdDef | undefined } {
+  const scares: ScareBeat[] = [];
+  const anchors: GridPos[] = [];
+  let hag: HagThresholdDef | undefined;
+  const defs: ZoneDef[] = Object.values(ZONES).filter((d): d is ZoneDef => d !== undefined);
+  if (IS_DEV && !hasZone(DEV_EXTERIOR_ZONE.id)) defs.push(DEV_EXTERIOR_ZONE);
+  for (const def of defs) {
+    if (def.kind !== 'exterior') continue;
+    if (def.scares) scares.push(...def.scares);
+    if (def.watcherAnchors) anchors.push(...def.watcherAnchors);
+    if (!hag && def.hagThreshold) hag = def.hagThreshold;
+  }
+  return { scares, anchors, hag };
 }
 
 /** Everything the context prompt can target in a built zone. Already-taken
@@ -333,6 +370,10 @@ async function startScene(): Promise<void> {
           ...new Set([...(prev?.visionsSeen ?? []), ...vista.seenIds, ...visionPlayer.seenIds]),
         ],
         ngPlus,
+        // Greater Vael dread ledger (Task 3): the glitches seen + Watcher budget
+        // spent this drop, so fidelity scarcity + the caps survive a reload.
+        // Carries the prior save's ledger forward until an exterior run advances it.
+        greaterVael: dread.snapshot(),
       };
       saveGame(data);
     },
@@ -364,6 +405,82 @@ async function startScene(): Promise<void> {
     },
   });
   game.register(brand);
+
+  // --- Task 3: the DreadDirector + screen-effect scare kit -----------------
+  // "The engine notices IT." The kit holds the four glitch timelines (registered
+  // as a Subsystem right AFTER the Brand, so it ticks once the Brand has written
+  // its own per-frame desaturation — the step loop composites the two via max()).
+  const scareKit = new ScreenScareKit();
+  game.register(scareKit);
+  // ONE run-scoped director for the whole drop (its per-drop caps span zones).
+  // Seeded per run (mulberry32) so the false-pulse crossing replays; the ledger
+  // (glitchSeen / watcherSightings) is seeded from the save so fidelity scarcity
+  // and the Watcher budget persist across reloads.
+  const runSeed = (Date.now() ^ 0x9e3779b9) >>> 0;
+  const dreadData = exteriorScareData();
+  const dread = new DreadDirector(
+    dreadData.scares,
+    dreadData.anchors,
+    dreadData.hag,
+    {
+      glitchSeen: save?.greaterVael?.glitchSeen ?? [],
+      watcherSightings: save?.greaterVael?.watcherSightings ?? 0,
+    },
+    mulberry32(runSeed),
+  );
+  // The reduced-flicker toggle drives the pipeline AND the kit (both strip their
+  // per-frame-random layers; the kit's held timelines are unaffected).
+  scareKit.setFlickerSafe(false);
+  // Latest per-frame dread event (kneel / lore-read), consumed once by the tick.
+  let dreadEvent: DreadCtx['events'] = { kind: 'none' };
+  game.bus.on('lore-read', (e) => {
+    dreadEvent = { kind: 'loreRead', loreId: e.loreId };
+  });
+  game.bus.on('player-rekindled', () => {
+    dreadEvent = { kind: 'kneel' };
+  });
+
+  /** Route one DreadDirector activation to the systems that render it. Screen
+   *  gimmicks + the false-pulse land now; the silence-spike, Watcher, Hag and
+   *  pure-visual routes are seams for Tasks 5/6/9–12 (safe no-ops until then). */
+  function routeScare(a: ScareActivation): void {
+    switch (a.kind) {
+      case 'snap-grid':
+        scareKit.snap(a.everSeen); // a repeat glitch holds ~30% shorter (rule 8)
+        break;
+      case 'resolution-drop':
+        scareKit.resDrop(a.everSeen);
+        break;
+      case 'desaturation':
+        scareKit.desatStab(a.everSeen);
+        break;
+      case 'silence-spike': {
+        // Task 6 adds AudioManager.duckToSilence(ms); route it the moment it lands.
+        const duck = (audio as { duckToSilence?: (ms: number) => void }).duckToSilence;
+        duck?.call(audio, 1200);
+        break;
+      }
+      case 'false-pulse':
+        // A spoofed brand pulse: ONE HUD/threat frame (the HUD's own reduced-
+        // flicker flash cap gates the visual). It never touches the banner.
+        game.bus.emit({ type: 'brand-pulse', intensity: 1 });
+        audio.setThreat(1);
+        break;
+      case 'watcher':
+        // Task 5: watcherPresence.manifest(a.anchor).
+        break;
+      case 'hag-glimpse':
+        // Task 5: hag.glimpse().
+        break;
+      case 'pure-visual':
+        // Tasks 9–12: the authored per-zone one-shot this beat shows.
+        break;
+    }
+  }
+  /** Latch so the per-frame vertex-snap override restores exactly once. */
+  let snapOverridden = false;
+  /** The render scale to restore after a resolution-drop beat ends (null ⇒ none). */
+  let dropRestoreScale: 240 | 360 | null = null;
 
   // --- Task 17: the dread mixer -------------------------------------------
   // The whole soundscape (synth beds + threat heartbeat + stone reverb + SFX).
@@ -1298,6 +1415,8 @@ async function startScene(): Promise<void> {
       pipeline,
       combat,
       audio,
+      scareKit,
+      dread,
       enemies,
       flags,
       vista,
@@ -1397,7 +1516,10 @@ async function startScene(): Promise<void> {
     },
     setRenderHeight: (h) => pipeline.setRenderScale(h),
     setCrt: (b) => pipeline.setCrtEnabled(b),
-    setFlickerSafe: (b) => pipeline.setFlickerSafe(b),
+    setFlickerSafe: (b) => {
+      pipeline.setFlickerSafe(b);
+      scareKit.setFlickerSafe(b); // held glitch timelines survive; random layers strip
+    },
     setTextScale: (v) => applyTextScale(v),
   };
   const settings = loadSettings();
@@ -1571,6 +1693,28 @@ async function startScene(): Promise<void> {
     if (game.state === 'playing' && !transitioning) {
       game.update(dt);
       controller.update(dt, built.collider);
+
+      // --- Task 3: the DreadDirector ------------------------------------
+      // Only exterior (Greater Vael) zones ever get scares — castle zones are
+      // never handed to the director. It fires at most one beat/frame; main
+      // routes each activation to the kit / mixer / (Tasks 5–12) presence.
+      if (activeDef.kind === 'exterior') {
+        const dRow = Math.floor(controller.pos.z / built.cellM);
+        const dCol = Math.floor(controller.pos.x / built.cellM);
+        const inCombat = enemies.some((e) => e.logic.alive && e.logic.state !== 'idle');
+        for (const activation of dread.update({
+          zone: zones.current,
+          cell: [dRow, dCol],
+          dtMs: dt,
+          inCombat,
+          brandPulse: brand.pulse,
+          events: dreadEvent,
+          // vistaFiredId: wired when an exterior VistaDef beat lands (Tasks 9–12).
+        })) {
+          routeScare(activation);
+        }
+        dreadEvent = { kind: 'none' }; // consume this frame's event
+      }
 
       // Combat: guard mirrors the held button; latched presses start actions.
       combat.tryGuard(controller.input.guardHeld);
@@ -1851,6 +1995,36 @@ async function startScene(): Promise<void> {
       const near = fogCellFar(activeDef, gRow, gCol);
       if (near !== undefined) fog.far = Math.min(fog.far, near);
     }
+
+    // --- Task 3: apply the screen-scare kit to the PS1 pipeline ----------
+    // Read the held glitch timelines (advanced by game.update) and drive the
+    // existing pipeline setters — no new render code, one glitch metaphor.
+    // 1) One-frame resolution DROP: force 240 for the beat, restore after (a
+    //    no-op at the default 240 — the paired diegetic guttering carries it).
+    if (scareKit.renderDrop()) {
+      if (dropRestoreScale === null) {
+        dropRestoreScale = pipeline.getRenderScale();
+        pipeline.setRenderScale(240);
+      }
+    } else if (dropRestoreScale !== null) {
+      pipeline.setRenderScale(dropRestoreScale);
+      dropRestoreScale = null;
+    }
+    // 2) Vertex-snap SPIKE: override the snap grid while active, restore once.
+    //    (setRenderScale above already re-syncs the grid, so compute the target
+    //    from the CURRENT scale.)
+    const snapTarget: [number, number] = pipeline.getRenderScale() === 240 ? [320, 240] : [480, 360];
+    const snapNow = scareKit.snapRes();
+    if (snapNow) {
+      setSnapResolution(snapNow[0], snapNow[1]);
+      snapOverridden = true;
+    } else if (snapOverridden) {
+      setSnapResolution(snapTarget[0], snapTarget[1]);
+      snapOverridden = false;
+    }
+    // 3) Desaturation STAB, composited with the Brand's per-frame hollowing via
+    //    max() so the stab never fights (or is fought by) the ember ramp.
+    pipeline.setDesaturation(Math.max(pipeline.getDesaturation(), scareKit.desatBoost()));
 
     hud?.begin();
     pipeline.render(scene, camera);
