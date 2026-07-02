@@ -20,6 +20,7 @@ import type { Material } from 'three';
 import { TUNING } from '../content/tuning';
 import { patchMaterial } from '../ps1/patchMaterial';
 import type { GridPos, HagThresholdDef } from '../world/zoneDef';
+import { steppedTime } from './animator';
 import type { EntityView } from './animator';
 import type { Vec2Like, Vec3Like } from './WatcherPresence';
 
@@ -185,9 +186,12 @@ export class HagView implements EntityView {
     if (!present) return;
     const wp = this.hag.worldPos();
     this.root.position.set(wp.x, 0, wp.z);
-    // A near-imperceptible breathing sway — she waits, she never walks.
+    // A near-imperceptible breathing sway — she waits, she never walks. Sampled
+    // off `steppedTime` (12 fps) like the sibling tall-entity views, so her pose
+    // pops at the wrong tempo while the world renders smooth.
     this.clock += dtMs / 1000;
-    this.hunch.rotation.x = this.baseHunchX + Math.sin(this.clock * 0.9) * 0.03;
+    const stepped = steppedTime(this.clock, HG.animFps);
+    this.hunch.rotation.x = this.baseHunchX + Math.sin(stepped * 0.9) * 0.03;
   }
 
   dispose(): void {
