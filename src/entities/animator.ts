@@ -182,6 +182,22 @@ export class EnemyView {
   private clipFor(state: EnemyState): string {
     return this.clips?.[state] ?? CLIP_FOR_STATE[state];
   }
+
+  /**
+   * Release this view's per-instance resources on zone teardown (Task 11):
+   * stop + uncache the mixer's actions and dispose the materials `ps1ify`
+   * cloned. Geometry and textures stay — both are shared with the cached
+   * skeleton template that outlives every zone. Call after removing
+   * `root` from the scene; the view must not be updated afterwards.
+   */
+  dispose(): void {
+    this.mixer.stopAllAction();
+    this.mixer.uncacheRoot(this.root);
+    this.root.traverse((obj) => {
+      const mesh = obj as Mesh;
+      if (mesh.isMesh) (mesh.material as Material).dispose();
+    });
+  }
 }
 
 /**

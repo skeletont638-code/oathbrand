@@ -84,9 +84,10 @@ export class ZoneManager implements Subsystem {
     return built;
   }
 
-  /** Walk through a door: loads its destination zone (same NG+ state). */
-  async transition(door: PlacedDoor): Promise<void> {
-    await this.load(door.def.to, this.ng);
+  /** Walk through a door: loads its destination zone (same NG+ state) and
+   * returns it so the caller can rebuild zone-scoped state (Task 11). */
+  async transition(door: PlacedDoor): Promise<BuiltZone> {
+    return this.load(door.def.to, this.ng);
   }
 
   /** Subsystem tick: torch flicker via layered sin-noise (deterministic,

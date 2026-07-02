@@ -61,14 +61,43 @@ export interface LoreSpot {
 
 /**
  * A door between zones. `at` is the [row, col] of the door anchor cell in
- * the grid (a `1`-`9`/`D` char). `lock` gates passage — see `canPass` in
- * zoneGraph.ts for the flag each lock kind requires.
+ * the grid (a `1`-`9`/`D` char). A gate wider than one cell repeats the
+ * digit on adjacent cells (e.g. ashen-gate's `11`); the DoorDef anchors on
+ * one of them and `doorSpan` (zoneGraph.ts) claims the rest.
+ *
+ * `lock` gates passage — see `canPass` in zoneGraph.ts for the flag each
+ * lock kind requires.
+ *
+ * PAIRING (Task 11): walking through a door drops the player at the
+ * matching door of the target zone. Two doors are two ends of one passage
+ * when they share the same `pair` edge id (unique per passage, game-wide);
+ * when `pair` is absent, the first door in the target whose `to` points
+ * back at the source zone is used (fine while zones link at most once —
+ * ramparts↔great-hall has TWO edges, so those doors MUST set `pair`).
+ * The arrival pose itself comes from `doorEntry`: one cell inward from the
+ * paired anchor, facing into the room.
  */
 export interface DoorDef {
   id: string;
   at: [number, number];
   to: ZoneId;
   lock?: 'gatekey' | 'shortcut' | 'throne' | 'ngplus' | 'illusory';
+  /** Edge id shared by both ends of a passage (see PAIRING above). */
+  pair?: string;
+}
+
+/**
+ * A one-shot scripted vista moment (spec §9, clip #1): the first time the
+ * player steps into any of `cells`, the renderer swells the fog far-plane
+ * open and lifts the camera (VistaDirector, world/vista.ts) without taking
+ * control away. `id` is persisted in SaveData.visionsSeen (namespaced
+ * `vista-*` so banner-vision ids can never collide) so it plays once per
+ * save; until the first banner checkpoint it replays on reload — intended,
+ * it is the game's signature capture shot.
+ */
+export interface VistaDef {
+  id: string;
+  cells: GridPos[];
 }
 
 /** A fake wall cell; revealing it sets `flag` (e.g. 'garden-found'). */
@@ -98,5 +127,10 @@ export interface ZoneDef {
   doors: DoorDef[];
   illusory?: IllusoryWall[];
   ambience: string[];
+  /** One-shot scripted vista (spec §9); ashen-gate carries clip #1. */
+  vista?: VistaDef;
+  /** Fog far-plane for this zone, meters. Default 16 (main.ts); the
+   * ashen-gate courtyard uses 12 so the vista's 12→28 swell reads. */
+  fogFarM?: number;
   ngPlus?: NgPlusVariant;
 }

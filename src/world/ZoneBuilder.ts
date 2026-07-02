@@ -50,6 +50,9 @@ export interface PlacedLore {
 export interface BuiltZone {
   group: Group;
   collider: GridCollider;
+  /** The built def's cell size (m) — world placement (enemy spawns, door
+   * cells) MUST use this, never a zone-def constant (T9 review). */
+  cellM: number;
   spawns: EnemySpawn[];
   doors: PlacedDoor[];
   banner?: PlacedBanner;
@@ -347,6 +350,7 @@ export class ZoneBuilder {
     return {
       group,
       collider: new GridCollider(def),
+      cellM: cell,
       spawns: def.enemies,
       doors: def.doors.map((d) => ({ def: d, position: toWorld(d.at) })),
       banner,

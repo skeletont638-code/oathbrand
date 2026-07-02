@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { TUNING } from './content/tuning';
+import type { GameFlag, ZoneId } from './content/types';
+import { hasZone, zoneOrThrow } from './content/zones';
 import { Game } from './engine/Game';
 import { installScreenshotKey } from './engine/screenshot';
 import { ARCHER_CLIPS, EnemyView, WraithView, loadSkeleton } from './entities/animator';
@@ -20,10 +22,12 @@ import type { SaveData } from './save/save';
 import { kitPieceUrl } from './world/assets';
 import { createBrandHud } from './ui/brandHud';
 import { createDevHud } from './ui/devHud';
-import { hidePrompt, showPrompt } from './ui/prompt';
-import type { BuiltZone } from './world/ZoneBuilder';
+import { flashDenied, hidePrompt, showPrompt } from './ui/prompt';
+import type { BuiltZone, PlacedDoor } from './world/ZoneBuilder';
 import { ZoneManager } from './world/ZoneManager';
 import type { ZoneDef } from './world/zoneDef';
+import { canPass, doorEntry, doorSpan, pairedDoor } from './world/zoneGraph';
+import { VistaDirector } from './world/vista';
 import './style.css';
 
 function hasWebGL(): boolean {
@@ -44,53 +48,24 @@ function showFallback(message: string): void {
   document.body.appendChild(div);
 }
 
-/**
- * Hardcoded TEST zone until authored zone data lands: a 6×12 torch-lit hall
- * holding the full common-enemy roster (Task 10), one per far corner so each
- * fight starts on the player's approach from the south spawn:
- * - Hollow Soldier (mid-west, ~14m): aggro → telegraph → swing (Task 9).
- * - Hollow Archer (NE corner, ~16m): keeps range, telegraphed crossbow
- *   bolts, backs off when crowded.
- * - Brand-Wraith (NW corner, ~16m): invisible until the brand's pulse
- *   thins the veil; dashes into a lunge up close.
- * Exercises ASCII grid → merged `patchMaterial` kit meshes → PS1Pipeline,
- * plus both skinned-enemy GLBs (warrior + archer) through entities/animator.
- */
-const TEST_ZONE: ZoneDef = {
-  id: 'ashen-gate',
-  grid: [
-    '######',
-    '#....#',
-    '#....#',
-    '#....#',
-    '#....#',
-    '#....#',
-    '#....#',
-    '#....#',
-    '#....#',
-    '#..S.#',
-    '#....#',
-    '######',
-  ],
-  cell: 2,
-  tiles: {},
-  props: [{ kind: 'crate', at: [8, 1], rotY: 0.35 }],
-  lights: [{ at: [1, 2] }, { at: [5, 1] }, { at: [9, 4] }],
-  enemies: [
-    { kind: 'soldier', at: [2, 2] },
-    { kind: 'archer', at: [1, 4] },
-    { kind: 'wraith', at: [1, 1] },
-  ],
-  // A readable note on the crate so the interact prompt has a live target.
-  lore: [{ id: 'crate-note', at: [8, 1], text: 'The ash keeps no oaths.' }],
-  doors: [],
-  ambience: [],
-};
-
 /** KayKit skeletons are 2.6m tall at scale 1 — 0.7 fits the 2m-wall halls. */
 const ENEMY_SCALE = 0.7;
 /** Ember-wisp lifetime (death mote drifting up from a slain enemy), ms. */
 const WISP_MS = 1200;
+/** Fog far-plane when a zone doesn't set its own `fogFarM`. */
+const DEFAULT_FOG_FAR = 16;
+
+/**
+ * The game starts at the Ashen Gate's `S`. Dev builds (`?dev=1`) may jump
+ * straight to any registered zone with `&zone=<id>` — this replaced the
+ * old hardcoded TEST_ZONE (Task 11); the real zones ARE the test content
+ * now, and manual QA reaches each one directly.
+ */
+function startZoneId(): ZoneId {
+  const params = new URLSearchParams(window.location.search);
+  const zone = params.get('dev') === '1' ? params.get('zone') : null;
+  return zone && hasZone(zone as ZoneId) ? (zone as ZoneId) : 'ashen-gate';
+}
 
 /** World-space center of the zone's `S` cell (player start). */
 function findSpawn(def: ZoneDef): { x: number; z: number } {
@@ -133,7 +108,8 @@ function collectInteractables(built: BuiltZone): Interactable[] {
 
 async function startScene(): Promise<void> {
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(0x1a1a1d, 2, 16);
+  const fog = new THREE.Fog(0x1a1a1d, 2, DEFAULT_FOG_FAR);
+  scene.fog = fog;
   scene.background = new THREE.Color(0x1a1a1d);
 
   const camera = new THREE.PerspectiveCamera(
@@ -155,24 +131,39 @@ async function startScene(): Promise<void> {
   scene.add(new THREE.AmbientLight(0x8a8a92, 0.35));
 
   const game = new Game();
-  const zones = new ZoneManager({ scene, bus: game.bus, resolve: () => TEST_ZONE });
+
+  // Run state seeded from the save: door-lock flags, NG+ remix, and the
+  // vista seen-set (one-shots stay one-shot across reloads once banked at
+  // a banner). Full save-restore (CONTINUE) lands with the menus (T18).
+  const save = loadGame();
+  const flags = new Set<GameFlag>(save?.flags ?? []);
+  const ngPlus = save?.ngPlus ?? false;
+  const vista = new VistaDirector(save?.visionsSeen ?? []);
+
+  // Zone registry (Task 11): real authored zones resolve through ZONES.
+  const zones = new ZoneManager({ scene, bus: game.bus, resolve: zoneOrThrow });
   game.register(zones);
-  const built = await zones.load('ashen-gate', false);
+  let built = await zones.load(startZoneId(), ngPlus);
+  /** Authored def of the current zone (grid/cell/vista never vary in NG+). */
+  let activeDef = zoneOrThrow(zones.current);
+  /** Current fog far baseline; the vista adds its boost on top per frame. */
+  let baseFogFar = DEFAULT_FOG_FAR;
 
   // First-person player. Camera reads the controller pose every frame;
   // 'YXZ' keeps yaw level when pitched (no roll creep).
   const controller = new Controller({ game, canvas: renderer.domElement });
-  const spawn = findSpawn(TEST_ZONE);
+  const spawn = findSpawn(activeDef);
   controller.pos.set(spawn.x, 0, spawn.z);
   camera.rotation.order = 'YXZ';
   const eyeY = TUNING.player.height * 0.9;
 
   const interactor = new Interactor(controller);
-  const interactables = collectInteractables(built);
+  let interactables: Interactable[] = [];
 
   // Player combat kit (Task 9): LMB light / RMB heavy / Shift guard / Space
   // quick-step. The step steers along the current move input; with no input
-  // Combat falls back to a backstep.
+  // Combat falls back to a backstep. `built` is rebound on every zone
+  // transition, so the collider closure always sees the current zone.
   const combat = new Combat({
     pose: controller,
     collider: () => built.collider,
@@ -181,15 +172,16 @@ async function startScene(): Promise<void> {
 
   // Zone-shared crossbow bolts (Task 10): one pool serves every archer, and
   // the player's guard blocks bolts exactly like melee (frontal, 0 embers).
-  const bolts = new ProjectilePool({ bus: game.bus, defense: combat });
+  // Recreated per zone (resetBolts) so no bolt survives a transition.
+  let bolts = new ProjectilePool({ bus: game.bus, defense: combat });
 
   // Enemy roster — declared before the Brand so its nearest-enemy poll can
-  // close over the array; populated right after the Brand exists (wraiths
-  // need `() => brand.pulse` for their veil).
+  // close over the array; REBUILT in place on every zone transition
+  // (spawnEnemies), so every closure over `enemies` stays live.
   const enemies: { logic: Enemy; view: EnemyView }[] = [];
 
   // The Oath-Brand: embers-as-health, threat pulse, hollowing desaturation,
-  // and the rekindle→save checkpoint loop. The pulse now tracks the nearest
+  // and the rekindle→save checkpoint loop. The pulse tracks the nearest
   // living enemy for real.
   const brandHud = createBrandHud(TUNING.brand.maxEmbers);
   const brand = new Brand({
@@ -203,11 +195,12 @@ async function startScene(): Promise<void> {
         zone: zones.current,
         bannerId,
         embers: brand.embers,
-        flags: prev?.flags ?? [],
+        flags: [...flags],
         endingsSeen: prev?.endingsSeen ?? [],
         loreRead: prev?.loreRead ?? [],
-        visionsSeen: prev?.visionsSeen ?? [],
-        ngPlus: prev?.ngPlus ?? false,
+        // Bank fired vistas (and keep any ids an older save already held).
+        visionsSeen: [...new Set([...(prev?.visionsSeen ?? []), ...vista.seenIds])],
+        ngPlus,
       };
       saveGame(data);
     },
@@ -227,15 +220,92 @@ async function startScene(): Promise<void> {
   });
   game.register(brand);
 
-  // Enemies: logic FSM + view (skinned GLB clone driven by the animator).
-  // The player's guard is injected as every enemy's MeleeDefense. Wraiths
-  // wear the warrior rig as a ghost (WraithView); archers get the crossbow
-  // clip set and fire into the shared bolt pool.
-  {
-    const [warriorTemplate, archerTemplate] = await Promise.all([
-      loadSkeleton(await kitPieceUrl('skeleton-warrior')),
-      loadSkeleton(await kitPieceUrl('skeleton-archer')),
-    ]);
+  // Skinned enemy templates, loaded ONCE — zone rebuilds re-clone from
+  // these (wraiths wear the warrior rig as a ghost; archers get the
+  // crossbow clip set and fire into the shared bolt pool).
+  const [warriorTemplate, archerTemplate] = await Promise.all([
+    loadSkeleton(await kitPieceUrl('skeleton-warrior')),
+    loadSkeleton(await kitPieceUrl('skeleton-archer')),
+  ]);
+
+  // Bolt views: one small unlit quarrel per pooled projectile, lazily grown
+  // (the pool itself recycles — steady-state combat allocates nothing).
+  const boltGeo = new THREE.BoxGeometry(0.07, 0.07, 0.55);
+  const boltMat = new THREE.MeshBasicMaterial({ color: 0xe8d8b0 });
+  const boltMeshes: THREE.Mesh[] = [];
+  function syncBolts(pool: ProjectilePool): void {
+    while (boltMeshes.length < pool.items.length) {
+      const mesh = new THREE.Mesh(boltGeo, boltMat);
+      mesh.visible = false;
+      scene.add(mesh);
+      boltMeshes.push(mesh);
+    }
+    pool.items.forEach((bolt: Projectile, i: number) => {
+      const mesh = boltMeshes[i];
+      mesh.visible = bolt.active;
+      if (bolt.active) {
+        mesh.position.copy(bolt.pos);
+        mesh.rotation.y = Math.atan2(bolt.dir.x, bolt.dir.z);
+      }
+    });
+  }
+
+  // Ember wisp: a small hot mote rises from each slain enemy — the visible
+  // half of the +1-per-3-kills rule (the counter itself lives in Brand).
+  const wispGeo = new THREE.SphereGeometry(0.09, 6, 5);
+  const wisps: { mesh: THREE.Mesh; material: THREE.MeshBasicMaterial; ttl: number }[] = [];
+  game.bus.on('enemy-slain', (e) => {
+    const source = enemies.find((en) => en.logic.id === e.enemyId);
+    if (!source) return;
+    const material = new THREE.MeshBasicMaterial({ color: 0xffa050, transparent: true });
+    const mesh = new THREE.Mesh(wispGeo, material);
+    mesh.position.set(source.logic.pos.x, 1.0, source.logic.pos.z);
+    scene.add(mesh);
+    wisps.push({ mesh, material, ttl: WISP_MS });
+  });
+
+  // Per-swing hit bookkeeping + a reusable enemy context (no per-frame
+  // allocs). `collider` is re-pointed at each new zone by enterZone().
+  let lastSwing = 0;
+  const hitThisSwing = new Set<Enemy>();
+  const enemyCtx: EnemyCtx = {
+    playerPos: controller.pos,
+    playerHollow: false,
+    collider: built.collider,
+    canSeePlayer: false,
+  };
+
+  // --- zone-scoped state rebuild (Task 11 handoff obligation) -------------
+  // Everything below is torn down and rebuilt on EVERY zone entry: enemy
+  // logic+views (views disposed), the projectile pool + its meshes, wisps,
+  // interactables, door trigger cells, and the enemyCtx collider.
+
+  /** Door-span trigger cells of the current zone, "row,col" → placed door. */
+  let doorCells = new Map<string, PlacedDoor>();
+
+  function clearEnemies(): void {
+    for (const { view } of enemies) {
+      scene.remove(view.root);
+      view.dispose();
+    }
+    enemies.length = 0;
+  }
+
+  function clearWisps(): void {
+    for (const w of wisps) {
+      scene.remove(w.mesh);
+      w.material.dispose();
+    }
+    wisps.length = 0;
+  }
+
+  function resetBolts(): void {
+    for (const mesh of boltMeshes) scene.remove(mesh);
+    boltMeshes.length = 0; // geometry/material are shared and live on
+    bolts = new ProjectilePool({ bus: game.bus, defense: combat });
+  }
+
+  function spawnEnemies(): void {
     const soldierAttack = TUNING.enemies.soldier.attack;
     const lunge = TUNING.enemies.wraith.lunge;
     built.spawns.forEach((spawn, i) => {
@@ -272,32 +342,66 @@ async function startScene(): Promise<void> {
         );
         logic = soldier;
       }
+      // Spawn placement uses the BUILT zone's cell size (T9 review).
       const [row, col] = spawn.at;
-      logic.pos.set((col + 0.5) * TEST_ZONE.cell, 0, (row + 0.5) * TEST_ZONE.cell);
+      logic.pos.set((col + 0.5) * built.cellM, 0, (row + 0.5) * built.cellM);
       scene.add(view.root);
       enemies.push({ logic, view });
     });
   }
 
-  // Bolt views: one small unlit quarrel per pooled projectile, lazily grown
-  // (the pool itself recycles — steady-state combat allocates nothing).
-  const boltGeo = new THREE.BoxGeometry(0.07, 0.07, 0.55);
-  const boltMat = new THREE.MeshBasicMaterial({ color: 0xe8d8b0 });
-  const boltMeshes: THREE.Mesh[] = [];
-  function syncBolts(pool: ProjectilePool): void {
-    while (boltMeshes.length < pool.items.length) {
-      const mesh = new THREE.Mesh(boltGeo, boltMat);
-      mesh.visible = false;
-      scene.add(mesh);
-      boltMeshes.push(mesh);
-    }
-    pool.items.forEach((bolt: Projectile, i: number) => {
-      const mesh = boltMeshes[i];
-      mesh.visible = bolt.active;
-      if (bolt.active) {
-        mesh.position.copy(bolt.pos);
-        mesh.rotation.y = Math.atan2(bolt.dir.x, bolt.dir.z);
+  /** Bind all zone-scoped state to the freshly built `built`/`zones.current`. */
+  function enterZone(): void {
+    activeDef = zoneOrThrow(zones.current);
+    baseFogFar = activeDef.fogFarM ?? DEFAULT_FOG_FAR;
+    fog.far = baseFogFar;
+    enemyCtx.collider = built.collider;
+    interactables = collectInteractables(built);
+    doorCells = new Map();
+    for (const door of built.doors) {
+      for (const [row, col] of doorSpan(activeDef, door.def)) {
+        doorCells.set(`${row},${col}`, door);
       }
+    }
+    clearWisps();
+    clearEnemies();
+    resetBolts(); // before spawnEnemies — archers capture the new pool
+    spawnEnemies();
+  }
+
+  // --- door transitions (Task 11) ------------------------------------------
+  // Walking into any cell of a passable door's span (or pressing E on it)
+  // loads the destination and places the player one cell inside its PAIRED
+  // door (see DoorDef pairing docs in zoneDef.ts), facing into the room —
+  // never on a door cell, so arrivals cannot chain-transition.
+  let transitioning = false;
+  function goThrough(door: PlacedDoor): void {
+    if (transitioning) return;
+    transitioning = true; // freezes simulation until the new zone is live
+    hidePrompt();
+    const from = zones.current;
+    game.bus.emit({ type: 'door-opened', doorId: door.def.id });
+    void (async () => {
+      try {
+        built = await zones.transition(door);
+        const def = zoneOrThrow(zones.current);
+        const paired = pairedDoor(from, door.def, def);
+        if (paired) {
+          const entry = doorEntry(def, paired);
+          controller.pos.set(entry.x, 0, entry.z);
+          controller.yaw = entry.yaw;
+        } else {
+          // One-way passage (no return door): arrive at the zone's S spawn.
+          const s = findSpawn(def);
+          controller.pos.set(s.x, 0, s.z);
+        }
+        controller.pitch = 0;
+        enterZone();
+      } finally {
+        transitioning = false;
+      }
+    })().catch((err: unknown) => {
+      console.error(`OATHBRAND: transition through "${door.def.id}" failed:`, err);
     });
   }
 
@@ -305,20 +409,6 @@ async function startScene(): Promise<void> {
   // kill returns one as a wisp (Brand self-subscribes to enemy-slain).
   game.bus.on('player-hit', (e) => brand.damage(e.damage));
   game.bus.on('ember-gained', (e) => brandHud.setEmbers(e.total));
-
-  // Ember wisp: a small hot mote rises from each slain enemy — the visible
-  // half of the +1-per-3-kills rule (the counter itself lives in Brand).
-  const wispGeo = new THREE.SphereGeometry(0.09, 6, 5);
-  const wisps: { mesh: THREE.Mesh; material: THREE.MeshBasicMaterial; ttl: number }[] = [];
-  game.bus.on('enemy-slain', (e) => {
-    const source = enemies.find((en) => en.logic.id === e.enemyId);
-    if (!source) return;
-    const material = new THREE.MeshBasicMaterial({ color: 0xffa050, transparent: true });
-    const mesh = new THREE.Mesh(wispGeo, material);
-    mesh.position.set(source.logic.pos.x, 1.0, source.logic.pos.z);
-    scene.add(mesh);
-    wisps.push({ mesh, material, ttl: WISP_MS });
-  });
 
   // Brand → HUD: embers/hollow are event-driven; pulse is pushed per frame
   // below (it decays to zero silently, which no event announces).
@@ -337,7 +427,8 @@ async function startScene(): Promise<void> {
 
   // Dev-only escape hatch (?dev=1) so tooling/manual QA can poke at the
   // renderer and zone manager (e.g. verify renderer.info doesn't grow
-  // across zone transitions). Never present in normal play.
+  // across zone transitions). Never present in normal play. Zone-scoped
+  // values are exposed as getters — they are rebound on every transition.
   if (hud) {
     (window as unknown as Record<string, unknown>).__oathbrand = {
       renderer,
@@ -349,15 +440,31 @@ async function startScene(): Promise<void> {
       pipeline,
       combat,
       enemies,
-      bolts,
+      flags,
+      vista,
+      get built() {
+        return built;
+      },
+      get bolts() {
+        return bolts;
+      },
+      get interactables() {
+        return interactables;
+      },
+      get transitioning() {
+        return transitioning;
+      },
     };
-    // Dev-only brand test keys (until combat/banners land): H burns an
-    // ember, R kneels at a phantom banner. Manual QA for hollowing/desat.
+    // Dev-only brand test keys: H burns an ember, R kneels at a phantom
+    // banner. Manual QA for hollowing/desat and the save checkpoint.
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyH') brand.damage(1);
       else if (e.code === 'KeyR') brand.rekindle('dev-banner');
     });
   }
+
+  // Bind the initial zone (same path every transition takes).
+  enterZone();
 
   // Until Task 18's menus land, jump straight into play so the room is
   // immediately walkable (boot → title → playing).
@@ -371,25 +478,16 @@ async function startScene(): Promise<void> {
     pipeline.resize();
   });
 
-  // Per-swing hit bookkeeping + a reusable enemy context (no per-frame allocs).
-  let lastSwing = 0;
-  const hitThisSwing = new Set<Enemy>();
-  const enemyCtx: EnemyCtx = {
-    playerPos: controller.pos,
-    playerHollow: false,
-    collider: built.collider,
-    canSeePlayer: false,
-  };
-
   let last = performance.now();
   function frame(now: number): void {
     requestAnimationFrame(frame);
     const dt = Math.min(now - last, 100); // clamp tab-switch jumps
     last = now;
 
-    // Simulation is gated on 'playing' (pause freezes world + player);
-    // rendering continues so the paused frame stays on screen.
-    if (game.state === 'playing') {
+    // Simulation is gated on 'playing' (pause freezes world + player) and
+    // on not being mid-transition; rendering continues so the last frame
+    // stays on screen while a zone swaps.
+    if (game.state === 'playing' && !transitioning) {
       game.update(dt);
       controller.update(dt, built.collider);
 
@@ -437,15 +535,50 @@ async function startScene(): Promise<void> {
         }
       }
 
+      // --- doors + vista (Task 11), keyed off the player's grid cell ----
+      const pRow = Math.floor(controller.pos.z / built.cellM);
+      const pCol = Math.floor(controller.pos.x / built.cellM);
+
+      // Walking into a passable door's span transitions. Unbuilt targets
+      // (undercroft/ramparts/throne until T12/T15) stay sealed.
+      const doorHere = doorCells.get(`${pRow},${pCol}`);
+      if (doorHere && canPass(doorHere.def, flags) && hasZone(doorHere.def.to)) {
+        goThrough(doorHere);
+      }
+
+      // Vista (clip #1): one-shot; the director eases fog + camera, the
+      // event is the audio swell's cue (T17).
+      if (activeDef.vista && vista.enterCell(activeDef.vista, pRow, pCol)) {
+        game.bus.emit({ type: 'vision-played', visionId: activeDef.vista.id });
+      }
+      vista.update(dt);
+
       brandHud.setPulse(brand.pulse, brand.blueFlicker);
       const target = interactor.nearest(interactables);
       if (target) showPrompt(target.verb, target.label);
       else hidePrompt();
+
+      // E on a door: pass if it opens, ember-red 'SEALED' rebuke if not.
+      // (READ/KNEEL actions land with the lore/checkpoint tasks.)
+      const pressedE = controller.consumeAction();
+      if (pressedE && target?.verb === 'OPEN') {
+        const door = built.doors.find((d) => d.def.id === target.id);
+        if (door) {
+          if (canPass(door.def, flags) && hasZone(door.def.to)) goThrough(door);
+          else flashDenied();
+        }
+      }
     }
 
     camera.rotation.y = controller.yaw;
     camera.rotation.x = controller.pitch;
-    camera.position.set(controller.pos.x, controller.pos.y + eyeY, controller.pos.z);
+    // The vista's lift rides on top of the eye height (0 when idle).
+    camera.position.set(
+      controller.pos.x,
+      controller.pos.y + eyeY + vista.camLift,
+      controller.pos.z,
+    );
+    fog.far = baseFogFar + vista.fogFarBoost;
 
     hud?.begin();
     pipeline.render(scene, camera);
