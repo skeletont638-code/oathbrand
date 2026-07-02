@@ -12,6 +12,10 @@ export type GameEvent =
   | { type: 'door-opened'; doorId: string }
   | { type: 'lore-read'; loreId: string }
   | { type: 'vision-played'; visionId: string }
+  // A named audio/motif cue for the sound layer (Task 17) — e.g. 'motif-kneel'
+  // fired at the settle beat of a kneel. Purely a string handle; nothing
+  // gameplay reads it, so new cue ids never touch this union again.
+  | { type: 'cue'; id: string }
   | { type: 'ending-reached'; ending: EndingId };
 
 type Handler<T extends GameEvent['type']> = (e: Extract<GameEvent, { type: T }>) => void;

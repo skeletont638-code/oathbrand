@@ -1,0 +1,150 @@
+/**
+ * The banner visions (Task 14) — the memory of the night Vael fell, one per
+ * banner, played the FIRST time the player kneels there. Together, in zone
+ * order, they assemble the tragedy:
+ *
+ *   the flame guttered  →  the oaths died  →  Callun opened the gate  →
+ *   the queen knelt alone  →  the herald ran  →  the garden kept her brand
+ *
+ * VOICE matches the T13 inscriptions (src/content/lore.ts): terse, litany-like,
+ * an image then a turn that darkens it. Each step's caption is a single line.
+ *
+ * Every vision opens on ash (`desatTo` ≈ 0.82), floods colour back toward 0
+ * (the past briefly alive), then the last step SNAPS to ash — the memory
+ * ending. Ghosts are placed on cells near each banner; the four built zones
+ * (gate/hall/undercroft/ramparts) use real floor cells, and the throne &
+ * queens-garden placements are authored now for when T15/T16 build those zones
+ * — `main.ts` only ever plays the vision of the banner actually being knelt at.
+ *
+ * `id`s are namespaced `vision-*`; the vista one-shots are `vista-*`; both live
+ * in `SaveData.visionsSeen`, so the two families never collide.
+ */
+import type { ZoneId } from './types';
+import type { VisionDef } from '../engine/VisionPlayer';
+
+/** Close, intimate ash for a memory — the world pulls in around the ghosts. */
+const MEMORY_FOG = 9;
+/** The ash the memory opens on and snaps back to (the 4-embers-lost ramp). */
+const ASH = 0.82;
+
+export const VISIONS: Record<
+  Extract<ZoneId, 'ashen-gate' | 'great-hall' | 'undercroft' | 'ramparts' | 'throne' | 'queens-garden'>,
+  VisionDef
+> = {
+  // ─── 1. THE ASHEN GATE — the flame guttered ──────────────────────────────
+  'ashen-gate': {
+    id: 'vision-ashen-gate',
+    steps: [
+      { desatTo: ASH, fogFar: MEMORY_FOG, waitMs: 700 },
+      {
+        desatTo: 0.5,
+        caption: 'The royal flame once stood taller than a man; every brand in Vael was lit from it.',
+        spawnGhosts: [
+          { piece: 'skeleton-warrior', at: [2, 6], rotY: 0 },
+          { piece: 'skeleton-warrior', at: [3, 5], rotY: 0.3 },
+        ],
+        waitMs: 1500,
+      },
+      { desatTo: 0.15, caption: 'One breath, and it leaned — the way a candle leans — and did not lean back.', waitMs: 1600 },
+      { desatTo: 0, caption: 'They named that night the Guttering before they knew it had no morning.', waitMs: 1700 },
+      { desatTo: ASH, waitMs: 500 },
+    ],
+  },
+
+  // ─── 2. THE GREAT HALL — the oaths died ───────────────────────────────────
+  'great-hall': {
+    id: 'vision-great-hall',
+    steps: [
+      { desatTo: ASH, fogFar: MEMORY_FOG, waitMs: 700 },
+      {
+        desatTo: 0.5,
+        caption: 'In the hall the sworn were still kneeling when the brands went cold in their hands.',
+        spawnGhosts: [
+          { piece: 'skeleton-warrior', at: [5, 6], rotY: -1.2 },
+          { piece: 'skeleton-warrior', at: [4, 7], rotY: -1.2 },
+          { piece: 'skeleton-warrior', at: [4, 9], rotY: -1.6 },
+        ],
+        waitMs: 1500,
+      },
+      { desatTo: 0.15, caption: 'An oath is only fire remembering a promise; the fire forgot the promise first.', waitMs: 1600 },
+      { desatTo: 0, caption: 'One by one the faces emptied, and none of them felt themselves empty.', waitMs: 1700 },
+      { desatTo: ASH, waitMs: 500 },
+    ],
+  },
+
+  // ─── 3. THE UNDERCROFT — Callun opened the gate ───────────────────────────
+  undercroft: {
+    id: 'vision-undercroft',
+    steps: [
+      { desatTo: ASH, fogFar: MEMORY_FOG, waitMs: 700 },
+      {
+        desatTo: 0.5,
+        caption: 'The first knight walked to the last door and took no torch, for he no longer meant to see.',
+        spawnGhosts: [{ piece: 'statue-knight', at: [6, 4], rotY: 1.2 }],
+        waitMs: 1500,
+      },
+      { desatTo: 0.15, caption: 'He drew the bar with his own hand — sworn before all others, forsworn before all others.', waitMs: 1600 },
+      { desatTo: 0, caption: 'He let the dark in the way a man lets in the cold, to be done with the waiting.', waitMs: 1700 },
+      { desatTo: ASH, waitMs: 500 },
+    ],
+  },
+
+  // ─── 4. THE RAMPARTS — the queen knelt alone ──────────────────────────────
+  ramparts: {
+    id: 'vision-ramparts',
+    steps: [
+      { desatTo: ASH, fogFar: MEMORY_FOG, waitMs: 700 },
+      {
+        desatTo: 0.5,
+        caption: 'The Queen did not run; she knelt where the flame had been and gave it back her crown.',
+        spawnGhosts: [
+          { piece: 'statue-knight', at: [4, 4], rotY: -0.6 },
+          { piece: 'skeleton-warrior', at: [3, 3], rotY: 0.4 },
+        ],
+        waitMs: 1500,
+      },
+      { desatTo: 0.15, caption: '‘Return the crown to the flame that forged it’ — she said it to an empty hall.', waitMs: 1600 },
+      { desatTo: 0, caption: 'No banner answered, and no brand. She knelt alone, and named it enough.', waitMs: 1700 },
+      { desatTo: ASH, waitMs: 500 },
+    ],
+  },
+
+  // ─── 5. THE THRONE (T15) — the herald ran ─────────────────────────────────
+  throne: {
+    id: 'vision-throne',
+    steps: [
+      { desatTo: ASH, fogFar: MEMORY_FOG, waitMs: 700 },
+      {
+        desatTo: 0.5,
+        caption: 'A herald took the Queen’s last words and ran — outward, against the tide of the fleeing.',
+        spawnGhosts: [{ piece: 'statue-knight', at: [4, 6], rotY: 2.4 }],
+        waitMs: 1500,
+      },
+      { desatTo: 0.15, caption: 'Her scroll-case was sealed still; she could not have carried what was set in her mouth.', waitMs: 1600 },
+      { desatTo: 0, caption: 'Something ran in a herald’s shape, and needed a knight it had not yet found.', waitMs: 1700 },
+      { desatTo: ASH, waitMs: 500 },
+    ],
+  },
+
+  // ─── 6. THE QUEEN’S GARDEN (NG+, T16) — the garden kept her brand ──────────
+  'queens-garden': {
+    id: 'vision-queens-garden',
+    steps: [
+      { desatTo: ASH, fogFar: MEMORY_FOG, waitMs: 700 },
+      {
+        desatTo: 0.5,
+        caption: 'Behind the sealed wall the garden went on, green in a kingdom of ash.',
+        spawnGhosts: [{ piece: 'statue-knight', at: [3, 4], rotY: 0 }],
+        waitMs: 1500,
+      },
+      { desatTo: 0.15, caption: 'Her brand still burns here, low and blue — the last unbroken oath in Vael.', waitMs: 1600 },
+      { desatTo: 0, caption: 'It kept faith for one who would walk all the way round to the truth. For you.', waitMs: 1700 },
+      { desatTo: ASH, waitMs: 500 },
+    ],
+  },
+};
+
+/** The memory for a banner in `zone`, or undefined for a zone with no banner. */
+export function visionForZone(zone: ZoneId): VisionDef | undefined {
+  return (VISIONS as Partial<Record<ZoneId, VisionDef>>)[zone];
+}

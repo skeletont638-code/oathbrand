@@ -382,6 +382,52 @@ export function showCard(text: string): void {
   }, TOAST_MS);
 }
 
+// ─── the vision caption (Task 14) ─────────────────────────────────────────
+
+let visionCapEl: HTMLDivElement | null = null;
+
+function ensureVisionCaption(): HTMLDivElement {
+  if (visionCapEl) return visionCapEl;
+  visionCapEl = document.createElement('div');
+  visionCapEl.style.cssText = [
+    'position:fixed',
+    'left:50%',
+    // Lower-third, clear of a 9:16 phone crop's safe area.
+    'bottom:22%',
+    'transform:translateX(-50%)',
+    'z-index:990',
+    'pointer-events:none',
+    'max-width:34ch',
+    'text-align:center',
+    "font:italic 400 22px/1.55 'Georgia',ui-serif,serif",
+    'letter-spacing:0.015em',
+    'color:#f2e7c8',
+    'text-shadow:0 2px 8px #000,0 0 24px rgba(0,0,0,0.7)',
+    'opacity:0',
+    'transition:opacity 700ms ease',
+    'display:none',
+  ].join(';');
+  document.body.appendChild(visionCapEl);
+  return visionCapEl;
+}
+
+/**
+ * Show a single line of vision litany, or fade it away with `null`. The
+ * VisionPlayer drives this once per step (Task 14); the memory ends by
+ * passing `null`.
+ */
+export function showVisionCaption(text: string | null): void {
+  const node = ensureVisionCaption();
+  if (text === null || text === '') {
+    node.style.opacity = '0';
+    return;
+  }
+  node.textContent = text;
+  node.style.display = 'block';
+  void node.offsetHeight; // reflow so the fade runs from 0
+  node.style.opacity = '1';
+}
+
 // ─── styling ──────────────────────────────────────────────────────────────
 
 function now(): number {

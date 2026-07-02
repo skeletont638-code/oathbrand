@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { TUNING } from './content/tuning';
 import type { GameFlag, ZoneId } from './content/types';
 import { hasZone, zoneOrThrow } from './content/zones';
@@ -15,14 +16,18 @@ import { Combat, inArc } from './player/Combat';
 import { Controller } from './player/Controller';
 import { Interactor } from './player/Interactor';
 import type { Interactable } from './player/Interactor';
+import { KneelRitual } from './player/Kneel';
 import { moveVector } from './player/movement';
 import { PS1Pipeline } from './ps1/PS1Pipeline';
 import { loadGame, saveGame } from './save/save';
 import type { SaveData } from './save/save';
+import { VisionPlayer } from './engine/VisionPlayer';
+import type { GhostSprite } from './engine/VisionPlayer';
+import { visionForZone } from './content/visions';
 import { kitPieceUrl, loadKitPieces } from './world/assets';
 import { createBrandHud } from './ui/brandHud';
 import { createDevHud } from './ui/devHud';
-import { DialogueBox, Inscription, showCard } from './ui/inscription';
+import { DialogueBox, Inscription, showCard, showVisionCaption } from './ui/inscription';
 import { flashDenied, hidePrompt, showPrompt } from './ui/prompt';
 import { AshPriest, ashPriestsIn } from './entities/AshPriest';
 import { dialogueSequence } from './content/dialogue';
@@ -250,8 +255,12 @@ async function startScene(): Promise<void> {
         endingsSeen: prev?.endingsSeen ?? [],
         // Bank inscriptions read this run (union with any older save's set).
         loreRead: [...new Set([...(prev?.loreRead ?? []), ...loreRead])],
-        // Bank fired vistas (and keep any ids an older save already held).
-        visionsSeen: [...new Set([...(prev?.visionsSeen ?? []), ...vista.seenIds])],
+        // Bank fired vistas AND played banner visions (Task 14), keeping any
+        // ids an older save already held. Both families share this set;
+        // `vista-*` vs `vision-*` namespacing keeps them from colliding.
+        visionsSeen: [
+          ...new Set([...(prev?.visionsSeen ?? []), ...vista.seenIds, ...visionPlayer.seenIds]),
+        ],
         ngPlus,
       };
       saveGame(data);
@@ -295,6 +304,99 @@ async function startScene(): Promise<void> {
   // ashen per instance. Loaded once here; ZoneBuilder shares the same cached
   // template, so this adds no extra download.
   const priestTemplate = (await loadKitPieces(['statue-knight'])).get('statue-knight');
+
+  // --- banner visions + the kneel ritual (Task 14) -------------------------
+  // Kneeling at a banner rekindles + checkpoints AND, on the first kneel per
+  // banner, plays that banner's memory: colour bleeds back over spectral
+  // courtiers/knights, then snaps to ash. Ghosts are clones of kit pieces made
+  // additive + transparent (opacity 0.35) and billboarded to the camera; they
+  // are torn down when the memory ends. The VisionPlayer owns desaturation +
+  // fog while it runs (the Brand does not tick outside 'playing').
+  const GHOST_OPACITY = 0.35;
+  const visionGhosts: THREE.Object3D[] = [];
+  /** Fog far-plane a vision requests; used in place of the vista/base fog while
+   *  the memory plays. */
+  let visionFogFar = DEFAULT_FOG_FAR;
+
+  function ghostTemplate(piece: GhostSprite['piece']): THREE.Object3D {
+    if (piece === 'skeleton-warrior') return cloneSkinned(warriorTemplate.scene);
+    if (piece === 'skeleton-archer') return cloneSkinned(archerTemplate.scene);
+    return priestTemplate.clone(true); // 'statue-knight' (default): robed silhouette
+  }
+
+  function buildGhosts(ghosts: GhostSprite[]): void {
+    for (const g of ghosts) {
+      const root = ghostTemplate(g.piece);
+      root.scale.setScalar(ENEMY_SCALE);
+      const [row, col] = g.at;
+      root.position.set((col + 0.5) * built.cellM, 0, (row + 0.5) * built.cellM);
+      root.rotation.y = g.rotY ?? 0;
+      root.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        mesh.frustumCulled = false; // skinned bounds don't follow the bones
+        const src = mesh.material as THREE.Material | THREE.Material[];
+        const mat = (Array.isArray(src) ? src[0] : src).clone() as THREE.MeshStandardMaterial;
+        mat.transparent = true;
+        mat.opacity = GHOST_OPACITY;
+        mat.depthWrite = false; // a memory, never occludes the present
+        mat.blending = THREE.AdditiveBlending; // glowing — the past, alive
+        mat.color.setHex(0xffe6b0); // warm ember-gold shade
+        if (mat.emissive) mat.emissive.setHex(0x3a2a12);
+        mesh.material = mat;
+      });
+      scene.add(root);
+      visionGhosts.push(root);
+    }
+  }
+
+  function clearGhosts(): void {
+    for (const g of visionGhosts) {
+      scene.remove(g);
+      g.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (mesh.isMesh) (mesh.material as THREE.Material).dispose();
+      });
+    }
+    visionGhosts.length = 0;
+  }
+
+  /** Billboard the raised ghosts to face the camera each frame of a vision. */
+  function faceGhostsToCamera(): void {
+    for (const g of visionGhosts) {
+      g.rotation.y = Math.atan2(
+        camera.position.x - g.position.x,
+        camera.position.z - g.position.z,
+      );
+    }
+  }
+
+  const visionPlayer = new VisionPlayer({
+    game,
+    setDesaturation: (v) => pipeline.setDesaturation(v),
+    setFogFar: (m) => {
+      visionFogFar = m;
+    },
+    spawnGhosts: (ghosts) => buildGhosts(ghosts),
+    clearGhosts: () => clearGhosts(),
+    showCaption: (t) => showVisionCaption(t),
+    onPlayed: (id) => game.bus.emit({ type: 'vision-played', visionId: id }),
+    seenIds: save?.visionsSeen ?? [],
+  });
+
+  const kneel = new KneelRitual({
+    game,
+    brand,
+    visionPlayer,
+    emitCue: (id) => game.bus.emit({ type: 'cue', id }),
+    respawnEnemies: () => {
+      // Bonfire rule: tear the roster down and rebuild it fresh — never a bare
+      // clear. A fight in progress resets to spawn and re-aggros naturally.
+      clearEnemies();
+      resetBolts();
+      spawnEnemies();
+    },
+  });
 
   // Bolt views: one small unlit quarrel per pooled projectile, lazily grown
   // (the pool itself recycles — steady-state combat allocates nothing).
@@ -609,6 +711,7 @@ async function startScene(): Promise<void> {
       renderer,
       zones,
       scene,
+      camera,
       game,
       controller,
       brand,
@@ -617,9 +720,14 @@ async function startScene(): Promise<void> {
       enemies,
       flags,
       vista,
+      visionPlayer,
+      kneel,
       inscription,
       dialogueBox,
       loreRead,
+      get visionGhosts() {
+        return visionGhosts;
+      },
       get ashPriests() {
         return ashPriests;
       },
@@ -769,7 +877,12 @@ async function startScene(): Promise<void> {
       //    shortcut) sets its lock flag instead of denying — swings, unseals
       //    the hall twin for good, persists. Otherwise: ember-red 'SEALED'.
       const pressedE = controller.consumeAction();
-      if (pressedE && target?.verb === 'READ') {
+      if (pressedE && target?.verb === 'KNEEL') {
+        // The checkpoint ritual (Task 14): rekindle + save + motif cue + enemy
+        // respawn, and — on the FIRST kneel here — this banner's memory. Locks
+        // input (enters 'vision') for its ~4s (longer while the memory plays).
+        if (kneel.start(zones.current, visionForZone(zones.current))) hidePrompt();
+      } else if (pressedE && target?.verb === 'READ') {
         inscription.open(target.id);
       } else if (pressedE && target?.verb === 'SPEAK') {
         const priest = ashPriests.find((p) => p.id === target.id);
@@ -797,18 +910,26 @@ async function startScene(): Promise<void> {
           } else flashDenied();
         }
       }
+    } else if (game.state === 'vision' && !transitioning) {
+      // The kneel ritual + its banner memory (Task 14). Input is locked here
+      // (the sim block above is skipped), so the Brand does not tick and the
+      // VisionPlayer owns desaturation + fog. Ghosts billboard to the camera.
+      kneel.update(dt);
+      faceGhostsToCamera();
     }
 
     camera.rotation.y = controller.yaw;
     camera.rotation.x = controller.pitch;
     // The vista's lift rides on top of the eye height (0 when idle); the
-    // undercroft drop subtracts a brief landing crouch (fallDip → 0).
+    // undercroft drop subtracts a brief landing crouch (fallDip → 0); the
+    // kneel sinks the eye ~0.5m to one knee (Task 14).
     camera.position.set(
       controller.pos.x,
-      controller.pos.y + eyeY + vista.camLift - fallDip,
+      controller.pos.y + eyeY + vista.camLift - fallDip - kneel.camSink,
       controller.pos.z,
     );
-    fog.far = baseFogFar + vista.fogFarBoost;
+    // While a memory plays, its intimate fog replaces the vista/base far-plane.
+    fog.far = visionPlayer.active ? visionFogFar : baseFogFar + vista.fogFarBoost;
 
     hud?.begin();
     pipeline.render(scene, camera);

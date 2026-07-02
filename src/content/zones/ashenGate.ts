@@ -54,7 +54,11 @@ export const ASHEN_GATE: ZoneDef = {
     { at: [-2, 2] },
     { at: [5, 8] }, // ruin's east face — front-lights the banner from the south
     { at: [7, 4] }, // south wall, west of the gate
-    { at: [7, 7] }, // south wall, east of the gate
+    // T14: a low torch on the west wall by the Ash-Priest [3,2] so he reads at
+    // the gate (the west court was too dark to make him out — T13 re-shoot
+    // obligation). Replaces the redundant east-gate flank ([7,7]) to keep the
+    // 4-light budget; [7,4] still lights the gate.
+    { at: [3, 1] },
   ],
   enemies: [
     // Gate guard: far enough from S and the vista row to leave the reveal
