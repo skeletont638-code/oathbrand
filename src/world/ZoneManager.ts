@@ -4,7 +4,7 @@
  * transition (renderer.info must not grow across transitions), fires
  * `zone-entered` on the event bus, and ticks torch flicker as a `Subsystem`.
  */
-import type { Mesh, MeshStandardMaterial, PointLight, Scene } from 'three';
+import type { InstancedMesh, Material, Mesh, MeshStandardMaterial, PointLight, Points, Scene, Sprite } from 'three';
 import type { ZoneId } from '../content/types';
 import type { EventBus } from '../engine/events';
 import type { Subsystem } from '../engine/Game';
@@ -106,7 +106,7 @@ export class ZoneManager implements Subsystem {
   }
 
   /** Subsystem tick: torch flicker via layered sin-noise (deterministic,
-   * no random flashes — flicker-safe). */
+   * no random flashes — flicker-safe), plus the exterior ash-fall drift. */
   update(dtMs: number): void {
     this.time += dtMs;
     const t = this.time;
@@ -117,6 +117,8 @@ export class ZoneManager implements Subsystem {
         Math.sin(t * 0.023 + phase) * 0.15;
       light.intensity = base * this.torchScale * (1 + 0.22 * n);
     }
+    // Exterior zones drift the ash each frame (interior zones leave it unset).
+    this.built?.updateExterior?.(dtMs);
   }
 
   /** Remove the current zone and free its GPU resources. Geometries and
@@ -127,15 +129,35 @@ export class ZoneManager implements Subsystem {
     const built = this.built;
     if (!built) return;
     this.scene.remove(built.group);
+    // Free a mesh/points/sprite's geometry + material(s) (and its texture, which
+    // three re-uploads on next sample so a shared-atlas dispose is safe).
+    const freeDrawable = (obj: Mesh | Points | Sprite): void => {
+      obj.geometry.dispose();
+      const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+      for (const material of materials) {
+        (material as MeshStandardMaterial).map?.dispose();
+        (material as Material).dispose();
+      }
+    };
     built.group.traverse((obj) => {
       const mesh = obj as Mesh;
       if (mesh.isMesh) {
-        mesh.geometry.dispose();
-        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-        for (const material of materials) {
-          (material as MeshStandardMaterial).map?.dispose();
-          material.dispose();
-        }
+        freeDrawable(mesh);
+        // InstancedMesh (exterior forest) also owns an instanceMatrix buffer.
+        const inst = obj as InstancedMesh;
+        if (inst.isInstancedMesh) inst.dispose();
+        return;
+      }
+      // Task 2: the exterior ash-fall (Points) and any Sprite leaked under the
+      // v1 teardown (Mesh + PointLight only) — free them too.
+      const points = obj as Points;
+      if (points.isPoints) {
+        freeDrawable(points);
+        return;
+      }
+      const sprite = obj as Sprite;
+      if (sprite.isSprite) {
+        freeDrawable(sprite);
         return;
       }
       const light = obj as PointLight;

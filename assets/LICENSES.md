@@ -32,6 +32,25 @@ only (same CC0 license, same texture atlas):
 - `kit/statue-knight.glb` — `pillar` (squat pedestal) + `sword_shield`
   crossed-swords-and-shield trophy mounted above. ~1.9 × 3.2 m memorial.
 
+## Procedural geometry (Task 2 — Greater Vael exterior forest)
+
+The instanced forest — grass tuft (`grass-tuft`), sparse trunk (`pine-sparse`),
+dense pine (`pine-dense`) — and the terrain skirt are **original geometry
+generated in code** (`src/world/exteriorForest.ts`), not a fetched pack, and
+are released **CC0** with the rest of the project. No download, no texture:
+the OATHBRAND ash palette is baked straight into vertex colours.
+
+This is a deliberate, documented substitution for the brief's "KayKit/Quaternius
+pine + rock" fetch. Instancing multiplies a mesh's triangles by its population,
+so the drop's `tris < 100k visible` budget forces *very* low-poly trees; real
+CC0 pines evaluated for this task (Quaternius "Pine", poly.pizza `79gmlLnweB`,
+CC0 — ~1.7k tris; and "Pine Tree with Snow" `17vQv2X5rh`, CC0 — ~1.7k tris)
+would blow the budget at a few dozen dense trees. Authoring the geometry caps
+the dense pine at ~25 tris, keeps the bundle unchanged (no GLB, no texture), and
+gives the flat-shaded PS1 look directly — so no `downsample-textures` darkening
+pass is needed (the palette is authored dark). Verified in-browser at 9 draw
+calls / ~16k triangles for a 105-tree test zone (`docs/shots/gv-task2-*.png`).
+
 ## Processing applied (all repeatable via `bash scripts/fetch-assets.sh`)
 
 - Texture atlases downsampled to 128 px, darkened toward the OATHBRAND palette

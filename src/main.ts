@@ -3,6 +3,8 @@ import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js
 import { TUNING } from './content/tuning';
 import type { GameFlag, ZoneId } from './content/types';
 import { hasZone, zoneOrThrow } from './content/zones';
+import { DEV_EXTERIOR_ZONE } from './world/devExterior';
+import { skyFogColor } from './world/exteriorSky';
 import { Game } from './engine/Game';
 import { installScreenshotKey } from './engine/screenshot';
 import { ARCHER_CLIPS, EnemyView, ForswornView, WraithView, loadSkeleton } from './entities/animator';
@@ -81,6 +83,11 @@ const ENEMY_SCALE = 0.7;
 const WISP_MS = 1200;
 /** Fog far-plane when a zone doesn't set its own `fogFarM`. */
 const DEFAULT_FOG_FAR = 16;
+/** The v1 interior fog/background tint (cold stone-grey). Exterior zones swap
+ *  it for their sky's horizon tint so the fog dissolves into the backdrop. */
+const INTERIOR_FOG_HEX = 0x1a1a1d;
+/** Height-lerp time constant (ms) — the eye eases onto a new cell's terrain. */
+const GROUND_EASE_MS = 120;
 /** Ambient-light floor when a zone doesn't set its own `ambientFloor`. */
 const DEFAULT_AMBIENT = 0.35;
 /** Shortcut gate: how far it swings open (rad) and how fast (rad/s). */
@@ -115,10 +122,22 @@ const EYE_OPEN_SPEED = 0.22; // per second — a slow waking
  * old hardcoded TEST_ZONE (Task 11); the real zones ARE the test content
  * now, and manual QA reaches each one directly.
  */
+/** Dev builds may reach the Task-2 exterior scaffold via `?dev=1&zone=gate-fields`
+ *  before Task 3 ships the real zone (see world/devExterior.ts). */
+const IS_DEV = new URLSearchParams(window.location.search).get('dev') === '1';
+
+/** Resolve a zone def, falling back to the dev exterior scaffold under `?dev=1`
+ *  for its (still-unbuilt) id — the moment Task 3 registers it, `hasZone` wins. */
+function resolveZone(id: ZoneId): ZoneDef {
+  if (IS_DEV && !hasZone(id) && id === DEV_EXTERIOR_ZONE.id) return DEV_EXTERIOR_ZONE;
+  return zoneOrThrow(id);
+}
+
 function startZoneId(): ZoneId {
   const params = new URLSearchParams(window.location.search);
   const zone = params.get('dev') === '1' ? params.get('zone') : null;
-  return zone && hasZone(zone as ZoneId) ? (zone as ZoneId) : 'ashen-gate';
+  if (zone && (hasZone(zone as ZoneId) || zone === DEV_EXTERIOR_ZONE.id)) return zone as ZoneId;
+  return 'ashen-gate';
 }
 
 /** World-space center of the zone's `S` cell (player start). */
@@ -130,6 +149,17 @@ function findSpawn(def: ZoneDef): { x: number; z: number } {
     }
   }
   return { x: def.cell * 1.5, z: def.cell * 1.5 }; // fail soft: first floor-ish cell
+}
+
+/** The low-fog far-plane (m) if [row,col] sits in one of the zone's `fogCells`
+ *  scare bands, else undefined — exterior only (spec §4). */
+function fogCellFar(def: ZoneDef, row: number, col: number): number | undefined {
+  for (const band of def.fogCells ?? []) {
+    for (const [r, c] of band.cells) {
+      if (r === row && c === col) return band.farM;
+    }
+  }
+  return undefined;
 }
 
 /** Everything the context prompt can target in a built zone. Already-taken
@@ -214,13 +244,17 @@ async function startScene(): Promise<void> {
   const loreRead = new Set<string>(save?.loreRead ?? []);
 
   // Zone registry (Task 11): real authored zones resolve through ZONES.
-  const zones = new ZoneManager({ scene, bus: game.bus, resolve: zoneOrThrow });
+  const zones = new ZoneManager({ scene, bus: game.bus, resolve: resolveZone });
   game.register(zones);
   let built = await zones.load(startZoneId(), ngPlus);
   /** Authored def of the current zone (grid/cell/vista never vary in NG+). */
-  let activeDef = zoneOrThrow(zones.current);
+  let activeDef = resolveZone(zones.current);
   /** Current fog far baseline; the vista adds its boost on top per frame. */
   let baseFogFar = DEFAULT_FOG_FAR;
+  /** Visual eye-height offset from the exterior terrain layer (0 in interiors);
+   *  eased toward the current cell's `cellHeightM` each frame — camera only,
+   *  collision is unchanged (no jump). */
+  let groundY = 0;
 
   // First-person player. Camera reads the controller pose every frame;
   // 'YXZ' keeps yaw level when pitched (no roll creep).
@@ -340,7 +374,7 @@ async function startScene(): Promise<void> {
   // is rebound per zone so the closure always sees the live collider.
   const audio = new AudioManager({
     bus: game.bus,
-    ambienceFor: (zone) => zoneOrThrow(zone as ZoneId).ambience,
+    ambienceFor: (zone) => resolveZone(zone as ZoneId).ambience,
     occluded: (sx, sz) => built.collider.raycastWall(controller.pos, { x: sx, z: sz }),
   });
   game.register(audio);
@@ -1103,10 +1137,23 @@ async function startScene(): Promise<void> {
 
   /** Bind all zone-scoped state to the freshly built `built`/`zones.current`. */
   function enterZone(): void {
-    activeDef = zoneOrThrow(zones.current);
-    baseFogFar = activeDef.fogFarM ?? DEFAULT_FOG_FAR;
+    activeDef = resolveZone(zones.current);
+    // Exterior zones (Greater Vael) fog into their sky and default to the tuned
+    // 16 m dread range; interiors keep the v1 stone-grey haze byte-for-byte.
+    const isExterior = activeDef.kind === 'exterior';
+    const skyHex = isExterior ? skyFogColor(activeDef.exteriorSky ?? 'field') : INTERIOR_FOG_HEX;
+    fog.color.setHex(skyHex);
+    (scene.background as THREE.Color).setHex(skyHex);
+    baseFogFar =
+      activeDef.fogFarM ?? (isExterior ? TUNING.greaterVael.exterior.fogFarDefaultM : DEFAULT_FOG_FAR);
     fog.far = baseFogFar;
     ambient.intensity = activeDef.ambientFloor ?? DEFAULT_AMBIENT;
+    // Snap the visual ground height to the arrival cell so exterior entry does
+    // not lerp up from 0 (interior zones are flat → this stays 0).
+    groundY = built.cellHeightM(
+      Math.floor(controller.pos.z / built.cellM),
+      Math.floor(controller.pos.x / built.cellM),
+    );
     // The Queen's Garden alone has colour (T16): a soft green ambient over the
     // ash-grey kit stone, so the whole zone reads living. Every other zone keeps
     // the cold grey. NOT a desaturation override — that channel is the brand's
@@ -1181,7 +1228,7 @@ async function startScene(): Promise<void> {
     void (async () => {
       try {
         built = await zones.transition(door);
-        const def = zoneOrThrow(zones.current);
+        const def = resolveZone(zones.current);
         const paired = pairedDoor(from, door.def, def);
         if (paired) {
           const entry = doorEntry(def, paired);
@@ -1777,12 +1824,19 @@ async function startScene(): Promise<void> {
 
     camera.rotation.y = controller.yaw;
     camera.rotation.x = controller.pitch;
+    // Exterior height layer (Task 2): the eye eases onto the current cell's
+    // terrain height (visual only — collision xz is unchanged, so no jump).
+    // Interiors report 0 everywhere, so `groundY` stays 0 and the camera math
+    // is byte-identical to v1.
+    const gRow = Math.floor(controller.pos.z / built.cellM);
+    const gCol = Math.floor(controller.pos.x / built.cellM);
+    groundY += (built.cellHeightM(gRow, gCol) - groundY) * Math.min(1, dt / GROUND_EASE_MS);
     // The vista's lift rides on top of the eye height (0 when idle); the
     // undercroft drop subtracts a brief landing crouch (fallDip → 0); the
     // kneel sinks the eye ~0.5m to one knee (Task 14).
     camera.position.set(
       controller.pos.x,
-      controller.pos.y + eyeY + vista.camLift - fallDip - kneel.camSink,
+      controller.pos.y + eyeY + groundY + vista.camLift - fallDip - kneel.camSink,
       controller.pos.z,
     );
     // Keep the audio listener on the camera every rendered frame (even in
@@ -1790,6 +1844,13 @@ async function startScene(): Promise<void> {
     audio.setListener(controller.pos.x, camera.position.y, controller.pos.z, controller.yaw);
     // While a memory plays, its intimate fog replaces the vista/base far-plane.
     fog.far = visionPlayer.active ? visionFogFar : baseFogFar + vista.fogFarBoost;
+    // Low-fog scare bands (Task 2 / spec §4): standing on a listed cell pulls
+    // the fog far-plane in (the paired audio tell is Task 6/10/12). Never while
+    // a memory owns the fog; interiors have no fogCells so this is skipped.
+    if (activeDef.fogCells && !visionPlayer.active) {
+      const near = fogCellFar(activeDef, gRow, gCol);
+      if (near !== undefined) fog.far = Math.min(fog.far, near);
+    }
 
     hud?.begin();
     pipeline.render(scene, camera);

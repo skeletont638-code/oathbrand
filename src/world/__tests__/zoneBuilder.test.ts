@@ -1,8 +1,53 @@
 import { describe, it, expect } from 'vitest';
-import { gridToPlacements } from '../ZoneBuilder';
+import { BoxGeometry, Group, InstancedMesh, Mesh, MeshStandardMaterial } from 'three';
+import { gridToPlacements, ZoneBuilder } from '../ZoneBuilder';
+import type { AssetCache } from '../assets';
 import type { ZoneDef, TileKind } from '../zoneDef';
 
 const HALF_PI = Math.PI / 2;
+
+/**
+ * A stand-in kit cache: every requested piece is a one-mesh Group whose
+ * material NAME is the piece name, so a merged bucket surfaces as
+ * `merged:<piece>` and a test can tell a `wall.glb` block from a `floor.glb`.
+ */
+function fakeAssets(): AssetCache {
+  const made = new Map<string, Group>();
+  return {
+    get(name: string): Group {
+      let g = made.get(name);
+      if (!g) {
+        g = new Group();
+        const mat = new MeshStandardMaterial();
+        mat.name = name;
+        g.add(new Mesh(new BoxGeometry(1, 1, 1), mat));
+        g.updateMatrixWorld(true);
+        made.set(name, g);
+      }
+      return g;
+    },
+  };
+}
+
+/** Names of a built group's InstancedMesh children. */
+function instancedNames(group: Group): string[] {
+  const out: string[] = [];
+  group.traverse((o) => {
+    if (o instanceof InstancedMesh) out.push(o.name);
+  });
+  return out;
+}
+
+/** Names of a built group's merged static meshes (`merged:*`). */
+function mergedNames(group: Group): string[] {
+  const out: string[] = [];
+  group.traverse((o) => {
+    if (o instanceof Mesh && !(o instanceof InstancedMesh) && o.name.startsWith('merged:')) {
+      out.push(o.name);
+    }
+  });
+  return out;
+}
 
 function zone(grid: string[], tiles: Record<string, TileKind> = {}): ZoneDef {
   return {
@@ -98,5 +143,65 @@ describe('gridToPlacements', () => {
   it('spawn and banner anchors are walkable floor', () => {
     const p = gridToPlacements(zone(['###', '#S#', '#B#', '###']));
     expect(p.filter((x) => x.piece === 'floor')).toHaveLength(2);
+  });
+});
+
+// --- Task 2: exterior build (instanced forest + height layer) ---------------
+
+const EXTERIOR_TILES: Record<string, TileKind> = { ',': 'floor', p: 'floor', t: 'floor', T: 'wall', H: 'wall' };
+
+function exteriorZone(grid: string[], overrides: Partial<ZoneDef> = {}): ZoneDef {
+  return {
+    id: 'gate-fields',
+    grid,
+    cell: 2,
+    tiles: EXTERIOR_TILES,
+    props: [],
+    lights: [],
+    enemies: [],
+    lore: [],
+    doors: [],
+    ambience: [],
+    kind: 'exterior',
+    exteriorSky: 'field',
+    ...overrides,
+  };
+}
+
+describe('ZoneBuilder.build (exterior)', () => {
+  it('emits exactly three instanced forest meshes and no wall.glb for T/#', () => {
+    // `.` bare floor, `,` grass, `t` sparse trunk, `T`/`#` dense tree (walls,
+    // but NOT castle wall.glb). No `H` here → no `merged:wall`.
+    const built = new ZoneBuilder().build(exteriorZone(['.,t', 'T#.'], { heightGrid: ['011', '000'] }), fakeAssets());
+    const inst = instancedNames(built.group).sort();
+    expect(inst).toEqual(['grass-tuft', 'pine-dense', 'pine-sparse']);
+    // The dense-tree instance carries both the `T` and the `#` cell.
+    built.group.traverse((o) => {
+      if (o instanceof InstancedMesh && o.name === 'pine-dense') expect(o.count).toBe(2);
+    });
+    // T/# rendered as trees, so the castle wall block never appears…
+    expect(mergedNames(built.group)).not.toContain('merged:wall');
+    // …but the bare/floor cells still get a merged floor tile.
+    expect(mergedNames(built.group)).toContain('merged:floor');
+  });
+
+  it('renders an `H` ruin cell as the castle wall.glb block', () => {
+    const built = new ZoneBuilder().build(exteriorZone(['H.']), fakeAssets());
+    expect(mergedNames(built.group)).toContain('merged:wall');
+  });
+
+  it('exposes per-cell visual height (heightGrid digit × level), 0 off-grid', () => {
+    const built = new ZoneBuilder().build(exteriorZone(['.,t', 'T#.'], { heightGrid: ['011', '000'] }), fakeAssets());
+    expect(built.cellHeightM(0, 0)).toBe(0); // digit '0'
+    expect(built.cellHeightM(0, 1)).toBeCloseTo(1.5); // digit '1' × 1.5 m
+    expect(built.cellHeightM(0, 2)).toBeCloseTo(1.5);
+    expect(built.cellHeightM(9, 9)).toBe(0); // out of bounds
+  });
+
+  it('an interior zone builds byte-identically — no instanced/exterior children', () => {
+    const built = new ZoneBuilder().build(zone(['###', '#.#', '###']), fakeAssets());
+    expect(instancedNames(built.group)).toHaveLength(0);
+    expect(built.cellHeightM(1, 1)).toBe(0); // interiors are flat
+    expect(built.updateExterior).toBeUndefined();
   });
 });
