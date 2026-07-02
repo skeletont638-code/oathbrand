@@ -48,10 +48,15 @@ export const ASHEN_GATE: ZoneDef = {
     { kind: 'rubble', at: [-3, 9], rotY: 1.7 },
   ],
   lights: [
-    // A lone ember burning among the ruins beyond the wall — the reveal's
-    // warm accent (backdrop cell; lights pass through walls, no shadow
-    // maps, so it also pools faintly over the parapet).
-    { at: [-2, 2] },
+    // A lone ember burning deep among the ruins beyond the wall — the
+    // reveal's warm accent (backdrop cell; lights pass through walls, no
+    // shadow maps). T20 exposure pass: moved from [-2,2] (west of the torii,
+    // where its highlight clipped at the left edge of the 9:16 README crop and
+    // left the east silhouettes near-black) to [-3,5] — central among the
+    // torii/stair/statue cluster so it grazes ALL three and reads as a distant
+    // glow, not a hot blob; intensity trimmed 8→5.5 so the point never blows
+    // out to a hard highlight in the README hero (checked in the vista capture).
+    { at: [-3, 5], intensity: 5.5, color: 0xff8a3c },
     { at: [5, 8] }, // ruin's east face — front-lights the banner from the south
     { at: [7, 4] }, // south wall, west of the gate
     // T14: a low torch on the west wall by the Ash-Priest [3,2] so he reads at
@@ -93,6 +98,12 @@ export const ASHEN_GATE: ZoneDef = {
     ],
   },
   fogFarM: 12, // outdoor ash-haze baseline; the vista swells it to 28
+  // T20 exposure pass: lift the ash-grey ambient floor (0.35 → 0.5) so the
+  // vista's east silhouettes (statue/stair/rubble) read as shape rather than
+  // near-black in the README GIF's 9:16 crop, and the opening courtyard reads
+  // legibly as a first impression. Still well below interior light; the mood
+  // is carried by the desaturated palette + PS1 filter, not crushed blacks.
+  ambientFloor: 0.5,
   ngPlus: {
     // "3 soldiers, moved": one now stands IN the vista row — the reveal is
     // no longer safe; the others hold the west court and the watch-post.
