@@ -89,8 +89,8 @@ export const VHAELIS_LINES: readonly string[] = [
 ];
 
 /** The credits crawl shown after every ending (DOM scroll). `%ENDING%` is
- *  replaced by the reached ending's name. CC0 asset + tool credits per the
- *  project's LICENSES.md. */
+ *  replaced by the reached ending's name. Mirrors the README credit block —
+ *  every shipped CC0/OFL asset + tool per the project's LICENSES.md. */
 export const CREDITS_LINES: readonly string[] = [
   'OATHBRAND',
   'a game from the world of Iron Oath',
@@ -107,7 +107,18 @@ export const CREDITS_LINES: readonly string[] = [
   'art — KayKit dungeon & skeleton kits',
   'Kay Lousberg (CC0)',
   '',
-  'type — Georgia · Courier New',
+  'crown — Quaternius (CC0)',
+  '',
+  'sound — Kenney RPG Audio & Impact Sounds (CC0)',
+  '',
+  'ambience & music',
+  'JaggedStone · SketchMan3',
+  'northivanastan · Ogrebane (CC0)',
+  '',
+  'type — Cinzel, Natanael Gama (OFL)',
+  'Georgia · Courier New',
+  '',
+  'the rest is synthesized at runtime',
   '',
   'The brand remembers.',
   'Thank you for keeping the vigil.',
