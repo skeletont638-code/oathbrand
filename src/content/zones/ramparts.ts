@@ -65,22 +65,15 @@ export const RAMPARTS: ZoneDef = {
     { kind: 'soldier', at: [4, 10] }, // patrol across the central span
   ],
   banner: { at: [4, 2], name: 'Banner of the Ramparts' },
+  // Inscriptions (Task 13). Text resolves by id in src/content/lore.ts.
   lore: [
-    {
-      id: 'callun-post-log',
-      at: [6, 3],
-      text: 'Callun’s watch-log, weathered to a whisper: "Night forty. The wind carries the old oath back to us. We do not answer it." (T13: real content.)',
-    },
-    {
-      id: 'rampart-watch',
-      at: [3, 3],
-      text: 'A sentry’s notch-tally by the arrow-slit, hundreds of marks — then one deep gouge through them all, ending the count. (T13: real content.)',
-    },
-    {
-      id: 'wind-scoured-oath',
-      at: [6, 17],
-      text: 'The parapet stone here is scoured smooth, as if a hand gripped it every night for a hundred years, waiting for a gate to open. (T13: real content.)',
-    },
+    { id: 'callun-post-log', at: [6, 3] }, // Callun's watch-log, south walk
+    { id: 'rampart-watch', at: [3, 3] }, // the sentry's tally by the arrow-slit
+    { id: 'wind-scoured-oath', at: [6, 17] }, // the worn stone by the shortcut gate
+    { id: 'callun-oath-broken', at: [6, 7] }, // the Forsworn's struck-down sigil
+    { id: 'beacon-cold', at: [4, 16] }, // the dead signal-beacon on the bastion
+    { id: 'edda-passage', at: [1, 4] }, // the herald's chalk route-mark, north walk
+    { id: 'ride-to-battle', at: [4, 11] }, // the muster-ground overlook
   ],
   doors: [
     // Entry stair from the hall (added; see header note 1). Pairs 'hall-ramparts'

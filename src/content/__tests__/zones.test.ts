@@ -14,6 +14,7 @@ import type { GridPos, ZoneDef } from '../../world/zoneDef';
 import { gridToPlacements } from '../../world/ZoneBuilder';
 import { doorEntry, doorSpan, pairedDoor } from '../../world/zoneGraph';
 import { FUTURE_ZONE_IDS, ZONES, hasZone, zoneOrThrow } from '../zones';
+import { LORE } from '../lore';
 
 const entries = Object.entries(ZONES) as [ZoneId, ZoneDef][];
 
@@ -107,6 +108,34 @@ describe('zone registry', () => {
           expect(targets.length, `pair "${pair}" targets built ${to} but is single-ended`).toBe(2);
         }
       }
+    }
+  });
+
+  it('every placed LoreSpot id resolves to a base LORE entry (Task 13)', () => {
+    // T12 left the spots referencing ids with placeholder text; T13 makes the
+    // ids resolve into real, non-NG+ content.
+    const placed = entries.flatMap(([, def]) => def.lore.map((l) => l.id));
+    for (const id of placed) {
+      const entry = LORE[id];
+      expect(entry, `LoreSpot "${id}" has no LORE entry`).toBeDefined();
+      expect(entry.ngOnly ?? false, `LoreSpot "${id}" placed a T16 NG+ entry`).toBe(false);
+    }
+  });
+
+  it('no orphaned base LORE entries — every base entry is placed in a zone', () => {
+    const placed = new Set(entries.flatMap(([, def]) => def.lore.map((l) => l.id)));
+    for (const [id, entry] of Object.entries(LORE)) {
+      if (entry.ngOnly) continue;
+      expect(placed.has(id), `base LORE "${id}" is defined but never placed`).toBe(true);
+    }
+  });
+
+  it('NG+ (ngOnly) LORE entries are defined but not yet placed (T16 places them)', () => {
+    const placed = new Set(entries.flatMap(([, def]) => def.lore.map((l) => l.id)));
+    const ng = Object.entries(LORE).filter(([, e]) => e.ngOnly);
+    expect(ng.length).toBeGreaterThan(0);
+    for (const [id] of ng) {
+      expect(placed.has(id), `ngOnly "${id}" should stay unplaced until T16`).toBe(false);
     }
   });
 
@@ -226,10 +255,9 @@ describe.each(entries)('zone %s', (id, def) => {
     }
   });
 
-  it('lore spots sit on plain floor cells with non-empty text', () => {
+  it('lore spots sit on plain floor cells (content resolves via LORE)', () => {
     for (const spot of def.lore) {
       expect(isPlainFloor(def, spot.at), `lore ${spot.id} off-floor`).toBe(true);
-      expect(spot.text.length).toBeGreaterThan(0);
     }
   });
 

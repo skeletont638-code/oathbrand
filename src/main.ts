@@ -19,11 +19,13 @@ import { moveVector } from './player/movement';
 import { PS1Pipeline } from './ps1/PS1Pipeline';
 import { loadGame, saveGame } from './save/save';
 import type { SaveData } from './save/save';
-import { kitPieceUrl } from './world/assets';
+import { kitPieceUrl, loadKitPieces } from './world/assets';
 import { createBrandHud } from './ui/brandHud';
 import { createDevHud } from './ui/devHud';
-import { showCard } from './ui/card';
+import { DialogueBox, Inscription, showCard } from './ui/inscription';
 import { flashDenied, hidePrompt, showPrompt } from './ui/prompt';
+import { AshPriest, ashPriestsIn } from './entities/AshPriest';
+import { dialogueSequence } from './content/dialogue';
 import type { BuiltZone, PlacedDoor } from './world/ZoneBuilder';
 import { ZoneManager } from './world/ZoneManager';
 import { kickOpen, takeItem } from './world/mechanics';
@@ -89,8 +91,14 @@ function findSpawn(def: ZoneDef): { x: number; z: number } {
 }
 
 /** Everything the context prompt can target in a built zone. Already-taken
- * items (their flag set) drop out so their prompt/mesh don't linger. */
-function collectInteractables(built: BuiltZone, flags: Set<GameFlag>): Interactable[] {
+ * items (their flag set) drop out so their prompt/mesh don't linger. The
+ * Ash-Priests (T13) are static NPCs spawned alongside enemies, so their SPEAK
+ * targets are folded in here. */
+function collectInteractables(
+  built: BuiltZone,
+  flags: Set<GameFlag>,
+  npcs: AshPriest[],
+): Interactable[] {
   const items: Interactable[] = built.lore.map((l) => ({
     id: l.spot.id,
     verb: 'READ',
@@ -101,6 +109,7 @@ function collectInteractables(built: BuiltZone, flags: Set<GameFlag>): Interacta
     if (flags.has(item.spot.flag)) continue; // already taken
     items.push({ id: item.spot.id, verb: 'TAKE', x: item.position.x, z: item.position.z });
   }
+  for (const priest of npcs) items.push(priest.interactable());
   for (const door of built.doors) {
     items.push({
       id: door.def.id,
@@ -157,6 +166,10 @@ async function startScene(): Promise<void> {
   const flags = new Set<GameFlag>(save?.flags ?? []);
   const ngPlus = save?.ngPlus ?? false;
   const vista = new VistaDirector(save?.visionsSeen ?? []);
+  // Lore already read (seeded from the save); the inscription reader adds to
+  // this set + emits `lore-read` on each first read, and it banks at the next
+  // kneel (see Brand.onSave below).
+  const loreRead = new Set<string>(save?.loreRead ?? []);
 
   // Zone registry (Task 11): real authored zones resolve through ZONES.
   const zones = new ZoneManager({ scene, bus: game.bus, resolve: zoneOrThrow });
@@ -177,6 +190,26 @@ async function startScene(): Promise<void> {
 
   const interactor = new Interactor(controller);
   let interactables: Interactable[] = [];
+
+  // Inscription reader + dialogue box (Task 13). Opening either transitions the
+  // game out of 'playing' (→ 'reading' / 'dialogue'), which freezes the whole
+  // simulation in the frame loop — so combat and movement are blocked while a
+  // plate or a conversation is up. `onClose` clears the interact latch so the
+  // very E that closes an overlay cannot immediately re-fire an interaction,
+  // and drops the lingering context prompt.
+  const clearInteractLatch = (): void => {
+    controller.input.interact = false;
+    controller.input.light = false;
+    controller.input.heavy = false;
+    hidePrompt();
+  };
+  const inscription = new Inscription({
+    game,
+    bus: game.bus,
+    readSet: loreRead,
+    onClose: clearInteractLatch,
+  });
+  const dialogueBox = new DialogueBox({ game, onClose: clearInteractLatch });
 
   // Player combat kit (Task 9): LMB light / RMB heavy / Shift guard / Space
   // quick-step. The step steers along the current move input; with no input
@@ -215,7 +248,8 @@ async function startScene(): Promise<void> {
         embers: brand.embers,
         flags: [...flags],
         endingsSeen: prev?.endingsSeen ?? [],
-        loreRead: prev?.loreRead ?? [],
+        // Bank inscriptions read this run (union with any older save's set).
+        loreRead: [...new Set([...(prev?.loreRead ?? []), ...loreRead])],
         // Bank fired vistas (and keep any ids an older save already held).
         visionsSeen: [...new Set([...(prev?.visionsSeen ?? []), ...vista.seenIds])],
         ngPlus,
@@ -256,6 +290,11 @@ async function startScene(): Promise<void> {
     loadSkeleton(await kitPieceUrl('skeleton-warrior')),
     loadSkeleton(await kitPieceUrl('skeleton-archer')),
   ]);
+
+  // Ash-Priest mesh (Task 13): the statue-knight kit piece, cloned + retextured
+  // ashen per instance. Loaded once here; ZoneBuilder shares the same cached
+  // template, so this adds no extra download.
+  const priestTemplate = (await loadKitPieces(['statue-knight'])).get('statue-knight');
 
   // Bolt views: one small unlit quarrel per pooled projectile, lazily grown
   // (the pool itself recycles — steady-state combat allocates nothing).
@@ -368,6 +407,26 @@ async function startScene(): Promise<void> {
     shortcutGate = null;
   }
 
+  /** The current zone's Ash-Priests (Task 13) — static SPEAK-able NPCs,
+   *  rebuilt per zone exactly like enemies. */
+  let ashPriests: AshPriest[] = [];
+
+  function clearAshPriests(): void {
+    for (const p of ashPriests) {
+      scene.remove(p.root);
+      p.dispose();
+    }
+    ashPriests = [];
+  }
+
+  function spawnAshPriests(): void {
+    for (const placement of ashPriestsIn(zones.current)) {
+      const priest = new AshPriest(priestTemplate, placement, built.cellM);
+      scene.add(priest.root);
+      ashPriests.push(priest);
+    }
+  }
+
   /** Place a glint on each un-taken item's pedestal (skip taken ones). */
   function spawnItemMeshes(): void {
     for (const item of built.items) {
@@ -462,7 +521,6 @@ async function startScene(): Promise<void> {
     fog.far = baseFogFar;
     ambient.intensity = activeDef.ambientFloor ?? DEFAULT_AMBIENT;
     enemyCtx.collider = built.collider;
-    interactables = collectInteractables(built, flags);
     doorCells = new Map();
     for (const door of built.doors) {
       for (const [row, col] of doorSpan(activeDef, door.def)) {
@@ -473,10 +531,14 @@ async function startScene(): Promise<void> {
     clearItemMeshes();
     clearGate();
     clearEnemies();
+    clearAshPriests();
     resetBolts(); // before spawnEnemies — archers capture the new pool
     spawnEnemies();
     spawnItemMeshes();
     spawnGate();
+    spawnAshPriests();
+    // Priests are spawned before collecting so their SPEAK targets are in.
+    interactables = collectInteractables(built, flags, ashPriests);
   }
 
   // --- door transitions (Task 11) ------------------------------------------
@@ -555,6 +617,12 @@ async function startScene(): Promise<void> {
       enemies,
       flags,
       vista,
+      inscription,
+      dialogueBox,
+      loreRead,
+      get ashPriests() {
+        return ashPriests;
+      },
       get built() {
         return built;
       },
@@ -690,14 +758,23 @@ async function startScene(): Promise<void> {
       if (target) showPrompt(target.verb, target.label);
       else hidePrompt();
 
-      // E on a target (Task 12 adds TAKE + kick-open; READ/KNEEL land later):
+      // E on a target (Task 12: TAKE + kick-open; Task 13: READ + SPEAK):
+      //  - READ: raise the full-screen inscription (enters 'reading', freezes
+      //    the sim); the reader emits 'lore-read' once per id and banks it.
+      //  - SPEAK: open the Ash-Priest's dialogue for this encounter (enters
+      //    'dialogue'); his summit line varies by ending track.
       //  - TAKE: pick up a lore-item (the Gatekey), set its flag, show the
-      //    inscription, remove the glint, persist.
+      //    inscription toast, remove the glint, persist.
       //  - OPEN a passable door: transition. A `kick` gate (the ramparts
       //    shortcut) sets its lock flag instead of denying — swings, unseals
       //    the hall twin for good, persists. Otherwise: ember-red 'SEALED'.
       const pressedE = controller.consumeAction();
-      if (pressedE && target?.verb === 'TAKE') {
+      if (pressedE && target?.verb === 'READ') {
+        inscription.open(target.id);
+      } else if (pressedE && target?.verb === 'SPEAK') {
+        const priest = ashPriests.find((p) => p.id === target.id);
+        if (priest) dialogueBox.open(dialogueSequence(priest.dialogueId, flags, brand.hollow));
+      } else if (pressedE && target?.verb === 'TAKE') {
         const item = built.items.find((it) => it.spot.id === target.id);
         if (item && takeItem(item.spot, flags)) {
           showCard(item.spot.card);
@@ -705,7 +782,7 @@ async function startScene(): Promise<void> {
           const glint = itemMeshes.find((x) => x.id === item.spot.id);
           if (glint) scene.remove(glint.mesh);
           itemMeshes = itemMeshes.filter((x) => x.id !== item.spot.id);
-          interactables = collectInteractables(built, flags);
+          interactables = collectInteractables(built, flags, ashPriests);
         }
       } else if (pressedE && target?.verb === 'OPEN') {
         const door = built.doors.find((d) => d.def.id === target.id);
@@ -716,7 +793,7 @@ async function startScene(): Promise<void> {
             persistProgress();
             showCard('The gate gives with a shriek of iron. The hall waits below.');
             if (shortcutGate) shortcutGate.opening = true;
-            interactables = collectInteractables(built, flags);
+            interactables = collectInteractables(built, flags, ashPriests);
           } else flashDenied();
         }
       }

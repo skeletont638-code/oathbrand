@@ -65,17 +65,13 @@ export const ASHEN_GATE: ZoneDef = {
     { kind: 'soldier', at: [5, 5] },
   ],
   banner: { at: [2, 8], name: 'Banner of the Vigil' },
+  // Inscriptions (Task 13). Text resolves by id in src/content/lore.ts.
   lore: [
-    {
-      id: 'gate-plaque',
-      at: [6, 5],
-      text: 'THE ASHEN GATE. Kneel, keeper of the brand. The kingdom you swore to is behind you; what kept the oath is ahead.',
-    },
-    {
-      id: 'herald-corpse',
-      at: [5, 6],
-      text: 'A herald, years dead, his scroll-case fused to his ribs. The seal is the queen’s. The wax was never broken.',
-    },
+    { id: 'gate-plaque', at: [6, 5] }, // the checkpoint plaque by the ruin
+    { id: 'herald-corpse', at: [5, 6] }, // the dead herald in the watch-post
+    { id: 'torii-lintel', at: [1, 9] }, // north wall, gazing at the broken royal gate
+    { id: 'gate-ash', at: [3, 8] }, // the ash that never settles
+    { id: 'watchpost-ledger', at: [6, 6] }, // the muster-roll by the watch-post
   ],
   doors: [{ id: 'gate-to-hall', at: [7, 5], to: 'great-hall', pair: 'gate-hall' }],
   ambience: ['amb-ash-wind', 'amb-vigil-synth'],

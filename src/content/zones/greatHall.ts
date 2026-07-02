@@ -55,22 +55,14 @@ export const GREAT_HALL: ZoneDef = {
     { kind: 'archer', at: [1, 10] },
   ],
   banner: { at: [5, 8], name: 'Banner of the Hall' },
+  // Inscriptions (Task 13). Text resolves by id in src/content/lore.ts.
   lore: [
-    {
-      id: 'hall-mural',
-      at: [2, 2],
-      text: 'A mural, ash-scoured: the queen hands a burning brand to a kneeling knight. Someone has scratched out the knight’s face. Not the queen’s.',
-    },
-    {
-      id: 'cold-hearth',
-      at: [4, 12],
-      text: 'The feast hearth, cold a hundred years. In the soot, small handprints — the servants’ children hid here when the oath broke.',
-    },
-    {
-      id: 'kings-decree',
-      at: [8, 3],
-      text: 'A decree, nailed to the floor: "NO FIRE SHALL PASS THE GATE." The nail is royal silver. The signature is not the king’s.',
-    },
+    { id: 'hall-mural', at: [2, 2] }, // the scoured mural, west wall
+    { id: 'cold-hearth', at: [4, 12] }, // the dead feast-fire in the chamber
+    { id: 'kings-decree', at: [8, 3] }, // the decree nailed to the nave floor
+    { id: 'oath-spoken', at: [5, 5] }, // the oath-stone by the banner
+    { id: 'feast-roster', at: [8, 12] }, // the vigil's roster down the nave
+    { id: 'throne-bar', at: [8, 6] }, // at the sealed throne approach
   ],
   doors: [
     { id: 'hall-to-gate', at: [9, 9], to: 'ashen-gate', pair: 'gate-hall' },

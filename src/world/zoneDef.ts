@@ -52,11 +52,16 @@ export interface Banner {
   name: string;
 }
 
-/** A readable lore spot. */
+/**
+ * A readable lore spot. The `id` resolves to its written inscription (title +
+ * body) in `src/content/lore.ts` — the single source of truth for all lore
+ * prose (Task 13). The reader (`ui/inscription.ts`) looks the entry up by id;
+ * the structural tests enforce that every placed id resolves and that no base
+ * entry is left unplaced.
+ */
 export interface LoreSpot {
   id: string;
   at: GridPos;
-  text: string;
 }
 
 /**

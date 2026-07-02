@@ -57,27 +57,15 @@ export const UNDERCROFT: ZoneDef = {
     { kind: 'wraith', at: [4, 10] },
   ],
   banner: { at: [5, 2], name: 'Banner of the Undercroft' },
+  // Inscriptions (Task 13). Text resolves by id in src/content/lore.ts.
   lore: [
-    {
-      id: 'maren-litany',
-      at: [1, 3],
-      text: 'Maren’s litany, scratched a thousand times into the stone: "the brand remembers, the brand remembers, the brand—" and then nothing. (T13: real content.)',
-    },
-    {
-      id: 'undercroft-ossuary',
-      at: [4, 3],
-      text: 'An ossuary shelf, the bones stacked with terrible care. Each skull wears a soldier’s brand-scar, cold and unlit. (T13: real content.)',
-    },
-    {
-      id: 'vael-plinth',
-      at: [1, 11],
-      text: 'A plinth inscription: "To the keeper who reaches here unhollowed — the Gatekey is yours. Vael kept it warm." (T13: real content.)',
-    },
-    {
-      id: 'brand-scoring',
-      at: [4, 8],
-      text: 'Long gouges rake the wall at shoulder height — something lunged here again and again, in the dark, at nothing it could see. (T13: real content.)',
-    },
+    { id: 'maren-litany', at: [1, 3] }, // the litany scratched into the crypt wall
+    { id: 'undercroft-ossuary', at: [4, 3] }, // the ossuary shelf of branded skulls
+    { id: 'vael-plinth', at: [1, 11] }, // the Gatekey plinth (east)
+    { id: 'brand-scoring', at: [4, 8] }, // the blind gouges near the wraith haunt
+    { id: 'lending-rite', at: [4, 4] }, // the rite of the borrowed fire (west)
+    { id: 'hollow-marker', at: [4, 11] }, // a named hollow's fresh grave (east)
+    { id: 'garden-seal', at: [2, 1] }, // beside the sealed Queen's Garden wall
   ],
   items: [
     {
