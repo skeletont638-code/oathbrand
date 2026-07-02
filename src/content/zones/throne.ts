@@ -49,8 +49,10 @@ export const THRONE: ZoneDef = {
   lights: [
     // Four braziers ring the arena — they light the duel in P1/P2, then the
     // Forsworn snuffs them in P3 (main.ts lerps these toward tuning.torchOut).
-    { at: [2, 1] },
-    { at: [2, 8] },
+    // T18: the two north braziers (nearest the throne on the north wall) are
+    // lifted to 11 — the throne composite read too dark to verify (T15 note).
+    { at: [2, 1], intensity: 11 },
+    { at: [2, 8], intensity: 11 },
     { at: [5, 1] },
     { at: [5, 8] },
   ],

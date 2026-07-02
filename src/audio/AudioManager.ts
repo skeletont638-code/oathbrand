@@ -133,8 +133,18 @@ export class AudioManager implements Subsystem {
   private dry!: GainNode;
   private reverbSend!: GainNode;
   private ambienceBus!: GainNode;
+  /** User ambience trim, downstream of the threat-ducked ambienceBus so the
+   *  volume dial and the duck automation don't fight over one gain. */
+  private ambienceTrim!: GainNode;
   private heartBus!: GainNode;
   private sfxBus!: GainNode;
+
+  // User volume dials (Task 18 settings), 0..1 multipliers over the tuned mix.
+  // Stored so they survive being set before the graph is built (init needs a
+  // gesture), then applied in buildGraph and live thereafter.
+  private userMaster = 1;
+  private userAmbience = 1;
+  private userSfx = 1;
 
   // Ambience crossfade state.
   private layers: Layer[] = [];
@@ -262,7 +272,7 @@ export class AudioManager implements Subsystem {
   private buildGraph(): void {
     const ctx = this.ctx!;
     this.master = ctx.createGain();
-    this.master.gain.value = AUDIO.master;
+    this.master.gain.value = AUDIO.master * this.userMaster;
     this.master.connect(ctx.destination);
 
     this.dry = ctx.createGain();
@@ -279,10 +289,14 @@ export class AudioManager implements Subsystem {
     wet.connect(this.master);
 
     // Buses. Ambience stays dry (the beds are spacious already); SFX + the
-    // heartbeat feed the room tail.
+    // heartbeat feed the room tail. The ambienceBus gain is automated by the
+    // threat duck, so the user ambience dial rides a separate trim downstream.
     this.ambienceBus = ctx.createGain();
     this.ambienceBus.gain.value = ambienceGain(0);
-    this.ambienceBus.connect(this.dry);
+    this.ambienceTrim = ctx.createGain();
+    this.ambienceTrim.gain.value = this.userAmbience;
+    this.ambienceBus.connect(this.ambienceTrim);
+    this.ambienceTrim.connect(this.dry);
 
     this.heartBus = ctx.createGain();
     this.heartBus.gain.value = 0;
@@ -290,8 +304,29 @@ export class AudioManager implements Subsystem {
     this.heartBus.connect(this.reverbSend);
 
     this.sfxBus = ctx.createGain();
+    this.sfxBus.gain.value = this.userSfx;
     this.sfxBus.connect(this.dry);
     this.sfxBus.connect(this.reverbSend);
+  }
+
+  // --- user volume dials (Task 18 settings) -------------------------------
+
+  /** Master output volume (0..1) — a multiplier over the tuned master trim. */
+  setMasterVolume(v: number): void {
+    this.userMaster = clamp01(v);
+    if (this.ctx) this.master.gain.setTargetAtTime(AUDIO.master * this.userMaster, this.ctx.currentTime, 0.02);
+  }
+
+  /** Ambience-bed volume (0..1). Rides the trim downstream of the threat duck. */
+  setAmbienceVolume(v: number): void {
+    this.userAmbience = clamp01(v);
+    if (this.ctx) this.ambienceTrim.gain.setTargetAtTime(this.userAmbience, this.ctx.currentTime, 0.02);
+  }
+
+  /** One-shot SFX volume (0..1). */
+  setSfxVolume(v: number): void {
+    this.userSfx = clamp01(v);
+    if (this.ctx) this.sfxBus.gain.setTargetAtTime(this.userSfx, this.ctx.currentTime, 0.02);
   }
 
   /** A 1.8 s stereo exponential-decay noise impulse — the cold-stone tail. */

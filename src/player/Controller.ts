@@ -44,6 +44,10 @@ export class Controller {
   yaw = 0;
   /** Radians; clamped to ±75°. */
   pitch = 0;
+  /** Look sensitivity multiplier over the base radians/px (settings; 1 = default). */
+  lookSensitivity = 1;
+  /** Invert the vertical look axis (settings). */
+  invertY = false;
   readonly input: InputState = {
     forward: false,
     back: false,
@@ -188,8 +192,9 @@ export class Controller {
     document.addEventListener('mousemove', (e) => {
       if (document.pointerLockElement !== this.canvas) return;
       if (this.game.state !== 'playing') return;
-      this.yaw -= e.movementX * MOUSE_SENS;
-      this.pitch = clampPitch(this.pitch - e.movementY * MOUSE_SENS);
+      const s = MOUSE_SENS * this.lookSensitivity;
+      this.yaw -= e.movementX * s;
+      this.pitch = clampPitch(this.pitch - e.movementY * s * (this.invertY ? -1 : 1));
     });
   }
 
@@ -301,7 +306,9 @@ export class Controller {
       (e) => {
         if (e.target === action) return; // button handles itself
         for (const t of Array.from(e.changedTouches)) {
-          if (t.clientX < window.innerWidth / 2 && stickId === null) {
+          // Only claim (and SHOW) the virtual stick while actually playing —
+          // otherwise the stick base lingers on screen over a pause/menu (T18).
+          if (t.clientX < window.innerWidth / 2 && stickId === null && this.game.state === 'playing') {
             stickId = t.identifier;
             stickX0 = t.clientX;
             stickY0 = t.clientY;
@@ -338,8 +345,9 @@ export class Controller {
               this.input.stickY = dy / STICK_RADIUS_PX;
             }
           } else if (t.identifier === lookId && this.game.state === 'playing') {
-            this.yaw -= (t.clientX - lookX) * TOUCH_LOOK_SENS;
-            this.pitch = clampPitch(this.pitch - (t.clientY - lookY) * TOUCH_LOOK_SENS);
+            const s = TOUCH_LOOK_SENS * this.lookSensitivity;
+            this.yaw -= (t.clientX - lookX) * s;
+            this.pitch = clampPitch(this.pitch - (t.clientY - lookY) * s * (this.invertY ? -1 : 1));
             lookX = t.clientX;
             lookY = t.clientY;
           }

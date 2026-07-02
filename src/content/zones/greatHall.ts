@@ -41,12 +41,13 @@ export const GREAT_HALL: ZoneDef = {
   lights: [
     { at: [7, 5] }, // beside the sealed Throne door
     { at: [7, 12] }, // beside the sealed shortcut gate
-    { at: [4, 4] }, // inside the banner chamber (NW fill)
+    { at: [4, 4], intensity: 10 }, // inside the banner chamber (NW fill), lifted a touch
     // T14: the checkpoint banner [5,8] read as a black silhouette (T11 note).
     // The banner faces SOUTH into the room, so a torch just south of it (on the
     // chamber's south wall at [6,6]) front-lights its face. Replaces the far NE
-    // stair torch ([1,13]) to stay within the 4-light budget.
-    { at: [6, 7] },
+    // stair torch ([1,13]) to stay within the 4-light budget. T18: brightened
+    // to 13 (from the default 8) — it still read dim in real lighting (T14 note).
+    { at: [6, 7], intensity: 13 },
   ],
   enemies: [
     // Banner-chamber guard: aggros through the south gap on the approach.

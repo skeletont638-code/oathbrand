@@ -81,17 +81,20 @@ interface UpscaleUniforms {
  */
 export class PS1Pipeline {
   private readonly renderer: WebGLRenderer;
-  private readonly target: WebGLRenderTarget;
+  private target: WebGLRenderTarget;
   private readonly quadScene: Scene;
   private readonly quadCamera: Camera;
   private readonly uniforms: UpscaleUniforms;
   private time = 0;
+  /** Current render-target height setting (240 → 320×240, 360 → 480×360). */
+  private heightSetting: 240 | 360;
 
   constructor(renderer: WebGLRenderer, opts: PS1PipelineOptions = {}) {
     this.renderer = renderer;
 
     const targetHeight = opts.width ?? DEFAULT_HEIGHT_SETTING;
     const targetWidth = targetHeight === 240 ? 320 : 480;
+    this.heightSetting = targetHeight;
 
     this.target = new WebGLRenderTarget(targetWidth, targetHeight, {
       minFilter: NearestFilter,
@@ -148,6 +151,32 @@ export class PS1Pipeline {
     this.uniforms.uTime.value = this.time;
 
     this.renderer.render(this.quadScene, this.quadCamera);
+  }
+
+  /**
+   * Switch the internal render resolution live (240 → 320×240, 360 → 480×360).
+   * Rebuilds the offscreen render target at the new size, re-points the upscale
+   * pass at it, and re-syncs `patchMaterial`'s vertex-snap grid so the PS1
+   * wobble stays keyed to the actual pixels. A no-op when already at `height`.
+   */
+  setRenderScale(height: 240 | 360): void {
+    if (height === this.heightSetting) return;
+    this.heightSetting = height;
+    const width = height === 240 ? 320 : 480;
+    this.target.dispose();
+    this.target = new WebGLRenderTarget(width, height, {
+      minFilter: NearestFilter,
+      magFilter: NearestFilter,
+      depthBuffer: true,
+    });
+    this.uniforms.tDiffuse.value = this.target.texture;
+    this.uniforms.uTargetSize.value.set(width, height);
+    setSnapResolution(width, height);
+  }
+
+  /** Current render-target height setting (240 or 360). */
+  getRenderScale(): 240 | 360 {
+    return this.heightSetting;
   }
 
   /** 0 = full color, 1 = grayscale. Applied in the upscale pass only — never

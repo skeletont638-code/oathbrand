@@ -21,7 +21,7 @@ import type { Interactable } from './player/Interactor';
 import { KneelRitual } from './player/Kneel';
 import { moveVector } from './player/movement';
 import { PS1Pipeline } from './ps1/PS1Pipeline';
-import { loadGame, saveGame, secondVigilSave } from './save/save';
+import { clearSave, loadGame, saveGame, secondVigilSave } from './save/save';
 import type { SaveData } from './save/save';
 import { VisionPlayer } from './engine/VisionPlayer';
 import type { GhostSprite } from './engine/VisionPlayer';
@@ -46,6 +46,15 @@ import type { EndingId } from './content/types';
 import { showTitleCard, hideTitleCard } from './ui/titleCard';
 import { setBlackout, rollCredits, showVigilContinues } from './ui/credits';
 import { AudioManager } from './audio/AudioManager';
+import { TitleScreen } from './ui/title';
+import { PauseScreen } from './ui/pause';
+import {
+  SettingsPanel,
+  loadSettings,
+  applySettings,
+  applyTextScale,
+} from './ui/settings';
+import type { SettingsSinks } from './ui/settings';
 import './style.css';
 
 function hasWebGL(): boolean {
@@ -906,10 +915,10 @@ async function startScene(): Promise<void> {
         // KEEP THE VIGIL AGAIN → the Second Vigil (T16). The castle re-seals
         // (every flag reset) but the knowledge carries (endings/lore/visions),
         // ng-plus is set, and the brand is full — see secondVigilSave. A THIRD
-        // Vigil is identical to the second (ngPlus stays true). Drop any dev
-        // query so the restart begins cleanly at the Ashen Gate.
-        saveGame(secondVigilSave(loadGame(), TUNING.brand.maxEmbers));
-        window.location.href = window.location.origin + window.location.pathname;
+        // Vigil is identical to the second (ngPlus stays true). startSecondVigil
+        // writes it + the autostart marker and reloads clean, so the new run
+        // begins in play at the Ashen Gate (not back at the title).
+        startSecondVigil();
       });
     });
   }
@@ -1313,10 +1322,150 @@ async function startScene(): Promise<void> {
   // Bind the initial zone (same path every transition takes).
   enterZone();
 
-  // Until Task 18's menus land, jump straight into play so the room is
-  // immediately walkable (boot → title → playing).
+  // --- Task 18: settings, title, pause -------------------------------------
+  // One-boot marker: BEGIN-ANEW / KEEP-THE-VIGIL reload the page (so the whole
+  // run — the NG+ flag included — rebuilds from a fresh module) and set this so
+  // boot drops straight into play instead of the title.
+  const AUTOSTART_KEY = 'oathbrand.autostart';
+
+  // Settings apply LIVE through the real setters on the T2 pipeline, the T17
+  // mixer, the T7 controller, and the DOM text scale — never invented APIs.
+  const settingsSinks: SettingsSinks = {
+    setMasterVolume: (v) => audio.setMasterVolume(v),
+    setAmbienceVolume: (v) => audio.setAmbienceVolume(v),
+    setSfxVolume: (v) => audio.setSfxVolume(v),
+    setSensitivity: (v) => {
+      controller.lookSensitivity = v;
+    },
+    setInvertY: (b) => {
+      controller.invertY = b;
+    },
+    setRenderHeight: (h) => pipeline.setRenderScale(h),
+    setCrt: (b) => pipeline.setCrtEnabled(b),
+    setFlickerSafe: (b) => pipeline.setFlickerSafe(b),
+    setTextScale: (v) => applyTextScale(v),
+  };
+  const settings = loadSettings();
+  applySettings(settingsSinks, settings); // push the kept dials before first paint
+  const settingsPanel = new SettingsPanel(settingsSinks, settings);
+
+  const anyEndingSeen = (save?.endingsSeen?.length ?? 0) > 0;
+
+  function requestLock(): void {
+    try {
+      void Promise.resolve(renderer.domElement.requestPointerLock()).catch(() => undefined);
+    } catch {
+      /* older browsers throw synchronously; the canvas click will lock instead */
+    }
+  }
+
+  /** Leave the menus and hand control to the world. The BEGIN/CONTINUE press is
+   *  also the user gesture that wakes the audio (autoplay policy — T17). */
+  function beginPlay(): void {
+    audio.init(true);
+    title.hide();
+    pause.hide();
+    if (game.state === 'title' || game.state === 'paused') game.transition('playing');
+    requestLock();
+  }
+
+  /** CONTINUE: resume the saved vigil — load its zone (NG+ state already matches
+   *  the boot save), stand the knight at that zone's banner, restore the brand,
+   *  then play. Used by the title's CONTINUE and by the autostart boot path. */
+  async function continueRestore(): Promise<void> {
+    try {
+      if (save && save.zone !== zones.current && hasZone(save.zone)) {
+        built = await zones.load(save.zone, ngPlus);
+        enterZone();
+        if (built.banner) {
+          controller.pos.set(built.banner.position.x, 0, built.banner.position.z);
+        } else {
+          const s = findSpawn(activeDef);
+          controller.pos.set(s.x, 0, s.z);
+        }
+        controller.yaw = 0;
+        controller.pitch = 0;
+      }
+      if (save) {
+        const lost = TUNING.brand.maxEmbers - save.embers;
+        if (lost > 0) brand.damage(lost); // faithful ember count (usually full)
+      }
+    } catch (err) {
+      console.error('OATHBRAND: continue failed:', err);
+    }
+    beginPlay();
+  }
+
+  /** Write the Second Vigil save + the autostart marker, then reload clean. */
+  function startSecondVigil(): void {
+    saveGame(secondVigilSave(loadGame(), TUNING.brand.maxEmbers));
+    try {
+      sessionStorage.setItem(AUTOSTART_KEY, '1');
+    } catch {
+      /* no sessionStorage: the reload just lands on the title, still valid */
+    }
+    window.location.href = window.location.origin + window.location.pathname;
+  }
+
+  const title = new TitleScreen({
+    onContinue: () => void continueRestore(),
+    onBegin: () => {
+      if (save) {
+        // BEGIN ANEW (confirmed at the title): abandon the vigil and reload
+        // clean so a fresh, non-NG+ run rebuilds; autostart drops into play.
+        clearSave();
+        try {
+          sessionStorage.setItem(AUTOSTART_KEY, '1');
+        } catch {
+          /* ignore */
+        }
+        window.location.href = window.location.origin + window.location.pathname;
+      } else {
+        beginPlay(); // a fresh boot is already at a clean Ashen Gate
+      }
+    },
+    onKeepVigil: () => startSecondVigil(),
+    onSettings: () => {
+      title.suspend();
+      settingsPanel.open(() => title.resume());
+    },
+  });
+
+  const pause = new PauseScreen({
+    onResume: () => {
+      pause.hide();
+      if (game.state === 'paused') game.transition('playing');
+      requestLock();
+    },
+    onSettings: () => {
+      pause.suspend();
+      settingsPanel.open(() => pause.resume());
+    },
+    onQuit: () => {
+      // Lay down the watch → back to the title (progress banked at banners).
+      window.location.href = window.location.origin + window.location.pathname;
+    },
+  });
+
+  // Boot into the title — unless a reload asked to autostart, or a dev zone
+  // jump (?dev=1&zone=…) wants to land straight in that room.
   game.transition('title');
-  game.transition('playing');
+  const bootParams = new URLSearchParams(window.location.search);
+  const devJump = bootParams.get('dev') === '1' && !!bootParams.get('zone');
+  let autostart = false;
+  try {
+    autostart = sessionStorage.getItem(AUTOSTART_KEY) === '1';
+    sessionStorage.removeItem(AUTOSTART_KEY);
+  } catch {
+    /* no sessionStorage: fall through to the title */
+  }
+  if (devJump) {
+    beginPlay(); // stay in the dev-jumped zone, already built
+  } else if (autostart) {
+    void continueRestore(); // the just-written save (NG+/fresh) or the Ashen Gate
+  } else {
+    title.show({ hasSave: save !== null, anyEndingSeen }, save?.endingsSeen ?? []);
+  }
 
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -1326,6 +1475,9 @@ async function startScene(): Promise<void> {
   });
 
   let last = performance.now();
+  /** Watched so the pause overlay follows the paused state (Esc drops pointer
+   *  lock → the Controller transitions to 'paused'; there is no state event). */
+  let lastGameState = game.state;
   function frame(now: number): void {
     requestAnimationFrame(frame);
     const dt = Math.min(now - last, 100); // clamp tab-switch jumps
@@ -1337,6 +1489,13 @@ async function startScene(): Promise<void> {
   // (`__oathbrand.stepFrame`) when requestAnimationFrame is throttled — e.g. a
   // hidden/background tab under headless QA. Never scheduled directly in play.
   function step(now: number, dt: number): void {
+    // The pause overlay follows the paused state. Losing pointer lock (Esc)
+    // makes the Controller transition to 'paused'; RESUME / QUIT leave it.
+    if (game.state !== lastGameState) {
+      if (game.state === 'paused') pause.show();
+      else if (lastGameState === 'paused') pause.hide();
+      lastGameState = game.state;
+    }
     // Simulation is gated on 'playing' (pause freezes world + player) and
     // on not being mid-transition; rendering continues so the last frame
     // stays on screen while a zone swaps.

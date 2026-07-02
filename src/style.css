@@ -1,3 +1,59 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * OATHBRAND — interface stylesheet (Task 18).
+ *
+ * Design language: FromSoft restraint. Ember-on-void. No buttons-with-borders.
+ * Three typographic voices, each carrying meaning:
+ *   • CARVED STONE — Cinzel (OFL, vendored). Oaths, the wordmark, menus, titles,
+ *     section labels. What is inscribed and permanent.
+ *   • SPOKEN WORD  — an italic serif (system Georgia stack). Inscriptions,
+ *     dialogue, the vision litany, subtitles. What is breathed and passing.
+ *   • THE MECHANISM — Courier mono. Prompts, hints, key legends, data. The
+ *     interface speaking to your hand.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+/* Cinzel — SIL Open Font License 1.1. Vendored latin subset (variable weight);
+ * see src/fonts/Cinzel-OFL.txt and the row in assets/LICENSES.md. */
+@font-face {
+  font-family: 'Cinzel';
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url('./fonts/cinzel-latin.woff2') format('woff2');
+}
+
+:root {
+  /* ── palette (semantic tokens) ─────────────────────────────────────────── */
+  --void: #0b0b0e; /* black-stone base */
+  --void-2: #14110d; /* warm-black panel fill */
+  --void-scrim: rgba(6, 5, 5, 0.82); /* modal scrim over the world */
+  --ash: #8a8a92; /* cold grey — inert / secondary text, spent embers */
+  --ash-dim: #55555c; /* deep grey — disabled */
+  --parchment: #e9dcc2; /* warm bone — primary reading text */
+  --gild: #c8a86e; /* dim gilt — labels, hairline rules, hints */
+  --ember: #ff9d45; /* the live flame — active, lit, focused */
+  --ember-deep: #c4501e; /* the brand ember — glows, accents */
+  --ember-banked: #7c4a26; /* a banked ember — inactive menu word */
+  --blood: #d8695a; /* the rebuke — SEALED, quit, destructive */
+  --vigil-blue: #6db4ff; /* the hidden way — reserved for the brand's flicker */
+
+  /* ── type ──────────────────────────────────────────────────────────────── */
+  --font-stone: 'Cinzel', 'Trajan Pro', 'Times New Roman', serif;
+  --font-spoken: Georgia, 'Iowan Old Style', ui-serif, serif;
+  --font-mech: 'Courier New', ui-monospace, Menlo, Consolas, monospace;
+
+  /* Live UI text scale (settings → text size). Reading + label sizes multiply
+   * by this so the whole interface honours the reader's choice. */
+  --ui-scale: 1;
+
+  /* ── shared feel ───────────────────────────────────────────────────────── */
+  --rule: rgba(200, 168, 110, 0.34); /* hairline gild rule */
+  --z-hud: 900;
+  --z-prompt: 950;
+  --z-overlay: 1000;
+  --z-menu: 1200;
+  --z-settings: 1400;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -9,7 +65,9 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #1a1a1d;
+  background: var(--void);
+  color: var(--parchment);
+  font-family: var(--font-spoken);
 }
 
 canvas {
@@ -24,9 +82,558 @@ canvas {
   height: 100%;
   margin: 0;
   padding: 2rem;
-  background: #1a1a1d;
-  color: #cfc9b8;
-  font-family: ui-serif, Georgia, serif;
+  background: var(--void);
+  color: var(--ash);
+  font-family: var(--font-spoken);
   font-size: 1.25rem;
   text-align: center;
+}
+
+/* ── shared primitives ─────────────────────────────────────────────────────*/
+
+/* A section label / eyebrow — the mechanism voice, tracked wide. */
+.ob-eyebrow {
+  font-family: var(--font-mech);
+  font-weight: 600;
+  font-size: calc(11px * var(--ui-scale));
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--gild);
+}
+
+/* A key/hint line — the mechanism voice, quiet. */
+.ob-hint {
+  font-family: var(--font-mech);
+  font-weight: 600;
+  font-size: calc(11px * var(--ui-scale));
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: rgba(200, 168, 110, 0.6);
+}
+
+/* A hairline rule that fades at both ends — a mark scored in stone. */
+.ob-rule {
+  height: 1px;
+  border: 0;
+  background: linear-gradient(90deg, transparent, var(--rule), transparent);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * TITLE SCREEN — the altar. Wordmark, ember-menu, endings tracker, over the
+ * live-but-still world with ash-embers drifting up.
+ * ───────────────────────────────────────────────────────────────────────── */
+.ob-title {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-menu);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: max(6vh, 28px) 6vw;
+  /* A vignette that pools black at the edges, letting the world glow at centre. */
+  background: radial-gradient(130% 120% at 50% 42%, rgba(8, 6, 5, 0.34), rgba(4, 3, 3, 0.9));
+  opacity: 0;
+  transition: opacity 1200ms ease;
+  overflow: hidden;
+}
+.ob-title.is-shown {
+  opacity: 1;
+}
+.ob-title.is-leaving {
+  opacity: 0;
+  transition: opacity 640ms ease;
+}
+
+.ob-ash-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.ob-title-inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(680px, 100%);
+}
+
+.ob-wordmark {
+  font-family: var(--font-stone);
+  font-weight: 800;
+  font-size: clamp(38px, 9vw, 104px);
+  line-height: 0.98;
+  letter-spacing: 0.16em;
+  /* Cinzel is inscriptional caps by nature; keep the indent off the tracking. */
+  margin: 0 0 0 0.16em;
+  color: var(--parchment);
+  text-shadow: 0 2px 0 #000, 0 0 46px rgba(196, 80, 30, 0.42);
+}
+
+.ob-tagline {
+  margin-top: 14px;
+  font-family: var(--font-spoken);
+  font-style: italic;
+  font-size: calc(15px * var(--ui-scale));
+  letter-spacing: 0.05em;
+  color: var(--ash);
+  text-shadow: 0 2px 6px #000;
+}
+
+.ob-title-rule {
+  width: min(340px, 70%);
+  margin: 26px 0 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--ember-deep);
+}
+.ob-title-rule::before,
+.ob-title-rule::after {
+  content: '';
+  height: 1px;
+  flex: 1;
+  background: linear-gradient(90deg, transparent, var(--rule));
+}
+.ob-title-rule::after {
+  background: linear-gradient(90deg, var(--rule), transparent);
+}
+.ob-title-rule .ob-diamond {
+  width: 7px;
+  height: 7px;
+  transform: rotate(45deg);
+  background: var(--ember-deep);
+  box-shadow: 0 0 10px var(--ember-deep);
+}
+
+/* The menu: a column of oaths. NO boxes. The lit word is where the brand looks. */
+.ob-menu {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ob-menu-item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7em;
+  appearance: none;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  padding: 9px 10px;
+  font-family: var(--font-stone);
+  font-weight: 600;
+  font-size: clamp(19px, 3.1vw, 28px);
+  letter-spacing: 0.2em;
+  line-height: 1.1;
+  color: var(--ember-banked);
+  text-shadow: 0 2px 4px #000;
+  transition: color 160ms ease, text-shadow 160ms ease, transform 160ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+/* The flame-tick — the HUD's own sigil, marking focus. Hidden until active. */
+.ob-menu-item::before {
+  content: '';
+  width: 0.42em;
+  height: 0.62em;
+  background: var(--ember);
+  clip-path: polygon(50% 0%, 100% 42%, 80% 100%, 20% 100%, 0% 42%);
+  opacity: 0;
+  transform: translateX(6px) scale(0.6);
+  transition: opacity 160ms ease, transform 160ms ease;
+  box-shadow: 0 0 8px var(--ember);
+}
+.ob-menu-item:hover,
+.ob-menu-item:focus-visible,
+.ob-menu-item.is-active {
+  color: var(--ember);
+  text-shadow: 0 2px 4px #000, 0 0 22px rgba(255, 157, 69, 0.5);
+  outline: none;
+}
+.ob-menu-item:hover::before,
+.ob-menu-item:focus-visible::before,
+.ob-menu-item.is-active::before {
+  opacity: 1;
+  transform: translateX(0) scale(1);
+}
+.ob-menu-item:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 0.34em;
+  text-decoration-thickness: 1px;
+  text-decoration-color: rgba(255, 157, 69, 0.5);
+}
+.ob-menu-item.is-disabled {
+  color: var(--ash-dim);
+  cursor: default;
+  pointer-events: none;
+}
+.ob-menu-item.is-danger.is-active,
+.ob-menu-item.is-danger:hover,
+.ob-menu-item.is-danger:focus-visible {
+  color: var(--blood);
+  text-shadow: 0 2px 4px #000, 0 0 22px rgba(216, 105, 90, 0.4);
+}
+.ob-menu-item .ob-confirm-note {
+  font-family: var(--font-mech);
+  font-weight: 600;
+  font-size: calc(10px * var(--ui-scale));
+  letter-spacing: 0.24em;
+  color: var(--blood);
+  margin-left: 0.6em;
+}
+
+/* Endings tracker — the vigil's record. Four coals; each lights as its ending
+ * is witnessed. Unwitnessed reads as a hollow diamond and a drawn blank. */
+.ob-tracker {
+  margin-top: 34px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.ob-tracker-coals {
+  display: flex;
+  gap: 16px;
+}
+.ob-coal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  min-width: 4.2em;
+}
+.ob-coal .mark {
+  width: 12px;
+  height: 12px;
+  transform: rotate(45deg);
+  background: transparent;
+  border: 1px solid var(--ash-dim);
+  transition: background 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+}
+.ob-coal.is-seen .mark {
+  background: var(--ember-deep);
+  border-color: var(--ember);
+  box-shadow: 0 0 10px var(--ember-deep);
+}
+.ob-coal .name {
+  font-family: var(--font-mech);
+  font-weight: 600;
+  font-size: calc(9px * var(--ui-scale));
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ash-dim);
+  line-height: 1.3;
+  max-width: 7em;
+}
+.ob-coal.is-seen .name {
+  color: var(--gild);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * PAUSE — the vigil held. A quiet column, the world dimmed behind it.
+ * ───────────────────────────────────────────────────────────────────────── */
+.ob-pause {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-menu);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 6vh 6vw;
+  background: var(--void-scrim);
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+.ob-pause.is-shown {
+  display: flex;
+  opacity: 1;
+}
+.ob-pause-title {
+  font-family: var(--font-stone);
+  font-weight: 700;
+  font-size: clamp(22px, 4vw, 34px);
+  letter-spacing: 0.28em;
+  color: var(--parchment);
+  margin: 0 0 6px 0.28em;
+  text-shadow: 0 2px 0 #000;
+}
+.ob-pause .ob-menu {
+  margin-top: 26px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * SETTINGS — the reckoning. A single centred plate; controls without boxes.
+ * ───────────────────────────────────────────────────────────────────────── */
+.ob-settings {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-settings);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 4vh 5vw;
+  background: var(--void-scrim);
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+.ob-settings.is-shown {
+  display: flex;
+  opacity: 1;
+}
+.ob-settings-plate {
+  width: min(560px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 30px clamp(20px, 5vw, 44px) 26px;
+  background: linear-gradient(rgba(22, 18, 13, 0.9), rgba(10, 9, 7, 0.94));
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+.ob-settings-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 22px;
+}
+.ob-settings-title {
+  font-family: var(--font-stone);
+  font-weight: 700;
+  font-size: clamp(20px, 3.4vw, 28px);
+  letter-spacing: 0.24em;
+  color: var(--parchment);
+  margin: 0 0 0 0.24em;
+}
+
+.ob-set-group {
+  margin: 22px 0 6px;
+}
+.ob-set-group > .ob-eyebrow {
+  display: block;
+  margin-bottom: 6px;
+  border-bottom: 1px solid rgba(200, 168, 110, 0.14);
+  padding-bottom: 8px;
+}
+
+.ob-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 12px 0;
+  min-height: 44px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.ob-row:last-child {
+  border-bottom: 0;
+}
+.ob-row-label {
+  font-family: var(--font-spoken);
+  font-size: calc(16px * var(--ui-scale));
+  letter-spacing: 0.02em;
+  color: var(--parchment);
+  white-space: nowrap;
+}
+.ob-row-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  justify-content: flex-end;
+}
+
+/* Slider — a thin ember track filling from the left. */
+.ob-slider {
+  appearance: none;
+  -webkit-appearance: none;
+  width: min(220px, 46vw);
+  height: 22px; /* generous hit area; the visible track is drawn thin */
+  background: transparent;
+  cursor: pointer;
+}
+.ob-slider::-webkit-slider-runnable-track {
+  height: 2px;
+  background: linear-gradient(90deg, var(--ember-deep) var(--fill, 60%), rgba(138, 138, 146, 0.28) var(--fill, 60%));
+}
+.ob-slider::-moz-range-track {
+  height: 2px;
+  background: rgba(138, 138, 146, 0.28);
+}
+.ob-slider::-moz-range-progress {
+  height: 2px;
+  background: var(--ember-deep);
+}
+.ob-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: var(--ember);
+  box-shadow: 0 0 8px var(--ember-deep);
+}
+.ob-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--ember);
+  box-shadow: 0 0 8px var(--ember-deep);
+}
+.ob-slider:focus-visible {
+  outline: none;
+}
+.ob-slider:focus-visible::-webkit-slider-runnable-track {
+  box-shadow: 0 0 0 1px rgba(255, 157, 69, 0.5);
+}
+.ob-slider-val {
+  font-family: var(--font-mech);
+  font-size: calc(12px * var(--ui-scale));
+  letter-spacing: 0.08em;
+  color: var(--gild);
+  min-width: 3.2em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Toggle — smallcaps ON/OFF; lights ember when kept. No switch chrome. */
+.ob-toggle {
+  appearance: none;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-family: var(--font-stone);
+  font-weight: 600;
+  font-size: calc(15px * var(--ui-scale));
+  letter-spacing: 0.18em;
+  color: var(--ash);
+  padding: 6px 4px;
+  transition: color 160ms ease, text-shadow 160ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.ob-toggle[aria-checked='true'] {
+  color: var(--ember);
+  text-shadow: 0 0 16px rgba(255, 157, 69, 0.45);
+}
+.ob-toggle:focus-visible {
+  outline: none;
+  text-decoration: underline;
+  text-underline-offset: 0.3em;
+  text-decoration-color: rgba(255, 157, 69, 0.5);
+}
+
+/* Segmented choice — two or three smallcaps options; the kept one lit. */
+.ob-seg {
+  display: inline-flex;
+  gap: 4px;
+}
+.ob-seg-opt {
+  appearance: none;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-family: var(--font-mech);
+  font-weight: 600;
+  font-size: calc(12px * var(--ui-scale));
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ash);
+  padding: 8px 10px;
+  min-height: 40px;
+  transition: color 160ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.ob-seg-opt + .ob-seg-opt {
+  border-left: 1px solid rgba(200, 168, 110, 0.2);
+}
+.ob-seg-opt[aria-pressed='true'] {
+  color: var(--ember);
+  text-shadow: 0 0 14px rgba(255, 157, 69, 0.4);
+}
+.ob-seg-opt:focus-visible {
+  outline: none;
+  color: var(--parchment);
+  text-decoration: underline;
+  text-underline-offset: 0.28em;
+}
+
+.ob-settings-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 26px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * BRAND HUD — the oath-sigil that IS the health display (final pass, T18).
+ * Bottom-centre. The flame with a row of ember-slivers: lit = embers left,
+ * ash = spent. Grayscale when hollowed. Diegetic — no panel, no border.
+ * ───────────────────────────────────────────────────────────────────────── */
+.brand-hud {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: var(--z-hud);
+  pointer-events: none;
+  user-select: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  --hud-ember: var(--ember);
+}
+.brand-hud.blue {
+  --hud-ember: var(--vigil-blue);
+}
+.brand-hud .sigil {
+  color: var(--hud-ember);
+  transition: color 140ms linear;
+  will-change: transform, filter;
+  filter: drop-shadow(0 0 5px rgba(196, 80, 30, 0.5));
+}
+.brand-hud .embers {
+  display: flex;
+  gap: 8px;
+}
+.brand-hud .ember {
+  width: 7px;
+  height: 13px;
+  background: transparent;
+  clip-path: polygon(50% 0%, 100% 40%, 80% 100%, 20% 100%, 0% 40%);
+  box-shadow: inset 0 0 0 1px rgba(138, 138, 146, 0.4);
+  transition: background 180ms linear, box-shadow 180ms linear;
+}
+.brand-hud .ember.lit {
+  background: var(--hud-ember);
+  box-shadow: 0 0 7px var(--hud-ember);
+}
+.brand-hud.hollow {
+  filter: grayscale(1);
+  opacity: 0.7;
+}
+
+/* Reduced motion: kill the drifting embers + tick motion; leave everything
+ * legible and static. */
+@media (prefers-reduced-motion: reduce) {
+  .ob-menu-item,
+  .ob-menu-item::before,
+  .ob-toggle,
+  .ob-seg-opt,
+  .ob-coal .mark {
+    transition-duration: 1ms;
+  }
 }

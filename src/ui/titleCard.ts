@@ -32,24 +32,30 @@ function ensure(): HTMLDivElement {
     'transition:opacity 900ms ease',
   ].join(';');
 
+  // Carved-stone voice: the ending/boss name inscribed in Cinzel.
   const title = document.createElement('div');
   title.style.cssText = [
-    "font:700 clamp(28px,6vw,64px)/1.1 'Georgia',ui-serif,serif",
+    "font:700 clamp(30px,6vw,66px)/1.08 var(--font-stone)",
     'letter-spacing:0.14em',
-    'text-transform:uppercase',
-    'color:#e9dcbb',
-    'text-shadow:0 2px 0 #000,0 0 40px rgba(180,120,60,0.35)',
+    'color:var(--parchment)',
+    'text-shadow:0 2px 0 #000,0 0 44px rgba(196,80,30,0.4)',
     'margin:0 6vw',
   ].join(';');
 
+  // Spoken-word voice: the line beneath, breathed in italic serif; scales with
+  // the reader's text-size setting.
   const sub = document.createElement('div');
   sub.style.cssText = [
-    "font:italic 400 clamp(14px,2.4vw,22px)/1.5 'Georgia',ui-serif,serif",
-    'letter-spacing:0.06em',
-    'color:#c8b892',
+    'font-family:var(--font-spoken)',
+    'font-style:italic',
+    'font-weight:400',
+    'font-size:calc(clamp(14px,2.4vw,22px) * var(--ui-scale))',
+    'line-height:1.55',
+    'letter-spacing:0.04em',
+    'color:var(--gild)',
     'text-shadow:0 2px 6px #000',
-    'margin:22px 8vw 0',
-    'max-width:40ch',
+    'margin:24px 8vw 0',
+    'max-width:42ch',
   ].join(';');
 
   el.append(title, sub);

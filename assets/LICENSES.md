@@ -65,3 +65,19 @@ Attribution is not required by CC0, but credit **Kay Lousberg
 (www.kaylousberg.com)**, **Quaternius (quaternius.com)**, **Kenney
 (www.kenney.nl)**, and the OpenGameArt authors **JaggedStone**, **SketchMan3**,
 **northivanastan**, and **Ogrebane** in the game credits anyway.
+
+## Fonts (Task 18)
+
+The interface's carved-stone display voice (the OATHBRAND wordmark, menu items,
+title cards, inscription titles, section labels) is set in **Cinzel**, an
+inscriptional-Roman serif — chosen because the whole game is words scored into
+stone. The other two UI voices are system faces (Georgia for spoken-word prose,
+Courier for the mechanism/prompts) and need no vendored file.
+
+| Source | Author | URL (pinned) | License | Files taken |
+|---|---|---|---|---|
+| Cinzel (Google Fonts) | Natanael Gama · The Cinzel Project Authors (github.com/NDISCOVER/Cinzel) | <https://fonts.google.com/specimen/Cinzel> — `v26` latin subset, variable weight; woff2 sha256 `09941fb1…c8f370` (`fonts.gstatic.com/s/cinzel/v26/8vIJ7ww63mVu7gt79mT7.woff2`) | SIL OFL 1.1 | `src/fonts/cinzel-latin.woff2` (25.9 KB, one file serves weights 400–900); full licence text `src/fonts/Cinzel-OFL.txt` |
+
+The SIL Open Font License permits redistribution and web embedding; the Reserved
+Font Name is "Cinzel". The vendored subset is the unmodified upstream latin
+subset (no glyph edits, no renaming).
