@@ -2,8 +2,12 @@
  * AudioManager — OATHBRAND's whole sound layer (Task 17), registered as the
  * last game Subsystem so it ticks after the Brand each frame.
  *
- * The entire soundscape is SYNTHESIZED in WebAudio — no sample payload ships,
- * so it stays lean on GitHub Pages and works offline. Structure:
+ * The RECORDED CC0 pack (scripts/fetch-audio.sh → assets/audio/) is the
+ * primary voice — looping dungeon/wind/dark-music ambience under the beds and
+ * recorded swing/hit/door/bow one-shots — while everything without a recorded
+ * source (heartbeat, stone-reverb impulse, musical cues, whisper/breath/cloth
+ * textures) is synthesized. Every recorded voice ALSO has a synth fallback, so
+ * a missing file thins the texture but never silences the game. Structure:
  *
  *   • Two looping ambient beds per zone, equal-power crossfaded over 2 s on a
  *     zone change (`setZoneLayers`, fed by `zone-entered`).
@@ -41,10 +45,12 @@ import {
 
 const AUDIO = TUNING.audio;
 
-// Optional recorded CC0 impact SFX (Kenney, see assets/LICENSES.md). Vite emits
-// each as a URL; if the pack was never fetched the glob is empty and every SFX
-// falls back to its synth voice — the game is never silent for a missing file.
-const SFX_URLS = import.meta.glob<string>('/assets/audio/*.ogg', {
+// The recorded CC0 pack (see assets/LICENSES.md + scripts/fetch-audio.sh):
+// looping ambience (amb-dungeon / amb-wind / amb-dark) plus one-shot SFX
+// (swing / hit / door / bow). Vite emits each as a URL; if the pack was never
+// fetched the glob is empty and every voice falls back to its synth version —
+// the game is never silent for a missing file.
+const SFX_URLS = import.meta.glob<string>(['/assets/audio/*.ogg', '/assets/audio/*.wav'], {
   query: '?url',
   import: 'default',
 });
@@ -56,10 +62,16 @@ interface Layer {
   sources: AudioScheduledSourceNode[];
 }
 
-/** Per-bed synthesis recipe. Winds/breath/whisper/cloth/drip ride filtered
- *  noise; pads/hums use live oscillators (seam-free). */
+/** Per-bed recipe. `file` names the PRIMARY recorded CC0 loop (basename in
+ *  assets/audio/, looped at `rate`); when the file is absent/undecoded the bed
+ *  synthesizes instead: winds/breath/whisper/cloth/drip ride filtered noise;
+ *  pads/hums use live oscillators (seam-free). */
 interface BedSpec {
   kind: 'wind' | 'pad' | 'hum' | 'drip' | 'whisper' | 'cloth' | 'breath';
+  /** Recorded CC0 loop backing this bed (primary). Absent ⇒ always synth. */
+  file?: string;
+  /** Playback rate of the recorded loop — pitch/pace variety from one file. */
+  rate?: number;
   cut?: number;
   q?: number;
   lfo?: number;
@@ -67,19 +79,22 @@ interface BedSpec {
   gain: number;
 }
 
+// Recorded mapping: amb-wind = OGA "Wind Whoosh Loop"; amb-dungeon = OGA
+// "Loopable Dungeon Ambience"; amb-dark = OGA "Derelict" (CC0 Dark Music).
+// Whisper/breath/cloth have no recorded source in the pack — synth only.
 const BEDS: Record<string, BedSpec> = {
-  'amb-ash-wind': { kind: 'wind', cut: 520, q: 0.7, lfo: 0.08, gain: 0.9 },
-  'amb-vigil-synth': { kind: 'pad', tone: [110, 164.81, 220], lfo: 0.05, gain: 0.5 },
-  'amb-hall-drone': { kind: 'pad', tone: [55, 82.41], lfo: 0.04, gain: 0.62 },
-  'amb-ember-hum': { kind: 'hum', tone: [69.3], lfo: 0.9, gain: 0.5 },
-  'amb-crypt-drip': { kind: 'drip', cut: 1800, q: 9, gain: 0.85 },
+  'amb-ash-wind': { kind: 'wind', file: 'amb-wind', rate: 0.9, cut: 520, q: 0.7, lfo: 0.08, gain: 0.8 },
+  'amb-vigil-synth': { kind: 'pad', file: 'amb-dark', rate: 1, tone: [110, 164.81, 220], lfo: 0.05, gain: 0.55 },
+  'amb-hall-drone': { kind: 'pad', file: 'amb-dungeon', rate: 1, tone: [55, 82.41], lfo: 0.04, gain: 0.75 },
+  'amb-ember-hum': { kind: 'hum', file: 'amb-dark', rate: 0.8, tone: [69.3], lfo: 0.9, gain: 0.4 },
+  'amb-crypt-drip': { kind: 'drip', file: 'amb-dungeon', rate: 0.8, cut: 1800, q: 9, gain: 0.85 },
   'amb-wraith-whisper': { kind: 'whisper', cut: 1400, q: 3, lfo: 0.3, gain: 0.7 },
-  'amb-rampart-wind': { kind: 'wind', cut: 720, q: 0.6, lfo: 0.13, gain: 0.9 },
+  'amb-rampart-wind': { kind: 'wind', file: 'amb-wind', rate: 1, cut: 720, q: 0.6, lfo: 0.13, gain: 0.9 },
   'amb-banner-cloth': { kind: 'cloth', cut: 900, q: 0.8, lfo: 0.55, gain: 0.6 },
-  'amb-throne-hush': { kind: 'wind', cut: 300, q: 0.9, lfo: 0.05, gain: 0.7 },
-  'amb-summit-wind': { kind: 'wind', cut: 1100, q: 0.5, lfo: 0.22, gain: 1.0 },
+  'amb-throne-hush': { kind: 'wind', file: 'amb-dungeon', rate: 0.9, cut: 300, q: 0.9, lfo: 0.05, gain: 0.7 },
+  'amb-summit-wind': { kind: 'wind', file: 'amb-wind', rate: 1.15, cut: 1100, q: 0.5, lfo: 0.22, gain: 1.0 },
   'amb-dragon-breath': { kind: 'breath', cut: 220, lfo: 0.11, gain: 0.8 },
-  'amb-garden-hush': { kind: 'wind', cut: 1600, q: 0.5, lfo: 0.09, gain: 0.6 },
+  'amb-garden-hush': { kind: 'wind', file: 'amb-wind', rate: 0.75, cut: 1600, q: 0.5, lfo: 0.09, gain: 0.5 },
 };
 
 /** Deterministic PRNG so a bed's noise (and thus its seamless loop) is stable. */
@@ -126,7 +141,9 @@ export class AudioManager implements Subsystem {
   private layerIds: string[] = [];
   private pendingLayers: string[] | null = null;
   private noiseCache = new Map<string, AudioBuffer>();
-  /** Decoded CC0 impact samples by basename ('swing'/'hit'/'door'); empty ⇒ synth. */
+  /** Decoded CC0 recordings by basename — one-shots ('swing'/'hit'/'door'/
+   *  'bow') and ambience loops ('amb-dungeon'/'amb-wind'/'amb-dark'). Any
+   *  missing entry ⇒ that voice synthesizes. */
   private samples = new Map<string, AudioBuffer>();
 
   // Threat state (smoothed off the 60 Hz brand pulse).
@@ -198,14 +215,16 @@ export class AudioManager implements Subsystem {
     return [...this.samples.keys()];
   }
 
-  /** Decode the fetched CC0 impact OGGs (fire-and-forget). Per-file failure is
-   *  swallowed — that SFX just uses its synth voice instead. */
+  /** Decode the fetched CC0 pack (ambience loops + one-shots). Per-file
+   *  failure is swallowed — that voice just uses its synth version instead.
+   *  When decoding finishes, any beds already playing as synth are re-spawned
+   *  so the recorded loops take over (a 2 s crossfade, not a cut). */
   private async loadSamples(): Promise<void> {
     const ctx = this.ctx;
     if (!ctx) return;
     await Promise.all(
       Object.entries(SFX_URLS).map(async ([path, resolve]) => {
-        const name = path.slice(path.lastIndexOf('/') + 1).replace(/\.ogg$/, '');
+        const name = path.slice(path.lastIndexOf('/') + 1).replace(/\.(ogg|wav)$/, '');
         try {
           const url = await resolve();
           const res = await fetch(url);
@@ -216,10 +235,17 @@ export class AudioManager implements Subsystem {
         }
       }),
     );
+    // Swap live synth beds over to their recorded loops (same ids, forced).
+    if (this.layerIds.length > 0) {
+      const ids = this.layerIds;
+      this.layerIds = [];
+      this.setZoneLayers(ids);
+    }
   }
 
-  /** Play a decoded sample by name; false if it isn't loaded (→ synth fallback). */
-  private playSample(name: string, gain: number, rate = 1): boolean {
+  /** Play a decoded sample by name into `sink` (default: the SFX bus); false
+   *  if it isn't loaded (→ synth fallback). */
+  private playSample(name: string, gain: number, rate = 1, sink?: AudioNode): boolean {
     const buf = this.samples.get(name);
     if (!buf || !this.ctx) return false;
     const ctx = this.ctx;
@@ -228,7 +254,7 @@ export class AudioManager implements Subsystem {
     src.playbackRate.value = rate;
     const g = ctx.createGain();
     g.gain.value = gain;
-    src.connect(g).connect(this.sfxBus);
+    src.connect(g).connect(sink ?? this.sfxBus);
     src.start();
     return true;
   }
@@ -329,7 +355,9 @@ export class AudioManager implements Subsystem {
     this.layerIds = ids.slice();
   }
 
-  /** Build one looping ambient bed (gain starts at 0; the caller ramps it). */
+  /** Build one looping ambient bed (gain starts at 0; the caller ramps it).
+   *  A bed with a decoded recorded loop (`spec.file`) plays it as the PRIMARY
+   *  voice; otherwise the bed synthesizes per its `kind`. */
   private spawnBed(id: string): Layer {
     const ctx = this.ctx!;
     const spec = BEDS[id] ?? { kind: 'wind', cut: 700, q: 0.6, lfo: 0.1, gain: 0.7 };
@@ -339,6 +367,22 @@ export class AudioManager implements Subsystem {
 
     const sources: AudioScheduledSourceNode[] = [];
     const t0 = ctx.currentTime;
+
+    const recorded = spec.file ? this.samples.get(spec.file) : undefined;
+    if (recorded) {
+      // Recorded CC0 loop — the primary bed voice. Rate varies pitch/pace so
+      // one file serves several zones without reading identical.
+      const src = ctx.createBufferSource();
+      src.buffer = recorded;
+      src.loop = true;
+      src.playbackRate.value = spec.rate ?? 1;
+      const g = ctx.createGain();
+      g.gain.value = spec.gain;
+      src.connect(g).connect(gain);
+      src.start(t0);
+      sources.push(src);
+      return { id, gain, sources };
+    }
 
     if (spec.kind === 'pad' || spec.kind === 'hum') {
       // Live detuned oscillators — no loop seam. A slow LFO breathes the level.
@@ -549,7 +593,8 @@ export class AudioManager implements Subsystem {
         if (!this.playSample('hit', AUDIO.sfx.hit)) this.thud(AUDIO.sfx.hit, 150, 60, 0.16, sink);
         return;
       case 'bow':
-        return this.twang(AUDIO.sfx.bow, sink);
+        if (!this.playSample('bow', AUDIO.sfx.bow)) this.twang(AUDIO.sfx.bow, sink);
+        return;
       case 'door':
         if (!this.playSample('door', AUDIO.sfx.door)) this.door(AUDIO.sfx.door, sink);
         return;
@@ -604,9 +649,13 @@ export class AudioManager implements Subsystem {
 
     lp.connect(panner);
     panner.connect(this.sfxBus);
-    // Route the chosen voice into the occlusion→panner chain.
-    if (id === 'bow') this.twang(AUDIO.sfx.bow, lp);
-    else this.thud(AUDIO.sfx.hit, 150, 60, 0.16, lp);
+    // Route the chosen voice into the occlusion→panner chain — the recorded
+    // sample when decoded, else the synth fallback.
+    if (id === 'bow') {
+      if (!this.playSample('bow', AUDIO.sfx.bow, 1, lp)) this.twang(AUDIO.sfx.bow, lp);
+    } else if (!this.playSample('hit', AUDIO.sfx.hit, 1, lp)) {
+      this.thud(AUDIO.sfx.hit, 150, 60, 0.16, lp);
+    }
   }
 
   // --- listener ------------------------------------------------------------
