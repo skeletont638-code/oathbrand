@@ -32,7 +32,7 @@
   --gild: #c8a86e; /* dim gilt — labels, hairline rules, hints */
   --ember: #ff9d45; /* the live flame — active, lit, focused */
   --ember-deep: #c4501e; /* the brand ember — glows, accents */
-  --ember-banked: #7c4a26; /* a banked ember — inactive menu word */
+  --ember-banked: #a56b3c; /* a banked ember — inactive menu word (AA-large on void) */
   --blood: #d8695a; /* the rebuke — SEALED, quit, destructive */
   --vigil-blue: #6db4ff; /* the hidden way — reserved for the brand's flicker */
 
@@ -132,8 +132,9 @@ canvas {
   justify-content: center;
   text-align: center;
   padding: max(6vh, 28px) 6vw;
-  /* A vignette that pools black at the edges, letting the world glow at centre. */
-  background: radial-gradient(130% 120% at 50% 42%, rgba(8, 6, 5, 0.34), rgba(4, 3, 3, 0.9));
+  /* A deep scrim over the still world — only a whisper of the gate's fire shows
+   * through at centre; the edges pool to near-black. */
+  background: radial-gradient(125% 120% at 50% 40%, rgba(6, 5, 4, 0.74), rgba(2, 2, 2, 0.95));
   opacity: 0;
   transition: opacity 1200ms ease;
   overflow: hidden;
@@ -432,7 +433,8 @@ canvas {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
+  flex-wrap: wrap; /* on an extreme-narrow screen the control drops below the label */
+  gap: 6px 18px;
   padding: 12px 0;
   min-height: 44px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
@@ -459,7 +461,12 @@ canvas {
 .ob-slider {
   appearance: none;
   -webkit-appearance: none;
-  width: min(220px, 46vw);
+  /* Flex within the row so it shrinks to fit any width and never overflows —
+   * capped so it doesn't sprawl on desktop. */
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 84px;
+  max-width: 220px;
   height: 22px; /* generous hit area; the visible track is drawn thin */
   background: transparent;
   cursor: pointer;

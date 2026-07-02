@@ -1459,6 +1459,18 @@ async function startScene(): Promise<void> {
   } catch {
     /* no sessionStorage: fall through to the title */
   }
+  /** The brand sigil belongs to the world, not the menus — show it only in the
+   *  in-world states (playing / reading / vision / dialogue / ending). */
+  function syncHudVisibility(): void {
+    const inWorld =
+      game.state === 'playing' ||
+      game.state === 'reading' ||
+      game.state === 'vision' ||
+      game.state === 'dialogue' ||
+      game.state === 'ending';
+    brandHud.root.style.display = inWorld ? '' : 'none';
+  }
+
   if (devJump) {
     beginPlay(); // stay in the dev-jumped zone, already built
   } else if (autostart) {
@@ -1466,6 +1478,7 @@ async function startScene(): Promise<void> {
   } else {
     title.show({ hasSave: save !== null, anyEndingSeen }, save?.endingsSeen ?? []);
   }
+  syncHudVisibility();
 
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -1495,6 +1508,7 @@ async function startScene(): Promise<void> {
       if (game.state === 'paused') pause.show();
       else if (lastGameState === 'paused') pause.hide();
       lastGameState = game.state;
+      syncHudVisibility();
     }
     // Simulation is gated on 'playing' (pause freezes world + player) and
     // on not being mid-transition; rendering continues so the last frame
