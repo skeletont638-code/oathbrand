@@ -1232,11 +1232,14 @@ async function startScene(): Promise<void> {
     zone: () => zones.current,
   });
 
-  // Dev-only escape hatch (?dev=1) so tooling/manual QA can poke at the
-  // renderer and zone manager (e.g. verify renderer.info doesn't grow
-  // across zone transitions). Never present in normal play. Zone-scoped
-  // values are exposed as getters — they are rebound on every transition.
-  if (hud) {
+  // Dev-only escape hatch so tooling/manual QA can poke at the renderer and
+  // zone manager (e.g. verify renderer.info doesn't grow across zone
+  // transitions). Never present in the SHIPPED production bundle. The gate is
+  // `?dev=1` (the dev HUD) OR a build compiled with VITE_E2E=1 — the latter is
+  // the CI Playwright build only, so the smoke test can read the game state
+  // without the dev HUD. Zone-scoped values are getters — rebound each transition.
+  const exposeDevHandle = hud !== null || import.meta.env.VITE_E2E === '1';
+  if (exposeDevHandle) {
     (window as unknown as Record<string, unknown>).__oathbrand = {
       renderer,
       zones,
@@ -1305,6 +1308,11 @@ async function startScene(): Promise<void> {
         return droppedTachi;
       },
       get gameState() {
+        return game.state;
+      },
+      // T19: the Playwright smoke reads `state` (an alias of gameState) to
+      // confirm BEGIN → 'playing'. Present in the VITE_E2E build and under ?dev=1.
+      get state() {
         return game.state;
       },
       // Dev-only deterministic stepper for headless QA (throttled rAF).

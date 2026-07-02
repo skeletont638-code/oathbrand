@@ -30,9 +30,24 @@ jobs:
         with:
           path: dist
 
+  # Playwright smoke — runs on every PR and push. The config's webServer builds
+  # with VITE_E2E=1 and serves it, so this exercises the real bundle. Deploy
+  # gates on it (see `deploy.needs`), so a red smoke blocks a release.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e
+
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    needs: build
+    needs: [build, e2e]
     runs-on: ubuntu-latest
     permissions:
       pages: write
