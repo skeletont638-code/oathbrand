@@ -67,4 +67,10 @@ export const THRONE: ZoneDef = {
     { id: 'throne-to-summit', at: [0, 7], to: 'summit', lock: 'forsworn', pair: 'throne-summit' },
   ],
   ambience: ['amb-throne-hush', 'amb-ember-hum'],
+  ngPlus: {
+    // The boss is not remixed — the Forsworn duel is the duel. But on a Second
+    // Vigil his reason is set down in the antechamber: why the first knight
+    // unswore, read within sight of the throne he barred (T16 ngOnly).
+    addedLore: [{ id: 'ng-callun-reason', at: [9, 5] }],
+  },
 };

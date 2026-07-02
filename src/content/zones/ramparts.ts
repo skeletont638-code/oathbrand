@@ -100,5 +100,7 @@ export const RAMPARTS: ZoneDef = {
       { kind: 'archer', at: [3, 6] },
       { kind: 'soldier', at: [4, 10] },
     ],
+    // The great warmth stirring above, felt from the overlook (T16 ngOnly).
+    addedLore: [{ id: 'ng-vhaelis-wakes', at: [4, 13] }],
   },
 };

@@ -76,10 +76,10 @@ export const UNDERCROFT: ZoneDef = {
     },
   ],
   doors: [
-    // Illusory west wall → Queen's Garden (T16). Sealed this task: garden is
-    // unbuilt AND the lock needs 'garden-found'. No pair yet (single-ended
-    // future edge; T16 wires the return).
-    { id: 'undercroft-illusory', at: [2, 2], to: 'queens-garden', lock: 'illusory' },
+    // Illusory west wall → Queen's Garden. On a Second Vigil the brand flickers
+    // blue against it; interacting reveals it (sets 'garden-found', main.ts) and
+    // the wall opens. Pairs the garden's return door as a two-ended passage.
+    { id: 'undercroft-illusory', at: [2, 2], to: 'queens-garden', lock: 'illusory', pair: 'undercroft-garden' },
     // Broken stair back up to the hall. Shares the hall drop's pair edge, so
     // dropping in lands the player here and climbing out lands them at the
     // hall's door 2 (great-hall's 'hall-to-undercroft').
@@ -95,5 +95,7 @@ export const UNDERCROFT: ZoneDef = {
       { kind: 'wraith', at: [4, 10] },
       { kind: 'wraith', at: [6, 9] },
     ],
+    // The cost of the borrowed fire, graven beside the lending-rite (T16 ngOnly).
+    addedLore: [{ id: 'ng-borrowed-flame', at: [4, 3] }],
   },
 };

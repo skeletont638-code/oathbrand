@@ -21,7 +21,7 @@ import type { Interactable } from './player/Interactor';
 import { KneelRitual } from './player/Kneel';
 import { moveVector } from './player/movement';
 import { PS1Pipeline } from './ps1/PS1Pipeline';
-import { loadGame, saveGame } from './save/save';
+import { loadGame, saveGame, secondVigilSave } from './save/save';
 import type { SaveData } from './save/save';
 import { VisionPlayer } from './engine/VisionPlayer';
 import type { GhostSprite } from './engine/VisionPlayer';
@@ -550,6 +550,8 @@ async function startScene(): Promise<void> {
   let keepConfirmPending = false;
   /** Ember-rise particles for the OATH KEPT ending (ash-fall reversed). */
   let emberRiseOn = false;
+  /** The Queen's Garden's green foliage + fill (T16), or null outside it. */
+  let gardenGroup: THREE.Group | null = null;
 
   function clearEnemies(): void {
     for (const { view } of enemies) {
@@ -666,7 +668,8 @@ async function startScene(): Promise<void> {
     dragon = null;
   }
 
-  /** The crown offering-flame: a bright emissive mote + a warm point light. */
+  /** The crown offering-flame: a bright emissive mote + a warm point light. On
+   *  a Second Vigil it already burns cold blue (the summit-blue-flame anomaly). */
   function spawnBrazier(): void {
     if (zones.current !== 'summit') return;
     const [row, col] = SUMMIT_FLAME_CELL;
@@ -675,13 +678,62 @@ async function startScene(): Promise<void> {
     flamePos = new THREE.Vector3(x, 0, z);
     const flame = new THREE.Mesh(
       new THREE.SphereGeometry(0.28, 8, 6),
-      new THREE.MeshBasicMaterial({ color: 0xffd27a }),
+      new THREE.MeshBasicMaterial({ color: ngPlus ? 0x6aa8ff : 0xffd27a }),
     );
     flame.position.set(x, 1.0, z);
-    const light = new THREE.PointLight(0xffb050, 6, 9);
+    const light = new THREE.PointLight(ngPlus ? 0x4f8cff : 0xffb050, 6, 9);
     light.position.set(x, 1.3, z);
     scene.add(flame, light);
     brazier = { light, flame };
+  }
+
+  /** The Queen's Garden's green-in-ash palette (T16): primitive foliage and a
+   *  soft green fill over the grey kit stone. The zone AmbientLight is tinted
+   *  green in enterZone; this stages the living detail. */
+  function spawnGarden(): void {
+    if (zones.current !== 'queens-garden') return;
+    const g = new THREE.Group();
+    const leaf = new THREE.MeshStandardMaterial({
+      color: 0x3f7a3a,
+      emissive: 0x123a12,
+      roughness: 0.9,
+      metalness: 0,
+    });
+    // Low hedges lining the lawn, and a taller shrub in each far corner —
+    // rounded boxes are plenty at PS1 fidelity.
+    const hedge = (row: number, col: number, h: number): void => {
+      const x = (col + 0.5) * built.cellM;
+      const z = (row + 0.5) * built.cellM;
+      const bush = new THREE.Mesh(new THREE.BoxGeometry(1.4, h, 1.4), leaf);
+      bush.position.set(x, h / 2, z);
+      g.add(bush);
+    };
+    hedge(1, 1, 0.9);
+    hedge(1, 10, 0.9);
+    hedge(8, 1, 0.9);
+    hedge(8, 10, 0.9);
+    hedge(4, 2, 1.6);
+    hedge(6, 9, 1.6);
+    // A soft green fill so the whole lawn reads living, not merely lit.
+    const fill = new THREE.PointLight(0x86c878, 5, 22);
+    fill.position.set(6 * built.cellM, 4.5, 5 * built.cellM);
+    fill.castShadow = false;
+    g.add(fill);
+    scene.add(g);
+    gardenGroup = g;
+  }
+
+  function clearGarden(): void {
+    if (!gardenGroup) return;
+    scene.remove(gardenGroup);
+    gardenGroup.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (mesh.isMesh) {
+        mesh.geometry.dispose();
+        (mesh.material as THREE.Material).dispose();
+      }
+    });
+    gardenGroup = null;
   }
 
   function clearBrazier(): void {
@@ -821,9 +873,12 @@ async function startScene(): Promise<void> {
     emberRiseOn = false;
     rollCredits(ending, () => {
       showVigilContinues(() => {
-        // Begin again at the Ashen Gate, keeping saved flags (pre-NG+ semantics
-        // — the true reset lands with the title screen in T18). Drop any dev
-        // query so the restart never respawns mid-campaign.
+        // KEEP THE VIGIL AGAIN → the Second Vigil (T16). The castle re-seals
+        // (every flag reset) but the knowledge carries (endings/lore/visions),
+        // ng-plus is set, and the brand is full — see secondVigilSave. A THIRD
+        // Vigil is identical to the second (ngPlus stays true). Drop any dev
+        // query so the restart begins cleanly at the Ashen Gate.
+        saveGame(secondVigilSave(loadGame(), TUNING.brand.maxEmbers));
         window.location.href = window.location.origin + window.location.pathname;
       });
     });
@@ -1013,6 +1068,13 @@ async function startScene(): Promise<void> {
     baseFogFar = activeDef.fogFarM ?? DEFAULT_FOG_FAR;
     fog.far = baseFogFar;
     ambient.intensity = activeDef.ambientFloor ?? DEFAULT_AMBIENT;
+    // The Queen's Garden alone has colour (T16): a soft green ambient over the
+    // ash-grey kit stone, so the whole zone reads living. Every other zone keeps
+    // the cold grey. NOT a desaturation override — that channel is the brand's
+    // hollowing, and overriding it would grey the garden the moment you were hit.
+    const gardenHere = zones.current === 'queens-garden';
+    ambient.color.setHex(gardenHere ? 0x6f9c62 : 0x8a8a92);
+    if (gardenHere) ambient.intensity = 0.5;
     enemyCtx.collider = built.collider;
     doorCells = new Map();
     for (const door of built.doors) {
@@ -1031,6 +1093,7 @@ async function startScene(): Promise<void> {
     clearDroppedTachi();
     clearDragon();
     clearBrazier();
+    clearGarden();
     bossArena = null;
     darkness = 0;
     zones.setTorchScale(1);
@@ -1058,6 +1121,8 @@ async function startScene(): Promise<void> {
       keepConfirmPending = false;
       emberRiseOn = false;
     }
+    // The Queen's Garden (T16): stage the green foliage + fill (green-in-ash).
+    if (gardenHere) spawnGarden();
     // Priests are spawned before collecting so their SPEAK targets are in.
     rebuildInteractables();
   }
@@ -1450,6 +1515,21 @@ async function startScene(): Promise<void> {
           // At the summit, the stair down is the KEEP choice, not a transition.
           if (zones.current === 'summit' && door.def.to === 'throne' && !endingId) {
             handleKeepPress();
+          } else if (
+            // The illusory wall to the Queen's Garden — revealable only on a
+            // Second Vigil (T16). Interact once: the wall gives, 'garden-found'
+            // is set (unsealing the door for good this run), and you step through.
+            door.def.lock === 'illusory' &&
+            ngPlus &&
+            !flags.has('garden-found') &&
+            hasZone(door.def.to)
+          ) {
+            flags.add('garden-found');
+            persistProgress();
+            showCard(
+              'The wall was never stone. Your brand leans blue against the cold, and it breathes open — the Queen’s Garden, kept a hundred years for the one who walked all the way round.',
+            );
+            goThrough(door);
           } else if (canPass(door.def, flags) && hasZone(door.def.to)) goThrough(door);
           else if (kickOpen(door.def, flags)) {
             game.bus.emit({ type: 'door-opened', doorId: door.def.id });

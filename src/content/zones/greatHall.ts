@@ -90,5 +90,8 @@ export const GREAT_HALL: ZoneDef = {
       { kind: 'archer', at: [1, 7] },
       { kind: 'wraith', at: [5, 9] },
     ],
+    // The kindest reading of every hollow you have put down, cut into the nave
+    // floor among the roster of the dead (T16 ngOnly).
+    addedLore: [{ id: 'ng-mercy', at: [8, 10] }],
   },
 };

@@ -20,6 +20,7 @@ import { patchMaterial } from '../ps1/patchMaterial';
 import { GridCollider } from './collision';
 import type { AssetCache } from './assets';
 import type { DoorDef, EnemySpawn, ItemSpot, LoreSpot, TileKind, ZoneDef } from './zoneDef';
+import type { Anomaly } from '../content/anomalies';
 
 /** One kit piece placed on the grid. `x`/`z` are world meters, `rotY` yaw. */
 export interface Placement {
@@ -243,8 +244,12 @@ export class ZoneBuilder {
    * Build the zone. Kit templates in `assets` are treated read-only: geometry
    * is cloned with all transforms baked in, materials are cloned per zone
    * (textures stay shared with the template cache).
+   *
+   * `anomalies` is the Second-Vigil post-build hook (T16): after the zone is
+   * fully assembled, each anomaly mutates the built scene in place. It is empty
+   * on a base run, so a non-NG+ build is byte-for-byte the pre-T16 zone.
    */
-  build(def: ZoneDef, assets: AssetCache): BuiltZone {
+  build(def: ZoneDef, assets: AssetCache, anomalies: readonly Anomaly[] = []): BuiltZone {
     const cell = def.cell;
     const half = cell / 2;
     const group = new Group();
@@ -355,7 +360,7 @@ export class ZoneBuilder {
     const toWorld = ([row, col]: readonly [number, number]): Vector3 =>
       new Vector3(col * cell + half, 0, row * cell + half);
 
-    return {
+    const built: BuiltZone = {
       group,
       collider: new GridCollider(def),
       cellM: cell,
@@ -366,5 +371,12 @@ export class ZoneBuilder {
       items: (def.items ?? []).map((spot) => ({ spot, position: toWorld(spot.at) })),
       lights,
     };
+
+    // Second-Vigil anomalies (T16): they alter `built` in place — add spectral
+    // meshes/lights to `group`, retint a torch, remove a lore spot. Applied last
+    // so they see the finished zone; empty (and thus a no-op) on a base run.
+    for (const anomaly of anomalies) anomaly.apply(built);
+
+    return built;
   }
 }

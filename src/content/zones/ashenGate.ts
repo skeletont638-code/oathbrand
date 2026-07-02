@@ -101,5 +101,8 @@ export const ASHEN_GATE: ZoneDef = {
       { kind: 'soldier', at: [6, 2] },
       { kind: 'soldier', at: [5, 6] },
     ],
+    // Edda's true errand, read in the watch-post where her remains are no longer
+    // to be found (paired with the 'gate-herald-gone' anomaly). T16 ngOnly.
+    addedLore: [{ id: 'ng-edda-lie', at: [5, 5] }],
   },
 };

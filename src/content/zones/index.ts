@@ -14,8 +14,9 @@ import { UNDERCROFT } from './undercroft';
 import { RAMPARTS } from './ramparts';
 import { THRONE } from './throne';
 import { SUMMIT } from './summit';
+import { QUEENS_GARDEN } from './queensGarden';
 
-/** Every built zone, by id. Partial until all seven land (see above). */
+/** Every built zone, by id. All seven have landed (T16 built the garden). */
 export const ZONES: Partial<Record<ZoneId, ZoneDef>> = {
   'ashen-gate': ASHEN_GATE,
   'great-hall': GREAT_HALL,
@@ -23,17 +24,18 @@ export const ZONES: Partial<Record<ZoneId, ZoneDef>> = {
   ramparts: RAMPARTS,
   throne: THRONE,
   summit: SUMMIT,
+  'queens-garden': QUEENS_GARDEN,
 };
 
 /**
- * Zones the design names but later tasks build: doors may already target
- * them (great-hall's throne door 4; the undercroft's illusory garden wall).
- * Until a target ships, its doors refuse to open in-game (main.ts treats an
- * unbuilt destination as sealed). T16: queens-garden.
- * (T12 landed undercroft + ramparts; T15 landed throne + summit — all off this
- * allowlist. Only the NG+ Queen's Garden remains.)
+ * Zones the design names but later tasks build: a door may target one before
+ * its zone ships, and main.ts treats an unbuilt destination as sealed. The
+ * campaign is complete as of T16 (the Queen's Garden landed), so this allowlist
+ * is now EMPTY — every door target is a real, registered zone, and the
+ * structural tests demand a real pairing for each. Kept (empty) as the seam for
+ * any future zone rather than deleting the mechanism.
  */
-export const FUTURE_ZONE_IDS: ReadonlySet<ZoneId> = new Set<ZoneId>(['queens-garden']);
+export const FUTURE_ZONE_IDS: ReadonlySet<ZoneId> = new Set<ZoneId>();
 
 /** True when `id` names a built, registered zone. */
 export function hasZone(id: ZoneId): boolean {

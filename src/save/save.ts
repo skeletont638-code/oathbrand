@@ -83,3 +83,29 @@ export function clearSave(): void {
     // Nothing sensible to do; the next loadGame() will still behave.
   }
 }
+
+/**
+ * The Second Vigil save (Task 16) — what "KEEP THE VIGIL AGAIN" writes before
+ * the reload. Pure, so the reset-vs-persist contract is unit-tested.
+ *
+ * RESET (the castle re-seals): every progression flag is cleared — gatekey,
+ * shortcut-open, throne-open, forsworn-dead/noguard, callun-tachi, queens-brand,
+ * garden-found, wraith-hunt-done — the run restarts at the Ashen Gate with a
+ * full brand and no checkpoint. PERSIST (knowledge carries across Vigils):
+ * endingsSeen, loreRead, visionsSeen. `ngPlus` is forced true, so a THIRD Vigil
+ * (calling this on an already-NG+ save) is identical to the second — the
+ * anomalies are static, they do not escalate.
+ */
+export function secondVigilSave(prev: SaveData | null, maxEmbers: number): SaveData {
+  return {
+    version: 1,
+    zone: 'ashen-gate',
+    bannerId: '',
+    embers: maxEmbers,
+    flags: [], // the castle re-seals — every gate, key, and kill is undone
+    endingsSeen: prev?.endingsSeen ?? [], // knowledge persists
+    loreRead: prev?.loreRead ?? [],
+    visionsSeen: prev?.visionsSeen ?? [],
+    ngPlus: true, // second — and every later — Vigil
+  };
+}

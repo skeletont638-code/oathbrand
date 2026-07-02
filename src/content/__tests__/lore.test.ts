@@ -43,11 +43,12 @@ describe('LORE content', () => {
   });
 });
 
-describe('endingPending — current truth table', () => {
+describe('endingPending — the four-track truth table (T16)', () => {
   const flags = (...f: GameFlag[]): Set<GameFlag> => new Set(f);
 
   it('a hollow brand is always track 3, whatever else is carried', () => {
     expect(endingPending(flags(), true)).toBe(3);
+    // Hollow dominates even the secret Queen's-Brand path — a dark brand cannot answer.
     expect(endingPending(flags('gatekey', 'queens-brand', 'ng-plus'), true)).toBe(3);
   });
 
@@ -55,20 +56,22 @@ describe('endingPending — current truth table', () => {
     expect(endingPending(flags(), false)).toBe(1);
   });
 
-  it('no reachable flag combination reroutes an unhollowed run before T15/T16', () => {
-    // Track 2 (refusal) needs a flag T15 introduces; track 4 (Queen's Brand)
-    // a mechanic T16 introduces. Until then every unhollowed state is track 1.
+  it('carrying the queen’s brand routes an unhollowed run to track 4 (T16)', () => {
+    expect(endingPending(flags('queens-brand'), false)).toBe(4);
+    expect(endingPending(flags('queens-brand', 'garden-found', 'ng-plus'), false)).toBe(4);
+  });
+
+  it('ordinary progress flags leave an unhollowed run on track 1', () => {
     const combos: GameFlag[][] = [
       ['gatekey'],
       ['shortcut-open'],
       ['gatekey', 'forsworn-dead'],
-      ['queens-brand'],
-      ['garden-found', 'ng-plus'],
+      ['garden-found', 'ng-plus'], // in the garden, but the brand not yet taken
     ];
     for (const c of combos) expect(endingPending(flags(...c), false)).toBe(1);
   });
 
-  it('never returns track 2 for any current input', () => {
+  it('never returns track 2 for any current input (give-vs-keep is a live choice)', () => {
     const all: GameFlag[] = [
       'gatekey',
       'shortcut-open',
@@ -82,7 +85,7 @@ describe('endingPending — current truth table', () => {
       'wraith-hunt-done',
     ];
     for (const hollow of [false, true]) {
-      expect([1, 2, 3]).toContain(endingPending(new Set(all), hollow));
+      expect([1, 2, 3, 4]).toContain(endingPending(new Set(all), hollow));
       expect(endingPending(new Set(all), hollow)).not.toBe(2);
     }
   });

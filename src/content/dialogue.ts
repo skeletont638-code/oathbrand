@@ -64,14 +64,15 @@ export const ASHPRIEST_3_LEAD: DialogueLine[] = [
 ];
 
 /**
- * The Ash-Priest's LAST word at the summit, by ending track. T16 widens
- * `EndingTrack` to include 4 (the Queen's Brand), which will force a fourth
- * arm here — deliberately, so the branch cannot be forgotten.
+ * The Ash-Priest's LAST word at the summit, by ending track. T16 widened
+ * `EndingTrack` to include 4 (the Queen's Brand), which forced the fourth arm
+ * here — the litany voice, and he knows what you carry.
  */
 export const ASHPRIEST_3_FINAL: Record<EndingTrack, DialogueLine> = {
   1: line('You mean to give it back, then — to close the account, the way she asked. Go on, keeper. Set the crown in the flame, and let Vael end as Vael, and not as some thing wearing its face. I will remember you kept faith. Someone should.'),
   2: line('So you will not give it back. You will keep the crown, and the debt, and the long slow falling that comes with it. I understand it; the living always choose more time. Go up, then, and buy Vael its hundred more years. I will keep the graves that pays for. I have the room.'),
   3: line('...Ah. There is no fire left in you to hear me by. You reached the stair, and the stair is all that is left to you. Come, then — give me your hand. Even a dark brand deserves to be carried the last of the way by someone who remembers its name. I remember. I always remember.'),
+  4: line('So you found the green place, and what she buried in it. There is a second warmth under your glove, keeper — older than the crown, quieter, that no herald ever named to you. Maren’s own coal, kept back from every fire I ever saw lit. Carry them both up, the loan and the ember she hid from it, and give them freely. What is offered is never taken. I buried a queen who prayed one of you would walk all the way round. Tell her, at the top, that someone did.'),
 };
 
 /**

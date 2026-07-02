@@ -151,7 +151,7 @@ export function showVigilContinues(onBegin: () => void): void {
   title.style.cssText = "font:700 clamp(24px,5vw,48px)/1.2 'Georgia',ui-serif,serif;letter-spacing:0.16em;color:#e9dcbb;text-shadow:0 2px 0 #000";
 
   const hint = document.createElement('div');
-  hint.textContent = 'press E to begin again';
+  hint.textContent = 'press E — keep the vigil again';
   hint.style.cssText = "font:600 13px/1 'Courier New',ui-monospace,monospace;letter-spacing:0.28em;color:rgba(200,170,110,0.7);margin-top:34px;text-transform:uppercase";
 
   el.append(title, hint);

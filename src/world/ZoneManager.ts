@@ -13,6 +13,8 @@ import type { AssetCache } from './assets';
 import { gridToPlacements, ZoneBuilder } from './ZoneBuilder';
 import type { BuiltZone, PlacedDoor } from './ZoneBuilder';
 import type { ZoneDef } from './zoneDef';
+import { applyNgPlus } from './ngplus';
+import { anomaliesForZone } from '../content/anomalies';
 
 export interface ZoneManagerOptions {
   scene: Scene;
@@ -68,11 +70,14 @@ export class ZoneManager implements Subsystem {
    * dispose the previous zone, and announce `zone-entered`. */
   async load(id: ZoneId, ng: boolean): Promise<BuiltZone> {
     const base = this.resolve(id);
-    // NG+ variants override whole satellite arrays on top of the base zone.
-    const def: ZoneDef = ng && base.ngPlus ? { ...base, ...base.ngPlus } : base;
+    // NG+ (Second Vigil): merge the zone's ngPlus variant (enemy remix + ngOnly
+    // lore) and apply this zone's anomalies as the post-build hook. A base run
+    // uses the untouched def and an empty anomaly list — no NG+ leakage.
+    const def: ZoneDef = ng ? applyNgPlus(base) : base;
+    const anomalies = ng ? anomaliesForZone(id) : [];
 
     const assets = await this.loadAssets(neededPieces(def));
-    const built = this.builder.build(def, assets);
+    const built = this.builder.build(def, assets, anomalies);
 
     this.disposeCurrent();
     this.scene.add(built.group);

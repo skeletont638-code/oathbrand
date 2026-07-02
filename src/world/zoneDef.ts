@@ -133,10 +133,29 @@ export interface IllusoryWall {
   flag: GameFlag;
 }
 
-/** NG+ overrides applied on top of the base zone. */
-export type NgPlusVariant = Partial<
-  Pick<ZoneDef, 'props' | 'lights' | 'enemies' | 'doors' | 'ambience'>
->;
+/**
+ * NG+ overrides merged onto the base zone by `applyNgPlus` (world/ngplus.ts) —
+ * the Second Vigil (T16). The satellite arrays here (enemies/props/lights/
+ * doors/ambience) REPLACE the base zone's whole array when present (the enemy
+ * remixes authored in T11/T12/T15 use `enemies`); `addedLore` is CONCATENATED
+ * onto the base zone's lore (deduped by id, so the merge is idempotent) — the
+ * eight `ngOnly` recontextualisation inscriptions (lore.ts) are placed here,
+ * never in a base `lore` array, so they surface only on a Second Vigil.
+ *
+ * Anomalies are NOT declared here: they mutate the BUILT three.js scene rather
+ * than the pure ZoneDef, so they live in the anomaly registry (content/
+ * anomalies.ts), keyed by zone, and are applied by the ZoneBuilder post-build
+ * hook in NG+ only.
+ */
+export interface NgPlusVariant {
+  props?: Prop[];
+  lights?: Torch[];
+  enemies?: EnemySpawn[];
+  doors?: DoorDef[];
+  ambience?: string[];
+  /** Extra inscriptions the Second Vigil adds (concatenated onto base lore). */
+  addedLore?: LoreSpot[];
+}
 
 export interface ZoneDef {
   id: ZoneId;

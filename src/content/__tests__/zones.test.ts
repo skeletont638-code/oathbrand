@@ -63,20 +63,25 @@ describe('zone registry', () => {
     expect(ZONES['summit']).toBeDefined();
   });
 
-  it('zoneOrThrow returns registered zones and throws on unbuilt ids', () => {
+  it('registers the Task 16 zone (queens-garden), completing all seven', () => {
+    expect(ZONES['queens-garden']).toBeDefined();
+    expect(Object.keys(ZONES)).toHaveLength(7);
+  });
+
+  it('zoneOrThrow returns every registered zone (the campaign is complete)', () => {
     expect(zoneOrThrow('ashen-gate').id).toBe('ashen-gate');
-    // Only the NG+ Queen's Garden remains unbuilt (T16); throne/summit resolve.
-    expect(() => zoneOrThrow('queens-garden')).toThrow(/queens-garden/);
+    expect(zoneOrThrow('queens-garden').id).toBe('queens-garden');
   });
 
   it('hasZone mirrors registration', () => {
     expect(hasZone('great-hall')).toBe(true);
     expect(hasZone('throne')).toBe(true);
     expect(hasZone('summit')).toBe(true);
-    expect(hasZone('queens-garden')).toBe(false);
+    expect(hasZone('queens-garden')).toBe(true);
   });
 
-  it('future-zone allowlist never overlaps registered zones', () => {
+  it('the future-zone allowlist is now empty (every door target is built)', () => {
+    expect(FUTURE_ZONE_IDS.size).toBe(0);
     for (const [id] of entries) expect(FUTURE_ZONE_IDS.has(id)).toBe(false);
   });
 
@@ -136,12 +141,21 @@ describe('zone registry', () => {
     }
   });
 
-  it('NG+ (ngOnly) LORE entries are defined but not yet placed (T16 places them)', () => {
-    const placed = new Set(entries.flatMap(([, def]) => def.lore.map((l) => l.id)));
-    const ng = Object.entries(LORE).filter(([, e]) => e.ngOnly);
-    expect(ng.length).toBeGreaterThan(0);
-    for (const [id] of ng) {
-      expect(placed.has(id), `ngOnly "${id}" should stay unplaced until T16`).toBe(false);
+  it('NG+ (ngOnly) LORE entries are placed only in ngPlus.addedLore, never base lore (T16)', () => {
+    const basePlaced = new Set(entries.flatMap(([, def]) => def.lore.map((l) => l.id)));
+    const ngPlaced = entries.flatMap(([, def]) => (def.ngPlus?.addedLore ?? []).map((l) => l.id));
+    const ngOnly = Object.entries(LORE).filter(([, e]) => e.ngOnly).map(([id]) => id);
+    expect(ngOnly.length).toBeGreaterThan(0);
+    // No ngOnly entry leaks into a base lore array (base runs must never show them).
+    for (const id of ngOnly) {
+      expect(basePlaced.has(id), `ngOnly "${id}" leaked into base lore`).toBe(false);
+    }
+    // The bijection: every addedLore entry is an ngOnly one, resolves, placed once.
+    expect(new Set(ngPlaced).size, 'an ngOnly entry is placed twice').toBe(ngPlaced.length);
+    expect(new Set(ngPlaced)).toEqual(new Set(ngOnly));
+    for (const id of ngPlaced) {
+      expect(LORE[id], `addedLore "${id}" has no LORE entry`).toBeDefined();
+      expect(LORE[id].ngOnly ?? false, `addedLore "${id}" is not an ngOnly entry`).toBe(true);
     }
   });
 
@@ -264,6 +278,12 @@ describe.each(entries)('zone %s', (id, def) => {
   it('lore spots sit on plain floor cells (content resolves via LORE)', () => {
     for (const spot of def.lore) {
       expect(isPlainFloor(def, spot.at), `lore ${spot.id} off-floor`).toBe(true);
+    }
+  });
+
+  it('NG+ addedLore spots (when present) sit on plain floor cells', () => {
+    for (const spot of def.ngPlus?.addedLore ?? []) {
+      expect(isPlainFloor(def, spot.at), `NG+ lore ${spot.id} off-floor`).toBe(true);
     }
   });
 
