@@ -457,11 +457,16 @@ export class AudioManager implements Subsystem {
     return { id, gain, sources };
   }
 
-  /** A looping noise BufferSource with a seam-crossfaded buffer (cached). */
-  private noiseSource(seconds: number, seed: number): AudioBufferSourceNode {
+  /**
+   * A looping noise BufferSource with a seam-crossfaded buffer. Fixed-seed beds
+   * pass `cache = true` (the default) so the buffer is reused across zone
+   * entries; random-seed one-shots pass `cache = false` — a fresh buffer that
+   * never enters `noiseCache`, so the cache can't grow unbounded on every swing.
+   */
+  private noiseSource(seconds: number, seed: number, cache = true): AudioBufferSourceNode {
     const ctx = this.ctx!;
     const key = `${seconds}:${seed}`;
-    let buf = this.noiseCache.get(key);
+    let buf = cache ? this.noiseCache.get(key) : undefined;
     if (!buf) {
       const n = Math.floor(ctx.sampleRate * seconds);
       buf = ctx.createBuffer(1, n, ctx.sampleRate);
@@ -475,7 +480,7 @@ export class AudioManager implements Subsystem {
         const a = k / xf;
         d[n - xf + k] = d[n - xf + k] * (1 - a) + d[k] * a;
       }
-      this.noiseCache.set(key, buf);
+      if (cache) this.noiseCache.set(key, buf);
     }
     const src = ctx.createBufferSource();
     src.buffer = buf;
@@ -695,7 +700,7 @@ export class AudioManager implements Subsystem {
   private whoosh(peak: number, f0: number, f1: number, dur: number, sink: AudioNode): void {
     const ctx = this.ctx!;
     const t0 = ctx.currentTime;
-    const src = this.noiseSource(0.5, (Math.random() * 1e9) | 0);
+    const src = this.noiseSource(0.5, (Math.random() * 1e9) | 0, false);
     src.loop = false;
     const bp = ctx.createBiquadFilter();
     bp.type = 'bandpass';
@@ -728,7 +733,7 @@ export class AudioManager implements Subsystem {
     o.connect(g);
     o.start(t0);
     o.stop(t0 + dur + 0.02);
-    const n = this.noiseSource(0.2, (Math.random() * 1e9) | 0);
+    const n = this.noiseSource(0.2, (Math.random() * 1e9) | 0, false);
     n.loop = false;
     const nlp = ctx.createBiquadFilter();
     nlp.type = 'lowpass';
@@ -757,7 +762,7 @@ export class AudioManager implements Subsystem {
     o.connect(g);
     o.start(t0);
     o.stop(t0 + 0.15);
-    const n = this.noiseSource(0.1, (Math.random() * 1e9) | 0);
+    const n = this.noiseSource(0.1, (Math.random() * 1e9) | 0, false);
     n.loop = false;
     const ng = ctx.createGain();
     ng.gain.setValueAtTime(peak * 0.5, t0);
@@ -772,7 +777,7 @@ export class AudioManager implements Subsystem {
     const ctx = this.ctx!;
     const t0 = ctx.currentTime;
     const dur = 0.6;
-    const n = this.noiseSource(1.0, (Math.random() * 1e9) | 0);
+    const n = this.noiseSource(1.0, (Math.random() * 1e9) | 0, false);
     n.loop = false;
     const bp = ctx.createBiquadFilter();
     bp.type = 'bandpass';
