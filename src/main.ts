@@ -21,6 +21,11 @@ import { Wraith } from './entities/Wraith';
 import { Forsworn } from './entities/Forsworn';
 import { AshHound, HoundView } from './entities/AshHound';
 import { KneelingHollow, KneelerView } from './entities/KneelingHollow';
+import { WatcherPresence, WatcherView } from './entities/WatcherPresence';
+import type { ViewTest } from './entities/WatcherPresence';
+import { HagPresence, HagView } from './entities/HagPresence';
+import { FOGLINE_PART_M, MIN_EMBER_CAP, offerToHag, restoreEmberCap } from './content/hagBargain';
+import type { HagState, Offering, Boon } from './content/hagBargain';
 import { BossArena, arenaWantsDark } from './entities/bossArena';
 import { Brand } from './player/Brand';
 import { Combat, inArc } from './player/Combat';
@@ -283,6 +288,18 @@ async function startScene(): Promise<void> {
   // kneel (see Brand.onSave below).
   const loreRead = new Set<string>(save?.loreRead ?? []);
 
+  // --- Task 5: the Hag's ember cap + the bargains struck --------------------
+  // The brand's rekindle CEILING reads `emberCap`; a tithe lowers it, persisting
+  // across Drop 1 until the door out of Greater Vael / the next Vigil restores
+  // it. `hagBargains` mirrors HagState.bargains (banked with the dread ledger).
+  let emberCap = save?.greaterVael?.maxEmberCap ?? TUNING.brand.maxEmbers;
+  let hagBargains: string[] = [...(save?.greaterVael?.bargains ?? [])];
+  /** Ashen-Forest-N fog-line boon (fogFar +6) armed by an ember tithe, applied
+   *  for the visit; 0 when unarmed / after leaving Greater Vael. */
+  let forestFogBoost = 0;
+  /** Seeded by the `kneel` bargain: the next Watcher glimpse is "answered". */
+  let watcherAnswered = false;
+
   // Zone registry (Task 11): real authored zones resolve through ZONES.
   const zones = new ZoneManager({ scene, bus: game.bus, resolve: resolveZone });
   game.register(zones);
@@ -354,6 +371,9 @@ async function startScene(): Promise<void> {
   const brand = new Brand({
     bus: game.bus,
     pipeline,
+    // Task 5: the rekindle ceiling is the Hag-tithed ember cap (defaults to the
+    // full brand until a tithe lowers it; restored on leaving Greater Vael).
+    maxEmbers: () => emberCap,
     onSave: (bannerId) => {
       // Merge over any prior save so progression fields survive checkpoints.
       const prev = loadGame();
@@ -376,7 +396,8 @@ async function startScene(): Promise<void> {
         // Greater Vael dread ledger (Task 3): the glitches seen + Watcher budget
         // spent this drop, so fidelity scarcity + the caps survive a reload.
         // Carries the prior save's ledger forward until an exterior run advances it.
-        greaterVael: dread.snapshot(),
+        // Task 5: also banks the Hag ember cap + bargains struck this drop.
+        greaterVael: { ...dread.snapshot(), maxEmberCap: emberCap, bargains: [...hagBargains] },
       };
       saveGame(data);
     },
@@ -439,6 +460,43 @@ async function startScene(): Promise<void> {
   // A separate seeded stream for Ash-Hound flank/duration rolls, so their
   // randomness is deterministic per run without perturbing the director's.
   const houndRng = mulberry32((runSeed ^ 0x5bd1e995) >>> 0);
+
+  // --- Task 5: the never-killable presences (the Watcher + the Hag) ---------
+  // The WATCHER is run-scoped (its sighting budget spans the drop, like the
+  // director); the HAG is zone-scoped (her threshold is a place — rebuilt in
+  // enterZone from the active zone's own `hagThreshold` + cell size, so the
+  // OFFER prompt, the silhouette, and `atThreshold` can never disagree across
+  // zones). Their VIEWS are zone-scoped. The director owns the budget + shared
+  // cooldown and CALLS manifest/glimpse via routeScare — these classes only
+  // render + reposition. Castle/interior zones never build a view, so they
+  // never see either. The Watcher's sighting seed comes from the same save
+  // slice the director uses, so both counters stay in step.
+  const PRESENCE_CELL_M = 2; // the universal 2 m grid (zoneDef: "always 2")
+  const watcherPresence = new WatcherPresence(
+    dreadData.anchors,
+    PRESENCE_CELL_M,
+    save?.greaterVael?.watcherSightings ?? 0,
+  );
+  /** The active exterior zone's Hag, or null (rebuilt per zone in enterZone). */
+  let hagPresence: HagPresence | null = null;
+  // Per-frame frustum scratch: the Watcher freezes while its silhouette is in
+  // view and may only reposition off-screen. The observed test is a SPHERE
+  // around the mid-body point sized to cover the whole 3 m column, so a figure
+  // half on screen (midpoint straddling a frustum plane) still counts as
+  // observed — it must never be caught teleporting while any of it shows.
+  // The scratch objects are reused so the tick allocates nothing.
+  const presenceFrustum = new THREE.Frustum();
+  const presenceViewProj = new THREE.Matrix4();
+  const presenceSphere = new THREE.Sphere(
+    new THREE.Vector3(),
+    TUNING.greaterVael.watcher.heightM * 0.6,
+  );
+  const presenceViewTest: ViewTest = {
+    contains: (p) => {
+      presenceSphere.center.set(p.x, p.y, p.z);
+      return presenceFrustum.intersectsSphere(presenceSphere);
+    },
+  };
   // The reduced-flicker toggle drives the pipeline AND the kit (both strip their
   // per-frame-random layers; the kit's held timelines are unaffected).
   scareKit.setFlickerSafe(false);
@@ -478,10 +536,14 @@ async function startScene(): Promise<void> {
         audio.setThreat(1);
         break;
       case 'watcher':
-        // Task 5: watcherPresence.manifest(a.anchor).
+        // A sighting: the Watcher manifests at the authored anchor (frozen,
+        // never approached). Its silhouette + off-screen reposition + despawn
+        // run in the exterior presence tick below.
+        watcherPresence.manifest(a.anchor);
         break;
       case 'hag-glimpse':
-        // Task 5: hag.glimpse().
+        // The Hag appears at the fog-line, receding if approached.
+        hagPresence?.glimpse();
         break;
       case 'pure-visual':
         // Tasks 9–12: the authored per-zone one-shot this beat shows.
@@ -753,6 +815,13 @@ async function startScene(): Promise<void> {
   let emberRiseOn = false;
   /** The Queen's Garden's green foliage + fill (T16), or null outside it. */
   let gardenGroup: THREE.Group | null = null;
+
+  /** The Watcher/Hag silhouette views for the current zone — null in castle
+   *  (interior) zones, so those zones never render either presence (Task 5). */
+  let watcherView: WatcherView | null = null;
+  let hagView: HagView | null = null;
+  /** True while the carved bargain is armed at the cairn (digit keys select). */
+  let bargainArmed = false;
 
   function clearEnemies(): void {
     for (const { view } of enemies) {
@@ -1132,6 +1201,127 @@ async function startScene(): Promise<void> {
     }
   }
 
+  // --- Task 5: the presence views + the Hag's carved bargain ---------------
+
+  function clearPresenceViews(): void {
+    if (watcherView) {
+      scene.remove(watcherView.root);
+      watcherView.dispose();
+      watcherView = null;
+    }
+    if (hagView) {
+      scene.remove(hagView.root);
+      hagView.dispose();
+      hagView = null;
+    }
+    // A zone change ends any manifest/glimpse in progress: the views are zone-
+    // scoped, so a stale presence would otherwise pop straight back in on the
+    // next exterior entry, unpaid-for by any DreadDirector activation.
+    watcherPresence.dismiss();
+    hagPresence = null;
+  }
+
+  /** Build the Watcher/Hag silhouettes for an EXTERIOR zone only (castle zones
+   *  get no view, so they can never see either — a binding rule). The Hag is
+   *  zone-scoped: built from THIS zone's `hagThreshold` + cell size, so her
+   *  silhouette, `atThreshold`, and the OFFER prompt always agree. */
+  function spawnPresenceViews(): void {
+    if (activeDef.kind !== 'exterior') return;
+    watcherView = new WatcherView(watcherPresence);
+    scene.add(watcherView.root);
+    if (activeDef.hagThreshold) {
+      hagPresence = new HagPresence(activeDef.hagThreshold, built.cellM);
+      hagView = new HagView(hagPresence);
+      scene.add(hagView.root);
+    }
+  }
+
+  /** Persist the dread ledger + the Hag slice into an EXISTING save (banks at
+   *  the next kneel too; with no checkpoint yet the in-memory cap/flags gate the
+   *  run). Uses the LIVE dread.snapshot() — never the save's stale ledger, or a
+   *  bargain-time write would roll back sightings/glitches accrued since the
+   *  last kneel (and re-open the Watcher budget on reload). No-op with no save. */
+  function persistGreaterVael(): void {
+    const prev = loadGame();
+    if (!prev) return;
+    saveGame({
+      ...prev,
+      flags: [...flags],
+      greaterVael: { ...dread.snapshot(), maxEmberCap: emberCap, bargains: [...hagBargains] },
+    });
+  }
+
+  /** Route a bargain boon to the world (the pure result carries which). Every
+   *  line is a CARVED inscription — she never speaks. */
+  function applyHagBoon(boon: Boon): void {
+    switch (boon.kind) {
+      case 'fogline-part':
+        // Ashen Forest N fogFar +FOGLINE_PART_M for the visit (its lore cache
+        // unseals when that zone ships, Tasks 9–12). Armed now; enterZone
+        // applies it on entry, and immediately if already standing there.
+        forestFogBoost = FOGLINE_PART_M;
+        if (zones.current === 'ashen-forest-n') baseFogFar += forestFogBoost;
+        showCard('The fog-line parts. North, the ash thins — and a sealed cache gives up its word.');
+        break;
+      case 'play-vision':
+        // gv-vision-hag is Task 8's content; the moment it registers this routes
+        // to visionPlayer.play. Until then the gesture is the carved line.
+        showCard('She takes the ledger. For a breath the world remembers its colour.');
+        break;
+      case 'answer-watcher':
+        watcherAnswered = true; // the next glimpse is "answered" (Drop-3 seed)
+        showCard('She kneels beside you. The next time the tall thing is seen, it is — answered.');
+        break;
+      case 'none':
+        showCard('She turns away. The threshold keeps, for a later visit.');
+        break;
+    }
+  }
+
+  /** Whether the ember tithe is offerable NOW: she never caps the brand below
+   *  one ember, and "place 1 LIVE ember" needs a spare lit ember to place —
+   *  she does not take your last (a tithe must never hollow the knight). */
+  function canTithe(): boolean {
+    return emberCap > MIN_EMBER_CAP && brand.embers >= 2 && !brand.hollow;
+  }
+
+  /** Apply an offering at the cairn: the pure bargain, then its world effects —
+   *  set flags, lower/keep the ember cap, place the live ember, surrender the
+   *  ledger, grant the boon, persist. Exposed on the dev handle for QA. */
+  function applyHagOffer(offering: Offering): void {
+    // Gate the tithe HERE (the pure table stays exactly §6.4): un-offerable
+    // when the cap is already at its floor or no spare live ember remains.
+    if (offering === 'ember' && !canTithe()) {
+      showCard('Carved beneath: she will not take the last of a brand.');
+      return;
+    }
+    const state: HagState = { maxEmberCap: emberCap, bargains: [...hagBargains] };
+    const result = offerToHag(offering, state, flags.has('tithe-ledger'));
+    emberCap = result.state.maxEmberCap;
+    hagBargains = result.state.bargains;
+    for (const f of result.flagsSet) flags.add(f);
+    // "Place 1 live ember": the tithed ember leaves the brand NOW (the cap drop
+    // makes it persist past the next rekindle) — the cost is visible at once.
+    if (result.flagsSet.includes('hag-tithed')) brand.damage(1);
+    // The ledger leaves the pack once given (its inscription already read).
+    if (result.flagsSet.includes('hag-ledger-given')) flags.delete('tithe-ledger');
+    applyHagBoon(result.boon);
+    persistGreaterVael();
+    rebuildInteractables();
+  }
+
+  /** Arm the carved bargain at the cairn: show the silent options; digit keys
+   *  (1 tithe / 2 give-ledger / 3 kneel / 4 turn away) select. Rows that are
+   *  un-offerable right now (no ledger, no spare ember) are simply not carved. */
+  function openHagBargain(): void {
+    bargainArmed = true;
+    const tithe = canTithe() ? '  [1] TITHE AN EMBER' : '';
+    const ledger = flags.has('tithe-ledger') ? '  [2] GIVE LEDGER' : '';
+    showCard(
+      `Carved at the cairn — she does not speak.${tithe}${ledger}  [3] KNEEL  [4] TURN AWAY`,
+    );
+  }
+
   /** Place a glint on each un-taken item's pedestal (skip taken ones). */
   function spawnItemMeshes(): void {
     for (const item of built.items) {
@@ -1268,6 +1458,19 @@ async function startScene(): Promise<void> {
    *  and the summit's GIVE-THE-CROWN flame. */
   function rebuildInteractables(): void {
     interactables = collectInteractables(built, flags, ashPriests);
+    // Task 5: the Hag's cairn — a threshold OFFER target (silent bargain). The
+    // presence tick decides whether she is glimpsed/present; the target itself
+    // is always at the authored cell so the player can reach the bargain.
+    if (activeDef.hagThreshold) {
+      const [hr, hc] = activeDef.hagThreshold.at;
+      interactables.push({
+        id: 'hag-threshold',
+        verb: 'OFFER',
+        x: (hc + 0.5) * built.cellM,
+        z: (hr + 0.5) * built.cellM,
+        label: 'THE FOG-LINE',
+      });
+    }
     if (droppedTachi && !droppedTachi.taken) {
       interactables.push({
         id: 'callun-tachi',
@@ -1300,6 +1503,9 @@ async function startScene(): Promise<void> {
     (scene.background as THREE.Color).setHex(skyHex);
     baseFogFar =
       activeDef.fogFarM ?? (isExterior ? TUNING.greaterVael.exterior.fogFarDefaultM : DEFAULT_FOG_FAR);
+    // Task 5: an ember tithe parts the fog-line — Ashen Forest N's far-plane
+    // opens +6 m for the visit (armed by the `fogline-part` boon).
+    if (zones.current === 'ashen-forest-n') baseFogFar += forestFogBoost;
     fog.far = baseFogFar;
     ambient.intensity = activeDef.ambientFloor ?? DEFAULT_AMBIENT;
     // Snap the visual ground height to the arrival cell so exterior entry does
@@ -1327,6 +1533,7 @@ async function startScene(): Promise<void> {
     clearGate();
     clearEnemies();
     clearAshPriests();
+    clearPresenceViews();
     // Task-15 teardown: nothing from throne/summit survives a zone change.
     clearBossGate();
     clearTrailMeshes();
@@ -1342,6 +1549,7 @@ async function startScene(): Promise<void> {
     spawnItemMeshes();
     spawnGate();
     spawnAshPriests();
+    spawnPresenceViews();
     // The player keeps Callun's tachi across zones once it's been taken.
     if (flags.has('callun-tachi')) combat.equipTachi();
     // Throne: the arena gate starts open; the portcullis seals on entry.
@@ -1383,6 +1591,16 @@ async function startScene(): Promise<void> {
       try {
         built = await zones.transition(door);
         const def = resolveZone(zones.current);
+        // Task 5: the door OUT of Greater Vael restores the Hag-tithed ember cap
+        // (leaving an exterior zone for a castle/interior one). The struck
+        // bargains persist; only the brand's ceiling is lifted back to full —
+        // and the restore is PERSISTED at once, or a reload before the next
+        // kneel would resurrect the tithed cap inside the castle.
+        if (resolveZone(from).kind === 'exterior' && def.kind !== 'exterior') {
+          emberCap = restoreEmberCap({ maxEmberCap: emberCap, bargains: hagBargains }).maxEmberCap;
+          forestFogBoost = 0;
+          persistGreaterVael();
+        }
         const paired = pairedDoor(from, door.def, def);
         if (paired) {
           const entry = doorEntry(def, paired);
@@ -1405,6 +1623,22 @@ async function startScene(): Promise<void> {
       console.error(`OATHBRAND: transition through "${door.def.id}" failed:`, err);
     });
   }
+
+  // Task 5: the Hag's carved bargain — digit keys select an offering while the
+  // cairn is armed. SILENT (no dialogue system, no voice); the effect runs
+  // through the pure `offerToHag` via `applyHagOffer`. Escape is left to pause.
+  window.addEventListener('keydown', (e) => {
+    if (!bargainArmed || game.state !== 'playing' || transitioning) return;
+    let off: Offering | null = null;
+    if (e.code === 'Digit1') off = canTithe() ? 'ember' : null;
+    else if (e.code === 'Digit2') off = flags.has('tithe-ledger') ? 'ledger' : null;
+    else if (e.code === 'Digit3') off = 'kneel';
+    else if (e.code === 'Digit4') off = 'decline';
+    if (!off) return;
+    e.preventDefault();
+    bargainArmed = false;
+    applyHagOffer(off);
+  });
 
   // Enemy hits (already guard-filtered by Combat) burn embers; every 3rd
   // kill returns one as a wisp (Brand self-subscribes to enemy-slain).
@@ -1458,6 +1692,29 @@ async function startScene(): Promise<void> {
       flags,
       vista,
       visionPlayer,
+      // Task 5: the never-killable presences + the Hag bargain, for headless QA
+      // (force a manifest, walk-to-despawn, drive the full bargain flow).
+      watcherPresence,
+      get hagPresence() {
+        return hagPresence; // zone-scoped — rebound by every enterZone
+      },
+      applyHagOffer,
+      openHagBargain,
+      get emberCap() {
+        return emberCap;
+      },
+      get hagBargains() {
+        return hagBargains;
+      },
+      get watcherAnswered() {
+        return watcherAnswered;
+      },
+      get watcherView() {
+        return watcherView;
+      },
+      get hagView() {
+        return hagView;
+      },
       kneel,
       inscription,
       dialogueBox,
@@ -1755,6 +2012,20 @@ async function startScene(): Promise<void> {
           routeScare(activation);
         }
         dreadEvent = { kind: 'none' }; // consume this frame's event
+
+        // Task 5: advance the never-killable presences. The frustum (from the
+        // camera's last-frame pose — a 1-frame lag on "am I looking?" is
+        // invisible here) tells the Watcher whether it is observed (frozen) or
+        // may reposition off-screen; the Hag reads the player's cell for the
+        // cairn threshold, and recedes if approached while merely glimpsed.
+        // Neither ever touches the sim, the player, or damage.
+        camera.updateMatrixWorld();
+        presenceViewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+        presenceFrustum.setFromProjectionMatrix(presenceViewProj);
+        watcherPresence.update(dt, controller.pos, presenceViewTest);
+        hagPresence?.update(controller.pos, [dRow, dCol]);
+        watcherView?.update(dt);
+        hagView?.update(dt);
       }
 
       // Combat: guard mirrors the held button; latched presses start actions.
@@ -1908,6 +2179,8 @@ async function startScene(): Promise<void> {
       const target = interactor.nearest(interactables);
       // Walking off the summit stair cancels a pending KEEP confirm.
       if (keepConfirmPending && target?.id !== 'summit-to-throne') keepConfirmPending = false;
+      // Stepping off the cairn disarms the Hag's carved bargain.
+      if (bargainArmed && target?.id !== 'hag-threshold') bargainArmed = false;
       if (target) showPrompt(target.verb, target.label);
       else hidePrompt();
 
@@ -1927,6 +2200,10 @@ async function startScene(): Promise<void> {
         // respawn, and — on the FIRST kneel here — this banner's memory. Locks
         // input (enters 'vision') for its ~4s (longer while the memory plays).
         if (kneel.start(zones.current, visionForZone(zones.current))) hidePrompt();
+      } else if (pressedE && target?.verb === 'OFFER') {
+        // The Hag's cairn (Task 5): arm the silent, carved bargain (digit keys
+        // select). No damage, no fight — a bargain, not a battle.
+        openHagBargain();
       } else if (pressedE && target?.verb === 'READ') {
         inscription.open(target.id);
       } else if (pressedE && target?.verb === 'SPEAK') {

@@ -37,6 +37,13 @@ export interface BrandDeps {
    */
   nearestEnemyM?: () => number | null;
   nearestIllusoryM?: () => number | null;
+  /**
+   * The rekindle ceiling — how many embers a full brand holds (Task 5). Polled
+   * on rekindle / the +1-per-3-kills cap / the desaturation ramp. Defaults to
+   * `TUNING.brand.maxEmbers` (5) when omitted, so behavior is unchanged unless
+   * the Hag's tithe lowers `save.greaterVael.maxEmberCap` for the drop.
+   */
+  maxEmbers?: () => number;
 }
 
 export class Brand implements Subsystem {
@@ -55,6 +62,7 @@ export class Brand implements Subsystem {
   private kills = 0;
 
   constructor(private readonly deps: BrandDeps) {
+    this.embers = this.cap();
     this.applyDesaturation();
     // Design call (Task 9): the kill counter lives INSIDE Brand, wired by
     // self-subscribing to 'enemy-slain' — main wiring cannot forget it and
@@ -94,7 +102,7 @@ export class Brand implements Subsystem {
   onEnemySlain(): void {
     this.kills += 1;
     if (this.kills % 3 !== 0) return;
-    if (this.hollowed || this.embers >= TUNING.brand.maxEmbers) return;
+    if (this.hollowed || this.embers >= this.cap()) return;
     this.embers += 1;
     this.deps.bus.emit({ type: 'ember-gained', total: this.embers });
     this.applyDesaturation();
@@ -102,7 +110,7 @@ export class Brand implements Subsystem {
 
   /** Kneel at a banner: restore every ember, announce it, checkpoint. */
   rekindle(bannerId: string): void {
-    this.embers = TUNING.brand.maxEmbers;
+    this.embers = this.cap();
     this.hollowed = false;
     this.deps.bus.emit({ type: 'player-rekindled', bannerId });
     this.deps.onSave?.(bannerId);
@@ -146,11 +154,18 @@ export class Brand implements Subsystem {
     );
   }
 
-  /** hollow → hard grayscale; else the tuned ramp indexed by embers LOST. */
+  /** The rekindle ceiling (embers a full brand holds). Defaults to the tuned
+   *  max; the Hag's tithe lowers it via `deps.maxEmbers` for Greater Vael. */
+  private cap(): number {
+    return this.deps.maxEmbers?.() ?? TUNING.brand.maxEmbers;
+  }
+
+  /** hollow → hard grayscale; else the tuned ramp indexed by embers LOST from
+   *  the CURRENT cap (clamped, so a Hag-lowered cap reads full colour at full). */
   private applyDesaturation(): void {
-    const v = this.hollowed
-      ? 1
-      : TUNING.brand.hollowDesatRamp[TUNING.brand.maxEmbers - this.embers];
+    const ramp = TUNING.brand.hollowDesatRamp;
+    const idx = Math.max(0, Math.min(ramp.length - 1, this.cap() - this.embers));
+    const v = this.hollowed ? 1 : ramp[idx];
     this.deps.pipeline?.setDesaturation(v);
   }
 }

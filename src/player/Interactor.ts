@@ -6,7 +6,7 @@
  */
 import { TUNING } from '../content/tuning';
 
-export type InteractVerb = 'KNEEL' | 'READ' | 'TAKE' | 'OPEN' | 'SPEAK' | 'GIVE';
+export type InteractVerb = 'KNEEL' | 'READ' | 'TAKE' | 'OPEN' | 'SPEAK' | 'GIVE' | 'OFFER';
 
 /** Something the player can target with the context action. */
 export interface Interactable {

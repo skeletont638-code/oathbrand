@@ -55,6 +55,26 @@ export const DEV_EXTERIOR_ZONE: ZoneDef = {
   fogCells: [{ cells: [[7, 4], [7, 5], [7, 6], [8, 3]], farM: 11 }],
   props: [],
   lights: [],
+  // Task 5 dev-only presences: the Watcher's backdrop anchors (off-grid, in the
+  // treeline corners beyond the field), an authored `watcher` scare that
+  // manifests it when the player nears the spawn, and the Hag's fog-line
+  // threshold (glimpse band + a cairn cell). Shadowed the moment a real
+  // `gate-fields` ships; lets `?dev=1&zone=gate-fields` exercise both presences.
+  watcherAnchors: [
+    [-2, 10],
+    [-2, 1],
+    [1, 12],
+  ],
+  scares: [
+    {
+      id: 'DEV-watcher',
+      zone: 'gate-fields',
+      trigger: { on: 'approach', at: [2, 5], withinM: 6 },
+      gimmick: 'watcher',
+      oneLine: 'Something stands where the field ends, and does not move.',
+    },
+  ],
+  hagThreshold: { at: [6, 5], glimpseCells: [[6, 1], [6, 2], [5, 1]] },
   // Task 4 dev-only killables: an Ash-Hound out in the open field (it aggros,
   // circles the fog edge, then lunges) and a Kneeling Hollow to its east (a
   // scarecrow-still figure that rises when the brand pulses — press G to force

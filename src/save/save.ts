@@ -18,6 +18,11 @@ import type { EndingId, GameFlag, ZoneId } from '../content/types';
 export interface DreadSave {
   glitchSeen: string[];
   watcherSightings: number;
+  /** The Hag-bargain ember cap (Task 5): a tithe lowers it, persisting across
+   *  Drop 1 until the player leaves Greater Vael. Absent ⇒ the full brand. */
+  maxEmberCap?: number;
+  /** The Hag bargains struck this drop (mirrors HagState). Absent ⇒ none. */
+  bargains?: string[];
 }
 
 export interface SaveData {
@@ -76,7 +81,11 @@ function isDreadSave(v: unknown): v is DreadSave | undefined {
   if (v === undefined) return true;
   if (typeof v !== 'object' || v === null) return false;
   const o = v as Record<string, unknown>;
-  return isStringArray(o.glitchSeen) && typeof o.watcherSightings === 'number';
+  if (!(isStringArray(o.glitchSeen) && typeof o.watcherSightings === 'number')) return false;
+  // The Task-5 Hag slice is optional + additive: if present it must be well-formed.
+  if (o.maxEmberCap !== undefined && typeof o.maxEmberCap !== 'number') return false;
+  if (o.bargains !== undefined && !isStringArray(o.bargains)) return false;
+  return true;
 }
 
 export function saveGame(d: SaveData): void {
