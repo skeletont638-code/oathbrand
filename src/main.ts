@@ -12,7 +12,7 @@ import { Projectile, ProjectilePool } from './entities/Projectile';
 import { Soldier } from './entities/Soldier';
 import { Wraith } from './entities/Wraith';
 import { Forsworn } from './entities/Forsworn';
-import { BossArena } from './entities/bossArena';
+import { BossArena, arenaWantsDark } from './entities/bossArena';
 import { Brand } from './player/Brand';
 import { Combat, inArc } from './player/Combat';
 import { Controller } from './player/Controller';
@@ -470,11 +470,13 @@ async function startScene(): Promise<void> {
   game.bus.on('enemy-slain', (e) => {
     if (e.kind !== 'forsworn' || !activeForsworn) return;
     flags.add('forsworn-dead');
-    persistProgress();
     if (activeForsworn.guardedNever) {
       flags.add('callun-tachi');
       dropTachi(activeForsworn.pos);
     }
+    // Persist AFTER both flags are set so the kill-time save captures the
+    // no-guard tachi reward too (it no longer rides the next save).
+    persistProgress();
     rebuildInteractables();
   });
 
@@ -1318,7 +1320,10 @@ async function startScene(): Promise<void> {
         // P3 blackout: the arena torches (and ambient) die as he snuffs them —
         // lerping to the tuned floor (torchOut ≈ 0.03 of their lit intensity).
         const torchOut = TUNING.enemies.forsworn.torchOut;
-        const wantDark = activeForsworn?.alive && activeForsworn.currentPhase() === 3 ? 1 : 0;
+        // The dark belongs to the sealed fight only: during the mercy (gate open,
+        // hollow player walking out) the torches relight, even at phase-3 hp.
+        const bossInP3 = !!(activeForsworn?.alive && activeForsworn.currentPhase() === 3);
+        const wantDark = arenaWantsDark(bossInP3, bossArena.sealed) ? 1 : 0;
         darkness = approach(darkness, wantDark, (DARKEN_SPEED * dt) / 1000);
         zones.setTorchScale(1 - darkness * (1 - torchOut));
         ambient.intensity = (activeDef.ambientFloor ?? DEFAULT_AMBIENT) * (1 - darkness * 0.9);

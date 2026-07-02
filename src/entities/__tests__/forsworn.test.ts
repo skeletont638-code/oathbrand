@@ -14,7 +14,7 @@ import { GridCollider } from '../../world/collision';
 import type { ZoneDef } from '../../world/zoneDef';
 import type { EnemyCtx, EnemyState, MeleeDefense } from '../Enemy';
 import { Forsworn, FORSWORN_MERCY_YAW } from '../Forsworn';
-import { BossArena } from '../bossArena';
+import { BossArena, arenaWantsDark } from '../bossArena';
 
 const F = TUNING.enemies.forsworn;
 const A = F.attack;
@@ -259,5 +259,52 @@ describe('BossArena — the gate seals behind you and reopens as mercy', () => {
     expect(arena.update({ ...alive, bossDead: true })).toBe('death-open');
     expect(arena.sealed).toBe(false);
     expect(arena.update({ ...alive, bossDead: true })).toBe(null);
+  });
+});
+
+describe('arenaWantsDark — the P3 blackout is a mechanic of the sealed fight', () => {
+  const alive = { playerInArena: true, playerHollow: false, bossDead: false };
+
+  /** Fold the main.ts boss side: alive AND phase 3. */
+  const bossInP3 = (f: Forsworn) => f.alive && f.currentPhase() === 3;
+
+  it('phase 3 while sealed → dark; the mercy unseals → the dark lifts', () => {
+    const f = makeForsworn(makeWorld(), 8, 8);
+    f.takeHit(F.hp - 8); // → phase 3 (torch-out territory)
+    expect(f.currentPhase()).toBe(3);
+    const arena = new BossArena();
+    arena.update(alive); // seal — the fight is on
+
+    // P3 + sealed → the torches die.
+    expect(arenaWantsDark(bossInP3(f), arena.sealed)).toBe(true);
+
+    // Hollowing mid-fight opens the mercy — even at phase-3 hp the dark lifts.
+    expect(arena.update({ ...alive, playerHollow: true })).toBe('mercy-open');
+    expect(arenaWantsDark(bossInP3(f), arena.sealed)).toBe(false);
+
+    // Rekindle + step back in → reseal → the P3 darkness returns unchanged.
+    arena.update({ playerInArena: false, playerHollow: false, bossDead: false });
+    expect(arena.update(alive)).toBe('seal');
+    expect(arenaWantsDark(bossInP3(f), arena.sealed)).toBe(true);
+  });
+
+  it('stays lit below phase 3 even while sealed (torch-out is P3-only)', () => {
+    const f = makeForsworn(makeWorld(), 8, 8);
+    f.takeHit(F.hp - 16); // → phase 2
+    expect(f.currentPhase()).toBe(2);
+    const arena = new BossArena();
+    arena.update(alive); // sealed fight, but not yet P3
+    expect(arenaWantsDark(bossInP3(f), arena.sealed)).toBe(false);
+  });
+
+  it('lifts on death even at phase-3 hp (gate open for good)', () => {
+    const w = makeWorld();
+    const f = makeForsworn(w, 8, 8);
+    const arena = new BossArena();
+    arena.update(alive); // seal
+    f.takeHit(F.hp); // fell at phase 3
+    expect(f.alive).toBe(false);
+    arena.update({ ...alive, bossDead: true }); // death-open → unsealed
+    expect(arenaWantsDark(bossInP3(f), arena.sealed)).toBe(false);
   });
 });

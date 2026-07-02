@@ -27,6 +27,18 @@ export interface ArenaFrame {
   bossDead: boolean;
 }
 
+/**
+ * The P3 blackout is a mechanic of the SEALED DUEL, not of the room itself: the
+ * torches only die while the fight is on. When the gate opens for the mercy —
+ * the hollow player walking out — the dark LIFTS as the Forsworn turns his back,
+ * even at phase-3 hp. On reseal (a fresh fight) the P3 darkness returns unchanged.
+ * `bossAliveInP3` folds the boss side (alive AND currentPhase() === 3); `sealed`
+ * is the arena gate. Dark only when both hold.
+ */
+export function arenaWantsDark(bossAliveInP3: boolean, sealed: boolean): boolean {
+  return bossAliveInP3 && sealed;
+}
+
 export class BossArena {
   /** True while the gate blocks the doorway. */
   sealed = false;
