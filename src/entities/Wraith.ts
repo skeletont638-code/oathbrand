@@ -76,7 +76,9 @@ export class Wraith extends Enemy {
   protected override think(dt: number, ctx: EnemyCtx): void {
     const dx = ctx.playerPos.x - this.pos.x;
     const dz = ctx.playerPos.z - this.pos.z;
-    const dist = Math.hypot(dx, dz);
+    // Clamped away from 0 so dx/dist can never go NaN with the player
+    // standing exactly on top of us.
+    const dist = Math.hypot(dx, dz) || 1e-6;
 
     switch (this.state) {
       case 'idle':

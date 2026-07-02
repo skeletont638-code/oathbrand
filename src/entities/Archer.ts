@@ -53,7 +53,9 @@ export class Archer extends Enemy {
     if (this.cool > 0) this.cool = Math.max(0, this.cool - dt);
     const dx = ctx.playerPos.x - this.pos.x;
     const dz = ctx.playerPos.z - this.pos.z;
-    const dist = Math.hypot(dx, dz);
+    // Clamped away from 0 so dx/dist can never go NaN with the player
+    // standing exactly on top of us (dx/1e-6 = 0 → we just hold still).
+    const dist = Math.hypot(dx, dz) || 1e-6;
 
     switch (this.state) {
       case 'idle':

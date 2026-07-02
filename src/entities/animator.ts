@@ -19,6 +19,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { patchMaterial } from '../ps1/patchMaterial';
 import type { Enemy, EnemyState } from './Enemy';
+import type { Wraith } from './Wraith';
 
 /** FSM state → KayKit clip. (Hit/death handling is in EnemyView.) */
 export const CLIP_FOR_STATE: Record<EnemyState, string> = {
@@ -29,6 +30,20 @@ export const CLIP_FOR_STATE: Record<EnemyState, string> = {
   recover: 'Idle_Combat',
   reposition: 'Walking_A',
   dead: 'Death_A',
+};
+
+/** Per-kind overrides layered over CLIP_FOR_STATE (Task 10). All names
+ * verified against the GLBs (both skeletons share the 95-clip rig). */
+export const ARCHER_CLIPS: Partial<Record<EnemyState, string>> = {
+  alert: '2H_Ranged_Aiming', // crossbow up, holding the line
+  attack: '2H_Ranged_Shooting',
+  recover: '2H_Ranged_Reload',
+  reposition: 'Walking_Backwards', // backpedals while keeping aim
+};
+
+export const WRAITH_CLIPS: Partial<Record<EnemyState, string>> = {
+  approach: 'Running_A', // speed 2.3 reads as a run, not a walk
+  attack: '1H_Melee_Attack_Stab', // the lunge
 };
 
 const HIT_CLIP = 'Hit_A';
@@ -106,12 +121,15 @@ export class EnemyView {
    * @param attackMs total windup+active ms of the enemy's swing — the attack
    *   clip's timeScale is stretched so the anim contact lines up with the
    *   FSM's active window (the telegraph must not lie).
+   * @param clips per-kind clip overrides layered over CLIP_FOR_STATE
+   *   (e.g. ARCHER_CLIPS swaps the melee chop for the crossbow set).
    */
   constructor(
     private readonly enemy: Enemy,
     template: SkeletonTemplate,
     scale: number,
     private readonly attackMs: number,
+    private readonly clips?: Partial<Record<EnemyState, string>>,
   ) {
     this.root = cloneSkinned(template.scene);
     this.root.name = `enemy:${enemy.id}`;
@@ -130,7 +148,7 @@ export class EnemyView {
     if (e.state === 'dead') {
       if (!this.deadPlayed) {
         this.deadPlayed = true;
-        const action = playClip(this.mixer, CLIP_FOR_STATE.dead, FADE_MS);
+        const action = playClip(this.mixer, this.clipFor('dead'), FADE_MS);
         if (action) {
           action.setLoop(LoopOnce, 1);
           action.clampWhenFinished = true;
@@ -149,7 +167,7 @@ export class EnemyView {
     } else if ((!this.flashing || e.hurtMs === 0) && e.state !== this.lastState) {
       this.flashing = false;
       this.lastState = e.state;
-      const action = playClip(this.mixer, CLIP_FOR_STATE[e.state], FADE_MS);
+      const action = playClip(this.mixer, this.clipFor(e.state), FADE_MS);
       if (action && e.state === 'attack') {
         // Stretch/compress the chop so its contact sits in the FSM's window.
         action.timeScale = action.getClip().duration / (this.attackMs / 1000);
@@ -159,5 +177,50 @@ export class EnemyView {
     }
     this.prevHurt = e.hurtMs;
     this.mixer.update(dtMs / 1000);
+  }
+
+  private clipFor(state: EnemyState): string {
+    return this.clips?.[state] ?? CLIP_FOR_STATE[state];
+  }
+}
+
+/**
+ * Brand-Wraith view (Task 10): the skeleton-warrior rig wearing a ghost —
+ * there is no dedicated wraith model. Every (already per-instance-cloned,
+ * `patchMaterial`-patched) material is made transparent with `depthWrite`
+ * off and a cold spectral tint; per frame the root's visibility follows
+ * `wraith.visible` (brand pulse > threshold) and opacity = pulse intensity.
+ *
+ * patchMaterial + transparency: the patch only rewrites vertex snapping and
+ * the affine `map` sample — `opacity` stays a stock three uniform that the
+ * renderer refreshes from `material.opacity` every frame, so driving it
+ * here works unchanged on patched materials (verified in-browser).
+ */
+export class WraithView extends EnemyView {
+  private readonly wraith: Wraith;
+  private readonly ghostMats: MeshStandardMaterial[] = [];
+
+  constructor(wraith: Wraith, template: SkeletonTemplate, scale: number, attackMs: number) {
+    super(wraith, template, scale, attackMs, WRAITH_CLIPS);
+    this.wraith = wraith;
+    this.root.traverse((obj) => {
+      const mesh = obj as Mesh;
+      if (!mesh.isMesh) return;
+      const mat = mesh.material as MeshStandardMaterial;
+      mat.transparent = true;
+      mat.depthWrite = false; // a veil, not a body — never occludes
+      mat.opacity = 0;
+      mat.color.setHex(0x9fd8e8); // cold spectral tint over the bone texture
+      mat.emissive.setHex(0x10333f); // faint inner glow so it reads in the dark
+      this.ghostMats.push(mat);
+    });
+    this.root.visible = false;
+  }
+
+  override update(dtMs: number): void {
+    super.update(dtMs);
+    this.root.visible = this.wraith.visible;
+    const opacity = this.wraith.opacity;
+    for (const mat of this.ghostMats) mat.opacity = opacity;
   }
 }

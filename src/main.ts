@@ -2,9 +2,12 @@ import * as THREE from 'three';
 import { TUNING } from './content/tuning';
 import { Game } from './engine/Game';
 import { installScreenshotKey } from './engine/screenshot';
-import { EnemyView, loadSkeleton } from './entities/animator';
-import type { EnemyCtx } from './entities/Enemy';
+import { ARCHER_CLIPS, EnemyView, WraithView, loadSkeleton } from './entities/animator';
+import { Archer } from './entities/Archer';
+import type { Enemy, EnemyCtx } from './entities/Enemy';
+import { Projectile, ProjectilePool } from './entities/Projectile';
 import { Soldier } from './entities/Soldier';
+import { Wraith } from './entities/Wraith';
 import { Brand } from './player/Brand';
 import { Combat, inArc } from './player/Combat';
 import { Controller } from './player/Controller';
@@ -42,13 +45,16 @@ function showFallback(message: string): void {
 }
 
 /**
- * Hardcoded TEST zone until authored zone data lands: a 6×12 torch-lit hall.
- * The player spawns at the south end; ONE Hollow Soldier (Task 9) waits at
- * the north end, ~14m away — outside its 9m aggro radius, so the fight
- * starts on the player's approach: aggro → telegraph → swing. Exercises the
- * whole chain: ASCII grid → gridToPlacements → merged, `patchMaterial`-
- * patched kit meshes → PS1Pipeline, plus the skinned-enemy path (GLB clips
- * through entities/animator).
+ * Hardcoded TEST zone until authored zone data lands: a 6×12 torch-lit hall
+ * holding the full common-enemy roster (Task 10), one per far corner so each
+ * fight starts on the player's approach from the south spawn:
+ * - Hollow Soldier (mid-west, ~14m): aggro → telegraph → swing (Task 9).
+ * - Hollow Archer (NE corner, ~16m): keeps range, telegraphed crossbow
+ *   bolts, backs off when crowded.
+ * - Brand-Wraith (NW corner, ~16m): invisible until the brand's pulse
+ *   thins the veil; dashes into a lunge up close.
+ * Exercises ASCII grid → merged `patchMaterial` kit meshes → PS1Pipeline,
+ * plus both skinned-enemy GLBs (warrior + archer) through entities/animator.
  */
 const TEST_ZONE: ZoneDef = {
   id: 'ashen-gate',
@@ -70,7 +76,11 @@ const TEST_ZONE: ZoneDef = {
   tiles: {},
   props: [{ kind: 'crate', at: [8, 1], rotY: 0.35 }],
   lights: [{ at: [1, 2] }, { at: [5, 1] }, { at: [9, 4] }],
-  enemies: [{ kind: 'soldier', at: [2, 2] }],
+  enemies: [
+    { kind: 'soldier', at: [2, 2] },
+    { kind: 'archer', at: [1, 4] },
+    { kind: 'wraith', at: [1, 1] },
+  ],
   // A readable note on the crate so the interact prompt has a live target.
   lore: [{ id: 'crate-note', at: [8, 1], text: 'The ash keeps no oaths.' }],
   doors: [],
@@ -78,7 +88,7 @@ const TEST_ZONE: ZoneDef = {
 };
 
 /** KayKit skeletons are 2.6m tall at scale 1 — 0.7 fits the 2m-wall halls. */
-const SOLDIER_SCALE = 0.7;
+const ENEMY_SCALE = 0.7;
 /** Ember-wisp lifetime (death mote drifting up from a slain enemy), ms. */
 const WISP_MS = 1200;
 
@@ -169,31 +179,14 @@ async function startScene(): Promise<void> {
     stepDir: (out) => moveVector(controller.input, controller.yaw, out),
   });
 
-  // Enemies: logic (Soldier FSM) + view (skinned GLB clone driven by the
-  // animator). The player's guard is injected as the soldiers' MeleeDefense.
-  const enemies: { logic: Soldier; view: EnemyView }[] = [];
-  const soldierSpawns = built.spawns.filter((s) => s.kind === 'soldier');
-  if (soldierSpawns.length > 0) {
-    const template = await loadSkeleton(await kitPieceUrl('skeleton-warrior'));
-    const soldierAttack = TUNING.enemies.soldier.attack;
-    soldierSpawns.forEach((spawn, i) => {
-      const soldier = new Soldier({
-        id: `${zones.current}-soldier-${i}`,
-        bus: game.bus,
-        defense: combat,
-      });
-      const [row, col] = spawn.at;
-      soldier.pos.set((col + 0.5) * TEST_ZONE.cell, 0, (row + 0.5) * TEST_ZONE.cell);
-      const view = new EnemyView(
-        soldier,
-        template,
-        SOLDIER_SCALE,
-        soldierAttack.windupMs + soldierAttack.activeMs,
-      );
-      scene.add(view.root);
-      enemies.push({ logic: soldier, view });
-    });
-  }
+  // Zone-shared crossbow bolts (Task 10): one pool serves every archer, and
+  // the player's guard blocks bolts exactly like melee (frontal, 0 embers).
+  const bolts = new ProjectilePool({ bus: game.bus, defense: combat });
+
+  // Enemy roster — declared before the Brand so its nearest-enemy poll can
+  // close over the array; populated right after the Brand exists (wraiths
+  // need `() => brand.pulse` for their veil).
+  const enemies: { logic: Enemy; view: EnemyView }[] = [];
 
   // The Oath-Brand: embers-as-health, threat pulse, hollowing desaturation,
   // and the rekindle→save checkpoint loop. The pulse now tracks the nearest
@@ -222,7 +215,10 @@ async function startScene(): Promise<void> {
       let best: number | null = null;
       for (const { logic } of enemies) {
         if (!logic.alive) continue;
-        const d = Math.hypot(logic.pos.x - controller.pos.x, logic.pos.z - controller.pos.z);
+        let d = Math.hypot(logic.pos.x - controller.pos.x, logic.pos.z - controller.pos.z);
+        // Wraiths ALWAYS pulse: they report a distance capped just inside
+        // the pulse range, so the brand whispers while one stalks the zone.
+        if (logic instanceof Wraith) d = logic.pulseDistM(d);
         if (best === null || d < best) best = d;
       }
       return best;
@@ -230,6 +226,80 @@ async function startScene(): Promise<void> {
     nearestIllusoryM: () => null,
   });
   game.register(brand);
+
+  // Enemies: logic FSM + view (skinned GLB clone driven by the animator).
+  // The player's guard is injected as every enemy's MeleeDefense. Wraiths
+  // wear the warrior rig as a ghost (WraithView); archers get the crossbow
+  // clip set and fire into the shared bolt pool.
+  {
+    const [warriorTemplate, archerTemplate] = await Promise.all([
+      loadSkeleton(await kitPieceUrl('skeleton-warrior')),
+      loadSkeleton(await kitPieceUrl('skeleton-archer')),
+    ]);
+    const soldierAttack = TUNING.enemies.soldier.attack;
+    const lunge = TUNING.enemies.wraith.lunge;
+    built.spawns.forEach((spawn, i) => {
+      const id = `${zones.current}-${spawn.kind}-${i}`;
+      let logic: Enemy;
+      let view: EnemyView;
+      if (spawn.kind === 'archer') {
+        const archer = new Archer({ id, bus: game.bus, defense: combat, shots: bolts });
+        view = new EnemyView(
+          archer,
+          archerTemplate,
+          ENEMY_SCALE,
+          TUNING.enemies.archer.shot.windupMs,
+          ARCHER_CLIPS,
+        );
+        logic = archer;
+      } else if (spawn.kind === 'wraith') {
+        const wraith = new Wraith({
+          id,
+          bus: game.bus,
+          defense: combat,
+          pulse: () => brand.pulse,
+        });
+        view = new WraithView(wraith, warriorTemplate, ENEMY_SCALE, lunge.windupMs + lunge.activeMs);
+        logic = wraith;
+      } else {
+        // 'soldier' (the forsworn boss arrives in a later task).
+        const soldier = new Soldier({ id, bus: game.bus, defense: combat });
+        view = new EnemyView(
+          soldier,
+          warriorTemplate,
+          ENEMY_SCALE,
+          soldierAttack.windupMs + soldierAttack.activeMs,
+        );
+        logic = soldier;
+      }
+      const [row, col] = spawn.at;
+      logic.pos.set((col + 0.5) * TEST_ZONE.cell, 0, (row + 0.5) * TEST_ZONE.cell);
+      scene.add(view.root);
+      enemies.push({ logic, view });
+    });
+  }
+
+  // Bolt views: one small unlit quarrel per pooled projectile, lazily grown
+  // (the pool itself recycles — steady-state combat allocates nothing).
+  const boltGeo = new THREE.BoxGeometry(0.07, 0.07, 0.55);
+  const boltMat = new THREE.MeshBasicMaterial({ color: 0xe8d8b0 });
+  const boltMeshes: THREE.Mesh[] = [];
+  function syncBolts(pool: ProjectilePool): void {
+    while (boltMeshes.length < pool.items.length) {
+      const mesh = new THREE.Mesh(boltGeo, boltMat);
+      mesh.visible = false;
+      scene.add(mesh);
+      boltMeshes.push(mesh);
+    }
+    pool.items.forEach((bolt: Projectile, i: number) => {
+      const mesh = boltMeshes[i];
+      mesh.visible = bolt.active;
+      if (bolt.active) {
+        mesh.position.copy(bolt.pos);
+        mesh.rotation.y = Math.atan2(bolt.dir.x, bolt.dir.z);
+      }
+    });
+  }
 
   // Enemy hits (already guard-filtered by Combat) burn embers; every 3rd
   // kill returns one as a wisp (Brand self-subscribes to enemy-slain).
@@ -279,6 +349,7 @@ async function startScene(): Promise<void> {
       pipeline,
       combat,
       enemies,
+      bolts,
     };
     // Dev-only brand test keys (until combat/banners land): H burns an
     // ember, R kneels at a phantom banner. Manual QA for hollowing/desat.
@@ -302,7 +373,7 @@ async function startScene(): Promise<void> {
 
   // Per-swing hit bookkeeping + a reusable enemy context (no per-frame allocs).
   let lastSwing = 0;
-  const hitThisSwing = new Set<Soldier>();
+  const hitThisSwing = new Set<Enemy>();
   const enemyCtx: EnemyCtx = {
     playerPos: controller.pos,
     playerHollow: false,
@@ -346,6 +417,11 @@ async function startScene(): Promise<void> {
         enemyCtx.canSeePlayer = !built.collider.raycastWall(logic.pos, controller.pos);
         logic.update(dt, enemyCtx);
       }
+      // Bolts fly after the archers think (a fresh shot moves next frame);
+      // enemyCtx doubles as the ProjectileCtx (playerPos + collider).
+      bolts.update(dt, enemyCtx);
+      syncBolts(bolts);
+
       for (const { view } of enemies) view.update(dt); // incl. death anims
 
       // Wisps drift up and gutter out.
