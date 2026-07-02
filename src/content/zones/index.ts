@@ -12,6 +12,8 @@ import { ASHEN_GATE } from './ashenGate';
 import { GREAT_HALL } from './greatHall';
 import { UNDERCROFT } from './undercroft';
 import { RAMPARTS } from './ramparts';
+import { THRONE } from './throne';
+import { SUMMIT } from './summit';
 
 /** Every built zone, by id. Partial until all seven land (see above). */
 export const ZONES: Partial<Record<ZoneId, ZoneDef>> = {
@@ -19,20 +21,19 @@ export const ZONES: Partial<Record<ZoneId, ZoneDef>> = {
   'great-hall': GREAT_HALL,
   undercroft: UNDERCROFT,
   ramparts: RAMPARTS,
+  throne: THRONE,
+  summit: SUMMIT,
 };
 
 /**
  * Zones the design names but later tasks build: doors may already target
  * them (great-hall's throne door 4; the undercroft's illusory garden wall).
  * Until a target ships, its doors refuse to open in-game (main.ts treats an
- * unbuilt destination as sealed). T15: throne · T16: summit + queens-garden.
- * (T12 landed undercroft + ramparts, so they left this allowlist.)
+ * unbuilt destination as sealed). T16: queens-garden.
+ * (T12 landed undercroft + ramparts; T15 landed throne + summit — all off this
+ * allowlist. Only the NG+ Queen's Garden remains.)
  */
-export const FUTURE_ZONE_IDS: ReadonlySet<ZoneId> = new Set<ZoneId>([
-  'throne',
-  'summit',
-  'queens-garden',
-]);
+export const FUTURE_ZONE_IDS: ReadonlySet<ZoneId> = new Set<ZoneId>(['queens-garden']);
 
 /** True when `id` names a built, registered zone. */
 export function hasZone(id: ZoneId): boolean {

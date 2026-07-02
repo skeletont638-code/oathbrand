@@ -156,6 +156,11 @@ export class PS1Pipeline {
     this.uniforms.uDesat.value = Math.min(1, Math.max(0, v));
   }
 
+  /** Current desaturation (so an ending can ease colour back from here). */
+  getDesaturation(): number {
+    return this.uniforms.uDesat.value;
+  }
+
   /** Toggles the optional scanline/vignette/grain CRT extras. */
   setCrtEnabled(b: boolean): void {
     this.uniforms.uCrt.value = b ? 1 : 0;

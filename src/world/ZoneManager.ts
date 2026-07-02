@@ -52,6 +52,10 @@ export class ZoneManager implements Subsystem {
   private ng = false;
   private torches: FlickeringTorch[] = [];
   private time = 0;
+  /** Global multiplier on every torch's base intensity — the Forsworn snuffs
+   *  the arena to near-black in P3 (main.ts lerps this toward ~0). Reset to 1
+   *  on every zone load. */
+  private torchScale = 1;
 
   constructor(opts: ZoneManagerOptions) {
     this.scene = opts.scene;
@@ -80,6 +84,7 @@ export class ZoneManager implements Subsystem {
       base: light.intensity,
       phase: i * 1.618,
     }));
+    this.torchScale = 1; // a fresh zone starts fully lit
     this.bus.emit({ type: 'zone-entered', zone: id });
     return built;
   }
@@ -88,6 +93,11 @@ export class ZoneManager implements Subsystem {
    * returns it so the caller can rebuild zone-scoped state (Task 11). */
   async transition(door: PlacedDoor): Promise<BuiltZone> {
     return this.load(door.def.to, this.ng);
+  }
+
+  /** Global torch-intensity multiplier (0..1). The Forsworn's P3 blackout. */
+  setTorchScale(scale: number): void {
+    this.torchScale = Math.min(1, Math.max(0, scale));
   }
 
   /** Subsystem tick: torch flicker via layered sin-noise (deterministic,
@@ -100,7 +110,7 @@ export class ZoneManager implements Subsystem {
         Math.sin(t * 0.011 + phase * 7.3) * 0.55 +
         Math.sin(t * 0.0047 + phase * 3.1) * 0.3 +
         Math.sin(t * 0.023 + phase) * 0.15;
-      light.intensity = base * (1 + 0.22 * n);
+      light.intensity = base * this.torchScale * (1 + 0.22 * n);
     }
   }
 

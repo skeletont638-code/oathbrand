@@ -58,16 +58,22 @@ describe('zone registry', () => {
     expect(ZONES['ramparts']).toBeDefined();
   });
 
+  it('registers the two Task 15 zones', () => {
+    expect(ZONES['throne']).toBeDefined();
+    expect(ZONES['summit']).toBeDefined();
+  });
+
   it('zoneOrThrow returns registered zones and throws on unbuilt ids', () => {
     expect(zoneOrThrow('ashen-gate').id).toBe('ashen-gate');
-    // 'throne' is still unbuilt (T15); undercroft/ramparts now resolve.
-    expect(() => zoneOrThrow('throne')).toThrow(/throne/);
+    // Only the NG+ Queen's Garden remains unbuilt (T16); throne/summit resolve.
+    expect(() => zoneOrThrow('queens-garden')).toThrow(/queens-garden/);
   });
 
   it('hasZone mirrors registration', () => {
     expect(hasZone('great-hall')).toBe(true);
-    expect(hasZone('undercroft')).toBe(true);
-    expect(hasZone('throne')).toBe(false);
+    expect(hasZone('throne')).toBe(true);
+    expect(hasZone('summit')).toBe(true);
+    expect(hasZone('queens-garden')).toBe(false);
   });
 
   it('future-zone allowlist never overlaps registered zones', () => {

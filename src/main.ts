@@ -5,12 +5,14 @@ import type { GameFlag, ZoneId } from './content/types';
 import { hasZone, zoneOrThrow } from './content/zones';
 import { Game } from './engine/Game';
 import { installScreenshotKey } from './engine/screenshot';
-import { ARCHER_CLIPS, EnemyView, WraithView, loadSkeleton } from './entities/animator';
+import { ARCHER_CLIPS, EnemyView, ForswornView, WraithView, loadSkeleton } from './entities/animator';
 import { Archer } from './entities/Archer';
 import type { Enemy, EnemyCtx } from './entities/Enemy';
 import { Projectile, ProjectilePool } from './entities/Projectile';
 import { Soldier } from './entities/Soldier';
 import { Wraith } from './entities/Wraith';
+import { Forsworn } from './entities/Forsworn';
+import { BossArena } from './entities/bossArena';
 import { Brand } from './player/Brand';
 import { Combat, inArc } from './player/Combat';
 import { Controller } from './player/Controller';
@@ -37,6 +39,12 @@ import { kickOpen, takeItem } from './world/mechanics';
 import type { ZoneDef } from './world/zoneDef';
 import { canPass, doorEntry, doorSpan, lockFlag, pairedDoor } from './world/zoneGraph';
 import { VistaDirector } from './world/vista';
+import { buildDragon, disposeDragon } from './world/dragon';
+import type { Dragon } from './world/dragon';
+import { selectEnding, EndingDirector } from './engine/endings';
+import type { EndingId } from './content/types';
+import { showTitleCard, hideTitleCard } from './ui/titleCard';
+import { setBlackout, rollCredits, showVigilContinues } from './ui/credits';
 import './style.css';
 
 function hasWebGL(): boolean {
@@ -71,6 +79,25 @@ const GATE_SWING_SPEED = 3.2;
 /** Landing-dip on the undercroft drop: start crouch (m) + recovery (m/s). */
 const FALL_DIP_M = 1.3;
 const FALL_DIP_RECOVER = 2.4;
+
+// --- Task 15: the throne arena + the summit finale -------------------------
+/** Throne: the two doorway cells the portcullis seals [row, col]. */
+const THRONE_GATE_CELLS: readonly [number, number][] = [
+  [7, 4],
+  [7, 5],
+];
+/** Throne: the player is "in the arena" (sealable) at or north of this row. */
+const THRONE_ARENA_MAX_ROW = 6;
+/** Portcullis travel: sealed y (down, blocking) → open y (up, in the lintel). */
+const GATE_SEALED_Y = 1.1;
+const GATE_OPEN_Y = 3.4;
+const GATE_SLIDE_SPEED = 3.6; // m/s
+/** P3 blackout: how fast the arena darkens/relights (fraction/s). */
+const DARKEN_SPEED = 0.7;
+/** Summit: the crown offering-flame cell [row, col], and the eye-wake radius. */
+const SUMMIT_FLAME_CELL: readonly [number, number] = [2, 4];
+const EYE_WAKE_RANGE_M = 5.5;
+const EYE_OPEN_SPEED = 0.22; // per second — a slow waking
 
 /**
  * The game starts at the Ashen Gate's `S`. Dev builds (`?dev=1`) may jump
@@ -270,9 +297,11 @@ async function startScene(): Promise<void> {
       for (const { logic } of enemies) {
         if (!logic.alive) continue;
         let d = Math.hypot(logic.pos.x - controller.pos.x, logic.pos.z - controller.pos.z);
-        // Wraiths ALWAYS pulse: they report a distance capped just inside
-        // the pulse range, so the brand whispers while one stalks the zone.
-        if (logic instanceof Wraith) d = logic.pulseDistM(d);
+        // Wraiths — and the Forsworn — ALWAYS pulse: they report a distance
+        // capped just inside the pulse range, so the brand never goes quiet
+        // while one stalks the zone (the only way to read the boss once the
+        // torches die in his P3).
+        if (logic instanceof Wraith || logic instanceof Forsworn) d = logic.pulseDistM(d);
         if (best === null || d < best) best = d;
       }
       return best;
@@ -434,6 +463,21 @@ async function startScene(): Promise<void> {
     wisps.push({ mesh, material, ttl: WISP_MS });
   });
 
+  // The Forsworn's fall (Task 15): set 'forsworn-dead' for good (the summit
+  // stair unseals), and — if the player never once guarded — drop Callun's
+  // broken tachi where he fell. The arena gate opens on the next frame
+  // (BossArena reads the flag as 'death-open').
+  game.bus.on('enemy-slain', (e) => {
+    if (e.kind !== 'forsworn' || !activeForsworn) return;
+    flags.add('forsworn-dead');
+    persistProgress();
+    if (activeForsworn.guardedNever) {
+      flags.add('callun-tachi');
+      dropTachi(activeForsworn.pos);
+    }
+    rebuildInteractables();
+  });
+
   // Gatekey glint: one shared emissive shape sits on each un-taken item's
   // pedestal (removed when the item is taken). Life-size-ish, ~waist height.
   const keyGeo = new THREE.BoxGeometry(0.14, 0.42, 0.14);
@@ -474,12 +518,313 @@ async function startScene(): Promise<void> {
   /** Landing-dip camera offset (m), eased to 0 after the undercroft drop. */
   let fallDip = 0;
 
+  // --- Task 15 zone-scoped state (throne arena + summit finale) ------------
+  /** The live Forsworn in the current zone (throne only), or null. */
+  let activeForsworn: Forsworn | null = null;
+  /** The arena gate state machine (throne only). */
+  let bossArena: BossArena | null = null;
+  /** The portcullis: a sliding iron leaf + its target y (sealed/open). */
+  let bossGate: { mesh: THREE.Mesh; material: THREE.Material; targetY: number } | null = null;
+  /** P3 arena blackout, eased 0 (lit) → 1 (near-black). */
+  let darkness = 0;
+  /** Dark-flame trail quads, grown to match the Forsworn's live trails. */
+  const trailMeshes: THREE.Mesh[] = [];
+  /** Dropped Callun's-tachi pickup (no-guard reward), or null. */
+  let droppedTachi: { position: THREE.Vector3; mesh: THREE.Mesh; taken: boolean } | null = null;
+
+  /** VHAELIS, staged at the summit, or null off the summit. */
+  let dragon: Dragon | null = null;
+  /** How open the eye is (0..1). Summit only. */
+  let eyeOpenT = 0;
+  /** The crown offering-flame (mesh + light), or null off the summit. */
+  let brazier: { light: THREE.PointLight; flame: THREE.Mesh } | null = null;
+  /** The world position of the summit flame (for the eye-wake + GIVE prompt). */
+  let flamePos: THREE.Vector3 | null = null;
+  /** The running ending sequence, or null when not in an ending. */
+  let endingDirector: EndingDirector | null = null;
+  /** Which ending is playing (for the credits handoff). */
+  let endingId: EndingId | null = null;
+  /** Two-press KEEP confirm at the summit stair (walk away = keep the crown). */
+  let keepConfirmPending = false;
+  /** Ember-rise particles for the OATH KEPT ending (ash-fall reversed). */
+  let emberRiseOn = false;
+
   function clearEnemies(): void {
     for (const { view } of enemies) {
       scene.remove(view.root);
       view.dispose();
     }
     enemies.length = 0;
+    activeForsworn = null;
+  }
+
+  // --- Task 15: boss gate, dark-flame trails, the dragon, the brazier ------
+
+  /** Build the throne arena portcullis (closed doorway leaf), starting OPEN
+   *  (raised) — it seals when the player crosses in (BossArena). */
+  function spawnBossGate(): void {
+    if (zones.current !== 'throne') return;
+    const [r0, c0] = THRONE_GATE_CELLS[0];
+    const [, c1] = THRONE_GATE_CELLS[1];
+    const width = (Math.abs(c1 - c0) + 1) * built.cellM;
+    const midX = ((c0 + c1) / 2 + 0.5) * built.cellM;
+    const z = (r0 + 0.5) * built.cellM;
+    const material = new THREE.MeshStandardMaterial({ color: 0x1c1c20, metalness: 0.6, roughness: 0.5 });
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, 2.4, 0.24), material);
+    mesh.position.set(midX, GATE_OPEN_Y, z); // starts raised (open)
+    scene.add(mesh);
+    bossGate = { mesh, material, targetY: GATE_OPEN_Y };
+  }
+
+  function clearBossGate(): void {
+    if (!bossGate) return;
+    scene.remove(bossGate.mesh);
+    bossGate.mesh.geometry.dispose();
+    bossGate.material.dispose();
+    bossGate = null;
+  }
+
+  /** Seal or open the portcullis: slide target + toggle the doorway collision. */
+  function setGateSealed(sealed: boolean): void {
+    if (bossGate) bossGate.targetY = sealed ? GATE_SEALED_Y : GATE_OPEN_Y;
+    for (const [r, c] of THRONE_GATE_CELLS) built.collider.setSolid(r, c, sealed);
+  }
+
+  const trailGeo = new THREE.CircleGeometry(TUNING.enemies.forsworn.trail.radiusM, 12);
+  const trailMat = new THREE.MeshBasicMaterial({
+    color: 0x6a1e12,
+    transparent: true,
+    opacity: 0.7,
+    depthWrite: false,
+  });
+
+  /** Grow/shrink the trail quads to match the Forsworn's live trails, laid flat
+   *  on the floor and fading with their remaining life. */
+  function syncTrails(): void {
+    const trails = activeForsworn?.trails ?? [];
+    while (trailMeshes.length < trails.length) {
+      const mesh = new THREE.Mesh(trailGeo, trailMat.clone());
+      mesh.rotation.x = -Math.PI / 2; // flat on the floor
+      scene.add(mesh);
+      trailMeshes.push(mesh);
+    }
+    trailMeshes.forEach((mesh, i) => {
+      const tr = trails[i];
+      if (tr) {
+        mesh.visible = true;
+        mesh.position.set(tr.x, 0.06, tr.z);
+        (mesh.material as THREE.MeshBasicMaterial).opacity =
+          0.7 * Math.min(1, tr.ttl / TUNING.enemies.forsworn.trail.lifetimeMs);
+      } else {
+        mesh.visible = false;
+      }
+    });
+  }
+
+  function clearTrailMeshes(): void {
+    for (const m of trailMeshes) {
+      scene.remove(m);
+      (m.material as THREE.Material).dispose();
+    }
+    trailMeshes.length = 0;
+  }
+
+  const tachiGlintGeo = new THREE.BoxGeometry(0.1, 0.5, 0.1);
+  const tachiGlintMat = new THREE.MeshBasicMaterial({ color: 0xd8b878 });
+
+  /** Drop Callun's broken tachi where the Forsworn fell (no-guard reward). */
+  function dropTachi(at: THREE.Vector3): void {
+    const mesh = new THREE.Mesh(tachiGlintGeo, tachiGlintMat);
+    mesh.position.set(at.x, 0.6, at.z);
+    mesh.rotation.z = 0.5;
+    scene.add(mesh);
+    droppedTachi = { position: mesh.position.clone(), mesh, taken: false };
+  }
+
+  function clearDroppedTachi(): void {
+    if (droppedTachi) scene.remove(droppedTachi.mesh);
+    droppedTachi = null;
+  }
+
+  /** Stage VHAELIS at the north of the summit, looming over the wall in fog. */
+  function spawnDragon(): void {
+    if (zones.current !== 'summit') return;
+    dragon = buildDragon();
+    // Centre on the room, behind the north wall (z ≈ 0), looming up.
+    dragon.group.position.set((4.5) * built.cellM, 0, -0.5);
+    scene.add(dragon.group);
+    eyeOpenT = 0;
+    dragon.setEyeOpen(0);
+  }
+
+  function clearDragon(): void {
+    if (!dragon) return;
+    scene.remove(dragon.group);
+    disposeDragon(dragon.group);
+    dragon = null;
+  }
+
+  /** The crown offering-flame: a bright emissive mote + a warm point light. */
+  function spawnBrazier(): void {
+    if (zones.current !== 'summit') return;
+    const [row, col] = SUMMIT_FLAME_CELL;
+    const x = (col + 0.5) * built.cellM;
+    const z = (row + 0.5) * built.cellM;
+    flamePos = new THREE.Vector3(x, 0, z);
+    const flame = new THREE.Mesh(
+      new THREE.SphereGeometry(0.28, 8, 6),
+      new THREE.MeshBasicMaterial({ color: 0xffd27a }),
+    );
+    flame.position.set(x, 1.0, z);
+    const light = new THREE.PointLight(0xffb050, 6, 9);
+    light.position.set(x, 1.3, z);
+    scene.add(flame, light);
+    brazier = { light, flame };
+  }
+
+  function clearBrazier(): void {
+    if (!brazier) return;
+    scene.remove(brazier.flame, brazier.light);
+    brazier.flame.geometry.dispose();
+    (brazier.flame.material as THREE.Material).dispose();
+    brazier.light.dispose();
+    brazier = null;
+    flamePos = null;
+  }
+
+  /** Ease `cur` toward `target` by at most `maxStep`. */
+  function approach(cur: number, target: number, maxStep: number): number {
+    const d = target - cur;
+    return Math.abs(d) <= maxStep ? target : cur + Math.sign(d) * maxStep;
+  }
+
+  // --- the OATH KEPT rising embers (ash-fall reversed) ----------------------
+  let emberField: THREE.Points | null = null;
+  let emberPos: Float32Array | null = null;
+  function updateEmberRise(dt: number): void {
+    if (!emberField) {
+      const N = 120;
+      emberPos = new Float32Array(N * 3);
+      const c = controller.pos;
+      for (let i = 0; i < N; i++) {
+        // A ring 1.8–7m out — never right on the camera (a too-close point
+        // blows up into a huge quad at the PS1 render resolution).
+        const a = Math.random() * Math.PI * 2;
+        const r = 1.8 + Math.random() * 5.2;
+        emberPos[i * 3] = c.x + Math.cos(a) * r;
+        emberPos[i * 3 + 1] = Math.random() * 5;
+        emberPos[i * 3 + 2] = c.z + Math.sin(a) * r;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(emberPos, 3));
+      emberField = new THREE.Points(
+        geo,
+        new THREE.PointsMaterial({ color: 0xffb45a, size: 0.06, transparent: true, opacity: 0.9 }),
+      );
+      scene.add(emberField);
+    }
+    const rise = (dt / 1000) * 1.3;
+    for (let i = 0; i < emberPos!.length; i += 3) {
+      emberPos![i + 1] += rise;
+      if (emberPos![i + 1] > 6) emberPos![i + 1] = 0; // wrap: a steady rising column
+    }
+    (emberField.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+  }
+  function clearEmberField(): void {
+    if (!emberField) return;
+    scene.remove(emberField);
+    emberField.geometry.dispose();
+    (emberField.material as THREE.Material).dispose();
+    emberField = null;
+    emberPos = null;
+  }
+
+  // --- the ending sequence orchestration ------------------------------------
+  const endingEffects = {
+    setDesaturation: (v: number) => pipeline.setDesaturation(v),
+    setBlackout: (a: number) => setBlackout(a),
+    setEmberRise: (on: boolean) => {
+      emberRiseOn = on;
+      if (!on) clearEmberField();
+    },
+    showCard: (title: string, subtitle: string) => showTitleCard(title, subtitle),
+    speakVhaelis: (line: string | null) => showVisionCaption(line),
+    cue: (id: string) => game.bus.emit({ type: 'cue', id }),
+  };
+
+  /** Begin an ending: freeze the sim ('ending' state) and start its sequence. */
+  function beginEnding(ending: EndingId): void {
+    if (endingId) return; // already resolving
+    endingId = ending;
+    keepConfirmPending = false;
+    hidePrompt();
+    if (game.state === 'playing') game.transition('ending');
+    endingDirector = new EndingDirector(endingEffects);
+    endingDirector.begin(ending, pipeline.getDesaturation());
+    rebuildInteractables(); // the GIVE prompt is gone now
+  }
+
+  /** GIVE THE CROWN at the flame → OATH KEPT (or the secret ending). */
+  function resolveGive(): void {
+    beginEnding(
+      selectEnding({
+        hollow: brand.hollow,
+        choice: 'give',
+        hasQueensBrand: flags.has('queens-brand'),
+      }),
+    );
+  }
+
+  /** Two-press KEEP confirm at the stair: first press asks, second commits. */
+  function handleKeepPress(): void {
+    if (!keepConfirmPending) {
+      keepConfirmPending = true;
+      showCard('KEEP THE CROWN — LEAVE?   press E again');
+      return;
+    }
+    beginEnding(
+      selectEnding({
+        hollow: brand.hollow,
+        choice: 'keep',
+        hasQueensBrand: flags.has('queens-brand'),
+      }),
+    );
+  }
+
+  /** Merge the reached ending into the save's endingsSeen (T18 renders it). */
+  function persistEnding(ending: EndingId): void {
+    const prev = loadGame();
+    const base: SaveData = prev ?? {
+      version: 1,
+      zone: zones.current,
+      bannerId: '',
+      embers: brand.embers,
+      flags: [...flags],
+      endingsSeen: [],
+      loreRead: [...loreRead],
+      visionsSeen: [...new Set([...vista.seenIds, ...visionPlayer.seenIds])],
+      ngPlus,
+    };
+    const endingsSeen = [...new Set([...(base.endingsSeen ?? []), ending])];
+    saveGame({ ...base, zone: zones.current, endingsSeen, flags: [...flags], ngPlus });
+  }
+
+  /** Hand the finished ending off to the credits, then the restart card. */
+  function finishEndingToCredits(ending: EndingId): void {
+    game.bus.emit({ type: 'ending-reached', ending });
+    persistEnding(ending);
+    hideTitleCard();
+    showVisionCaption(null);
+    clearEmberField();
+    emberRiseOn = false;
+    rollCredits(ending, () => {
+      showVigilContinues(() => {
+        // Begin again at the Ashen Gate, keeping saved flags (pre-NG+ semantics
+        // — the true reset lands with the title screen in T18). Drop any dev
+        // query so the restart never respawns mid-campaign.
+        window.location.href = window.location.origin + window.location.pathname;
+      });
+    });
   }
 
   function clearWisps(): void {
@@ -575,6 +920,10 @@ async function startScene(): Promise<void> {
     const soldierAttack = TUNING.enemies.soldier.attack;
     const lunge = TUNING.enemies.wraith.lunge;
     built.spawns.forEach((spawn, i) => {
+      // The Forsworn stays dead once felled (flag 'forsworn-dead') — re-entering
+      // the throne must not raise a fresh boss in a room already won. The mercy
+      // reset (rekindle mid-fight) happens while he still lives, so it is unaffected.
+      if (spawn.kind === 'forsworn' && flags.has('forsworn-dead')) return;
       const id = `${zones.current}-${spawn.kind}-${i}`;
       let logic: Enemy;
       let view: EnemyView;
@@ -597,8 +946,23 @@ async function startScene(): Promise<void> {
         });
         view = new WraithView(wraith, warriorTemplate, ENEMY_SCALE, lunge.windupMs + lunge.activeMs);
         logic = wraith;
+      } else if (spawn.kind === 'forsworn') {
+        // The boss stays down for good: 'forsworn-dead' is permanent, so he
+        // never respawns — not on re-entry, not on the bonfire rule.
+        if (flags.has('forsworn-dead')) return;
+        const forswornAttack = TUNING.enemies.forsworn.attack;
+        const forsworn = new Forsworn({ id, bus: game.bus, defense: combat });
+        // A touch larger than a soldier — the first knight still stands taller.
+        view = new ForswornView(
+          forsworn,
+          warriorTemplate,
+          ENEMY_SCALE * 1.2,
+          forswornAttack.windupMs + forswornAttack.activeMs,
+        );
+        logic = forsworn;
+        activeForsworn = forsworn;
       } else {
-        // 'soldier' (the forsworn boss arrives in a later task).
+        // 'soldier'.
         const soldier = new Soldier({ id, bus: game.bus, defense: combat });
         view = new EnemyView(
           soldier,
@@ -614,6 +978,31 @@ async function startScene(): Promise<void> {
       scene.add(view.root);
       enemies.push({ logic, view });
     });
+  }
+
+  /** collectInteractables plus the Task-15 dynamic targets: the dropped tachi
+   *  and the summit's GIVE-THE-CROWN flame. */
+  function rebuildInteractables(): void {
+    interactables = collectInteractables(built, flags, ashPriests);
+    if (droppedTachi && !droppedTachi.taken) {
+      interactables.push({
+        id: 'callun-tachi',
+        verb: 'TAKE',
+        x: droppedTachi.position.x,
+        z: droppedTachi.position.z,
+        label: "CALLUN'S TACHI",
+      });
+    }
+    // The offering: only while lit and not already resolving an ending.
+    if (zones.current === 'summit' && flamePos && !brand.hollow && !endingId) {
+      interactables.push({
+        id: 'summit-flame',
+        verb: 'GIVE',
+        x: flamePos.x,
+        z: flamePos.z,
+        label: 'THE CROWN',
+      });
+    }
   }
 
   /** Bind all zone-scoped state to the freshly built `built`/`zones.current`. */
@@ -634,13 +1023,41 @@ async function startScene(): Promise<void> {
     clearGate();
     clearEnemies();
     clearAshPriests();
+    // Task-15 teardown: nothing from throne/summit survives a zone change.
+    clearBossGate();
+    clearTrailMeshes();
+    clearDroppedTachi();
+    clearDragon();
+    clearBrazier();
+    bossArena = null;
+    darkness = 0;
+    zones.setTorchScale(1);
     resetBolts(); // before spawnEnemies — archers capture the new pool
     spawnEnemies();
     spawnItemMeshes();
     spawnGate();
     spawnAshPriests();
+    // The player keeps Callun's tachi across zones once it's been taken.
+    if (flags.has('callun-tachi')) combat.equipTachi();
+    // Throne: the arena gate starts open; the portcullis seals on entry.
+    if (zones.current === 'throne') {
+      bossArena = new BossArena();
+      spawnBossGate();
+    }
+    // Summit: stage the dragon + the crown flame; the finale runs from here.
+    // A hollow arrival does NOT end instantly — the eye simply never opens,
+    // the Ash-Priest still has his last word for a dark brand, and the fade
+    // begins only when the hollow knight reaches the flame (per-frame check).
+    if (zones.current === 'summit') {
+      spawnDragon();
+      spawnBrazier();
+      endingDirector = null;
+      endingId = null;
+      keepConfirmPending = false;
+      emberRiseOn = false;
+    }
     // Priests are spawned before collecting so their SPEAK targets are in.
-    interactables = collectInteractables(built, flags, ashPriests);
+    rebuildInteractables();
   }
 
   // --- door transitions (Task 11) ------------------------------------------
@@ -690,10 +1107,17 @@ async function startScene(): Promise<void> {
   // Brand → HUD: embers/hollow are event-driven; pulse is pushed per frame
   // below (it decays to zero silently, which no event announces).
   game.bus.on('ember-lost', (e) => brandHud.setEmbers(e.remaining));
-  game.bus.on('player-hollowed', () => brandHud.setHollow(true));
+  game.bus.on('player-hollowed', () => {
+    brandHud.setHollow(true);
+    // The summit's GIVE target is lit-only — drop it while hollow.
+    rebuildInteractables();
+  });
   game.bus.on('player-rekindled', () => {
     brandHud.setHollow(false);
     brandHud.setEmbers(brand.embers);
+    // A knight who arrived hollow and rekindled at the summit banner gets the
+    // offering back (GIVE is excluded while hollow).
+    rebuildInteractables();
   });
 
   // Dev-only: F9 saves the canvas as shot-<zone>-<timestamp>.png.
@@ -752,12 +1176,39 @@ async function startScene(): Promise<void> {
       get fallDip() {
         return fallDip;
       },
+      get activeForsworn() {
+        return activeForsworn;
+      },
+      get bossArena() {
+        return bossArena;
+      },
+      get dragon() {
+        return dragon;
+      },
+      get endingId() {
+        return endingId;
+      },
+      get eyeOpenT() {
+        return eyeOpenT;
+      },
+      get darkness() {
+        return darkness;
+      },
+      get droppedTachi() {
+        return droppedTachi;
+      },
+      get gameState() {
+        return game.state;
+      },
+      // Dev-only deterministic stepper for headless QA (throttled rAF).
+      stepFrame: (dtMs = 16) => step(performance.now(), dtMs),
     };
     // Dev-only brand test keys: H burns an ember, R kneels at a phantom
-    // banner. Manual QA for hollowing/desat and the save checkpoint.
+    // banner, K strikes the Forsworn for 4 (fast phase-forcing in QA).
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyH') brand.damage(1);
       else if (e.code === 'KeyR') brand.rekindle('dev-banner');
+      else if (e.code === 'KeyK') activeForsworn?.takeHit(4);
     });
   }
 
@@ -781,7 +1232,13 @@ async function startScene(): Promise<void> {
     requestAnimationFrame(frame);
     const dt = Math.min(now - last, 100); // clamp tab-switch jumps
     last = now;
+    step(now, dt);
+  }
 
+  // The per-frame body, split out so a dev build can drive it deterministically
+  // (`__oathbrand.stepFrame`) when requestAnimationFrame is throttled — e.g. a
+  // hidden/background tab under headless QA. Never scheduled directly in play.
+  function step(now: number, dt: number): void {
     // Simulation is gated on 'playing' (pause freezes world + player) and
     // on not being mid-transition; rendering continues so the last frame
     // stays on screen while a zone swaps.
@@ -833,14 +1290,85 @@ async function startScene(): Promise<void> {
         }
       }
 
+      // --- Task 15: the Forsworn's arena + the summit dragon ------------
+      if (activeForsworn) {
+        // Dark-flame floor trails burn the player once per touch (P2+).
+        const trailDmg = activeForsworn.tickTrails(dt, controller.pos);
+        if (trailDmg > 0) brand.damage(trailDmg);
+        // A raised guard forfeits the no-guard tachi reward.
+        if (combat.state === 'guard') activeForsworn.noteGuard();
+      }
+      syncTrails();
+
+      if (zones.current === 'throne' && bossArena) {
+        const inArena = Math.floor(controller.pos.z / built.cellM) <= THRONE_ARENA_MAX_ROW;
+        const bossDead = flags.has('forsworn-dead') || !(activeForsworn?.alive ?? false);
+        const evt = bossArena.update({
+          playerInArena: inArena,
+          playerHollow: brand.hollow,
+          bossDead,
+        });
+        if (evt === 'seal') {
+          setGateSealed(true);
+          showTitleCard('THE FORSWORN', 'FIRST KNIGHT OF VAEL', 3400);
+          game.bus.emit({ type: 'cue', id: 'card-boss' });
+        } else if (evt === 'mercy-open' || evt === 'death-open') {
+          setGateSealed(false);
+        }
+        // P3 blackout: the arena torches (and ambient) die as he snuffs them —
+        // lerping to the tuned floor (torchOut ≈ 0.03 of their lit intensity).
+        const torchOut = TUNING.enemies.forsworn.torchOut;
+        const wantDark = activeForsworn?.alive && activeForsworn.currentPhase() === 3 ? 1 : 0;
+        darkness = approach(darkness, wantDark, (DARKEN_SPEED * dt) / 1000);
+        zones.setTorchScale(1 - darkness * (1 - torchOut));
+        ambient.intensity = (activeDef.ambientFloor ?? DEFAULT_AMBIENT) * (1 - darkness * 0.9);
+      }
+
+      // Portcullis slide toward its target height (sealed down / open up).
+      if (bossGate) {
+        const dy = bossGate.targetY - bossGate.mesh.position.y;
+        if (Math.abs(dy) > 1e-3) {
+          bossGate.mesh.position.y +=
+            Math.sign(dy) * Math.min(Math.abs(dy), (GATE_SLIDE_SPEED * dt) / 1000);
+        }
+      }
+
+      // Summit: the eye wakes as the LIT knight nears the flame (a hollow one
+      // never wakes it — Ending 3); the dragon breathes; the brazier flickers.
+      // A hollow knight reaching the flame begins the silent fade instead.
+      if (zones.current === 'summit') {
+        if (dragon && flamePos && !brand.hollow && !endingId && eyeOpenT < 1) {
+          const d = Math.hypot(controller.pos.x - flamePos.x, controller.pos.z - flamePos.z);
+          if (d <= EYE_WAKE_RANGE_M) {
+            if (eyeOpenT === 0) game.bus.emit({ type: 'cue', id: 'eye-open' });
+            eyeOpenT = Math.min(1, eyeOpenT + (EYE_OPEN_SPEED * dt) / 1000);
+          }
+        }
+        if (flamePos && brand.hollow && !endingId) {
+          const d = Math.hypot(controller.pos.x - flamePos.x, controller.pos.z - flamePos.z);
+          if (d <= TUNING.player.interactRangeM) beginEnding(3);
+        }
+        if (dragon) {
+          dragon.setEyeOpen(eyeOpenT);
+          dragon.update(dt);
+        }
+        if (brazier) brazier.flame.scale.setScalar(1 + Math.sin(now * 0.006) * 0.14);
+      }
+
       // --- doors + vista (Task 11), keyed off the player's grid cell ----
       const pRow = Math.floor(controller.pos.z / built.cellM);
       const pCol = Math.floor(controller.pos.x / built.cellM);
 
       // Walking into a passable door's span transitions. Unbuilt targets
-      // (undercroft/ramparts/throne until T12/T15) stay sealed.
+      // stay sealed. The summit's return door is NOT auto-walked — leaving
+      // there is the KEEP choice, taken only by an explicit press (below).
       const doorHere = doorCells.get(`${pRow},${pCol}`);
-      if (doorHere && canPass(doorHere.def, flags) && hasZone(doorHere.def.to)) {
+      if (
+        doorHere &&
+        zones.current !== 'summit' &&
+        canPass(doorHere.def, flags) &&
+        hasZone(doorHere.def.to)
+      ) {
         goThrough(doorHere);
       }
 
@@ -863,6 +1391,8 @@ async function startScene(): Promise<void> {
 
       brandHud.setPulse(brand.pulse, brand.blueFlicker);
       const target = interactor.nearest(interactables);
+      // Walking off the summit stair cancels a pending KEEP confirm.
+      if (keepConfirmPending && target?.id !== 'summit-to-throne') keepConfirmPending = false;
       if (target) showPrompt(target.verb, target.label);
       else hidePrompt();
 
@@ -887,6 +1417,15 @@ async function startScene(): Promise<void> {
       } else if (pressedE && target?.verb === 'SPEAK') {
         const priest = ashPriests.find((p) => p.id === target.id);
         if (priest) dialogueBox.open(dialogueSequence(priest.dialogueId, flags, brand.hollow));
+      } else if (pressedE && target?.verb === 'TAKE' && target.id === 'callun-tachi') {
+        // Callun's broken tachi (Task 15): the no-guard reward. Equip = swap.
+        if (droppedTachi && !droppedTachi.taken) {
+          droppedTachi.taken = true;
+          scene.remove(droppedTachi.mesh);
+          combat.equipTachi();
+          showCard("Callun's broken tachi. Lighter than it looks, and hungrier — the windup barely there at all.");
+          rebuildInteractables();
+        }
       } else if (pressedE && target?.verb === 'TAKE') {
         const item = built.items.find((it) => it.spot.id === target.id);
         if (item && takeItem(item.spot, flags)) {
@@ -895,18 +1434,24 @@ async function startScene(): Promise<void> {
           const glint = itemMeshes.find((x) => x.id === item.spot.id);
           if (glint) scene.remove(glint.mesh);
           itemMeshes = itemMeshes.filter((x) => x.id !== item.spot.id);
-          interactables = collectInteractables(built, flags, ashPriests);
+          rebuildInteractables();
         }
+      } else if (pressedE && target?.verb === 'GIVE') {
+        // GIVE THE CROWN at the summit flame → the oath is kept (Ending 1/4).
+        resolveGive();
       } else if (pressedE && target?.verb === 'OPEN') {
         const door = built.doors.find((d) => d.def.id === target.id);
         if (door) {
-          if (canPass(door.def, flags) && hasZone(door.def.to)) goThrough(door);
+          // At the summit, the stair down is the KEEP choice, not a transition.
+          if (zones.current === 'summit' && door.def.to === 'throne' && !endingId) {
+            handleKeepPress();
+          } else if (canPass(door.def, flags) && hasZone(door.def.to)) goThrough(door);
           else if (kickOpen(door.def, flags)) {
             game.bus.emit({ type: 'door-opened', doorId: door.def.id });
             persistProgress();
             showCard('The gate gives with a shriek of iron. The hall waits below.');
             if (shortcutGate) shortcutGate.opening = true;
-            interactables = collectInteractables(built, flags, ashPriests);
+            rebuildInteractables();
           } else flashDenied();
         }
       }
@@ -916,6 +1461,20 @@ async function startScene(): Promise<void> {
       // VisionPlayer owns desaturation + fog. Ghosts billboard to the camera.
       kneel.update(dt);
       faceGhostsToCamera();
+    } else if (game.state === 'ending' && !transitioning) {
+      // A summit ending is playing (Task 15). The director drives desaturation,
+      // the blackout, the card, and Vhaelis; the dragon keeps living behind it.
+      endingDirector?.update(dt);
+      if (dragon) {
+        dragon.setEyeOpen(eyeOpenT);
+        dragon.update(dt);
+      }
+      if (emberRiseOn) updateEmberRise(dt);
+      if (endingDirector?.done && endingId !== null) {
+        const reached = endingId;
+        endingDirector = null;
+        finishEndingToCredits(reached);
+      }
     }
 
     camera.rotation.y = controller.yaw;
@@ -938,6 +1497,8 @@ async function startScene(): Promise<void> {
   }
   requestAnimationFrame(frame);
 }
+
+// (dev stepper is registered on __oathbrand inside startScene)
 
 if (hasWebGL()) {
   startScene().catch((err: unknown) => {

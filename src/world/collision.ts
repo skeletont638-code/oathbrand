@@ -59,6 +59,16 @@ export class GridCollider {
   }
 
   /**
+   * Toggle a single cell's solidity at runtime — the throne arena gate (Task
+   * 15) seals a floor doorway behind the player, then re-opens it. Out-of-range
+   * cells are ignored. Movement AND sight (`raycastWall`) respect the change.
+   */
+  setSolid(row: number, col: number, solid: boolean): void {
+    if (row < 0 || row >= this.rows || col < 0 || col >= this.cols) return;
+    this.solid[row][col] = solid;
+  }
+
+  /**
    * Move a circle by `delta`, sliding along walls. Axis-separated (X then
    * Z per substep) so contact with a wall preserves tangential motion and
    * absorbs only the normal component. Substeps whenever |delta| > radius

@@ -54,9 +54,10 @@ export const ASH_PRIESTS: AshPriestPlacement[] = [
   // Ramparts: the south-west corner by the banner post and the entry stair,
   // off the archers' firing line down the north walk.
   { id: 'ashpriest-ramparts', zone: 'ramparts', at: [5, 2], rotY: Math.PI * 0.25, dialogueId: 'ashpriest-2' },
-  // Summit stair (T15/T16): registered so the data + dialogue exist; the cell
-  // is provisional and will settle when the zone is authored.
-  { id: 'ashpriest-summit', zone: 'summit', at: [1, 1], rotY: 0, dialogueId: 'ashpriest-3' },
+  // Summit stair (T15): he stands at the top of the stair, the crown-flame and
+  // the sleeping dragon at your back as he speaks — his last word varies by the
+  // ending the run is bound for (dialogue.ts ASHPRIEST_3_FINAL).
+  { id: 'ashpriest-summit', zone: 'summit', at: [6, 7], rotY: Math.PI * 1.5, dialogueId: 'ashpriest-3' },
 ];
 
 /** Placements standing in `zone`. */

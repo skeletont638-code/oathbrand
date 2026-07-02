@@ -75,6 +75,10 @@ export class Combat {
   swingId = 0;
 
   private spec: AttackSpec = TUNING.player.light;
+  /** The equipped weapon's swing specs — the starting sword, until the
+   * Forsworn's broken tachi (Task 15) swaps them for faster ones. */
+  private lightSpec: AttackSpec = TUNING.player.light;
+  private heavySpec: AttackSpec = TUNING.player.heavy;
   /** ms elapsed in the current windup/active/recover/step phase. */
   private t = 0;
   // Scratch objects reused every frame — the hot path allocates nothing.
@@ -93,12 +97,23 @@ export class Combat {
   /** Start a light swing. Only from 'idle' (attacks commit; guard must be
    * released first). Returns whether the swing started. */
   tryLight(): boolean {
-    return this.beginAttack(TUNING.player.light);
+    return this.beginAttack(this.lightSpec);
   }
 
   /** Start a heavy swing. Same gating as tryLight. */
   tryHeavy(): boolean {
-    return this.beginAttack(TUNING.player.heavy);
+    return this.beginAttack(this.heavySpec);
+  }
+
+  /**
+   * Equip Callun's broken tachi (Task 15): a simple weapon swap that points
+   * `tryLight`/`tryHeavy` at the faster tuning specs. Idempotent; dropped by
+   * the Forsworn only on a no-guard kill, so the reward for the harder fight is
+   * a quicker blade. Reverting is out of scope — the tachi is a one-way upgrade.
+   */
+  equipTachi(): void {
+    this.lightSpec = TUNING.player.tachi.light;
+    this.heavySpec = TUNING.player.tachi.heavy;
   }
 
   /**

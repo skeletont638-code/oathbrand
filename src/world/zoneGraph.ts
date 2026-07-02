@@ -14,6 +14,8 @@ const LOCK_FLAG: Record<NonNullable<DoorDef['lock']>, GameFlag> = {
   throne: 'throne-open',
   ngplus: 'ng-plus',
   illusory: 'garden-found', // illusory walls pass freely once revealed
+  // The throne→summit stair opens only once the Forsworn is down (Task 15).
+  forsworn: 'forsworn-dead',
 };
 
 /** The save flag that satisfies a given lock kind. */

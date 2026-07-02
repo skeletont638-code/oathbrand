@@ -86,7 +86,7 @@ export interface DoorDef {
   id: string;
   at: [number, number];
   to: ZoneId;
-  lock?: 'gatekey' | 'shortcut' | 'throne' | 'ngplus' | 'illusory';
+  lock?: 'gatekey' | 'shortcut' | 'throne' | 'ngplus' | 'illusory' | 'forsworn';
   /** Edge id shared by both ends of a passage (see PAIRING above). */
   pair?: string;
   /**

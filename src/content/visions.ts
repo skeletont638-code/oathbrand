@@ -117,11 +117,14 @@ export const VISIONS: Record<
       {
         desatTo: 0.5,
         caption: 'A herald took the Queen’s last words and ran — outward, against the tide of the fleeing.',
-        spawnGhosts: [{ piece: 'statue-knight', at: [4, 6], rotY: 2.4 }],
+        spawnGhosts: [{ piece: 'statue-knight', at: [6, 4], rotY: 2.4 }],
         waitMs: 1500,
       },
       { desatTo: 0.15, caption: 'Her scroll-case was sealed still; she could not have carried what was set in her mouth.', waitMs: 1600 },
-      { desatTo: 0, caption: 'Something ran in a herald’s shape, and needed a knight it had not yet found.', waitMs: 1700 },
+      // T15 obligation: line 3 keeps the impossibility/unease WITHOUT stating she
+      // was a thing wearing a herald's shape — that reveal is ng-edda-lie's, saved
+      // for NG+. Here she only runs the wrong way and arrives nowhere anyone recalls.
+      { desatTo: 0, caption: 'She passed every gate that night and reached none of them; no threshold in Vael remembers her crossing.', waitMs: 1700 },
       { desatTo: ASH, waitMs: 500 },
     ],
   },

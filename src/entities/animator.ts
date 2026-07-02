@@ -20,6 +20,7 @@ import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js
 import { patchMaterial } from '../ps1/patchMaterial';
 import type { Enemy, EnemyState } from './Enemy';
 import type { Wraith } from './Wraith';
+import type { Forsworn } from './Forsworn';
 
 /** FSM state → KayKit clip. (Hit/death handling is in EnemyView.) */
 export const CLIP_FOR_STATE: Record<EnemyState, string> = {
@@ -238,5 +239,38 @@ export class WraithView extends EnemyView {
     this.root.visible = this.wraith.visible;
     const opacity = this.wraith.opacity;
     for (const mat of this.ghostMats) mat.opacity = opacity;
+  }
+}
+
+/**
+ * THE FORSWORN view (Task 15): the warrior rig, darkened to sooted armour with a
+ * dark-ember hollow glow that RISES with his phase — so when he snuffs the
+ * torches in P3, his own guttering brand leaves a barely-readable shape in the
+ * dark (the pulse does the rest). Uses the default melee clip set (his swing is
+ * the player's heavy).
+ */
+export class ForswornView extends EnemyView {
+  private readonly forsworn: Forsworn;
+  private readonly mats: MeshStandardMaterial[] = [];
+
+  constructor(forsworn: Forsworn, template: SkeletonTemplate, scale: number, attackMs: number) {
+    super(forsworn, template, scale, attackMs);
+    this.forsworn = forsworn;
+    this.root.traverse((obj) => {
+      const mesh = obj as Mesh;
+      if (!mesh.isMesh) return;
+      const mat = mesh.material as MeshStandardMaterial;
+      mat.color.multiplyScalar(0.5); // ash-blackened armour
+      mat.emissive.setHex(0x40100a); // a dark-ember hollow glow
+      mat.emissiveIntensity = 0.12;
+      this.mats.push(mat);
+    });
+  }
+
+  override update(dtMs: number): void {
+    super.update(dtMs);
+    const phase = this.forsworn.currentPhase();
+    const glow = phase === 3 ? 0.95 : phase === 2 ? 0.3 : 0.12;
+    for (const m of this.mats) m.emissiveIntensity = glow;
   }
 }
