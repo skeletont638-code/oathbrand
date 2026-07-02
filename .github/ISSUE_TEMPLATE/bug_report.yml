@@ -1,0 +1,79 @@
+name: Bug report
+description: Something broke, softlocked, or looked wrong while playing OATHBRAND.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping keep the vigil. The more concrete you can be about
+        **where** it happened and **what you were doing**, the faster it gets fixed.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What went wrong, and what did you expect instead?
+      placeholder: "The Forsworn's gate never re-opened after I beat him, so I was stuck in the arena."
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: How can we make it happen again?
+      placeholder: |
+        1. Start a new run and reach the Great Hall
+        2. Take the rampart shortcut
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: zone
+    attributes:
+      label: Where in the game?
+      description: Roughly where were you when it happened?
+      options:
+        - "Not sure"
+        - "Title / menus / settings"
+        - "The Ashen Gate"
+        - "The Great Hall"
+        - "The Undercroft"
+        - "The Ramparts"
+        - "The Throne / the Forsworn"
+        - "The Summit / an ending"
+        - "The Queen's Garden (second vigil)"
+    validations:
+      required: true
+  - type: dropdown
+    id: vigil
+    attributes:
+      label: First vigil or a later one?
+      options:
+        - "First vigil (a fresh run)"
+        - "A second vigil or later (Keep the Vigil Again)"
+        - "Not sure"
+    validations:
+      required: false
+  - type: input
+    id: browser
+    attributes:
+      label: Browser & device
+      description: e.g. "Chrome 126 on Windows 11", "Safari on iPhone 14".
+      placeholder: "Chrome 126 on Windows 11 desktop"
+    validations:
+      required: true
+  - type: textarea
+    id: console
+    attributes:
+      label: Console errors (optional)
+      description: If you can, open the browser dev tools (F12) → Console and paste any red errors.
+      render: text
+    validations:
+      required: false
+  - type: textarea
+    id: media
+    attributes:
+      label: Screenshot or clip (optional)
+      description: Drag an image or video in here if it helps show the problem.
+    validations:
+      required: false

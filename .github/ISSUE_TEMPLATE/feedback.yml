@@ -1,0 +1,64 @@
+name: Feedback / impressions
+description: Tell us how OATHBRAND felt to play — pacing, difficulty, story, the ending you reached.
+title: "[feedback] "
+labels: ["feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is a short game meant to be felt in one sitting. Honest impressions —
+        what landed, what dragged, what confused you — are worth more than praise.
+  - type: dropdown
+    id: finished
+    attributes:
+      label: How far did you get?
+      options:
+        - "Reached an ending"
+        - "Reached the summit but didn't finish"
+        - "Stopped partway through"
+        - "Bounced off early"
+    validations:
+      required: true
+  - type: checkboxes
+    id: endings
+    attributes:
+      label: Which endings have you seen?
+      description: No spoilers needed — just check what you reached.
+      options:
+        - label: "Oath Kept"
+        - label: "Oath Broken"
+        - label: "Hollow"
+        - label: "The fourth (second vigil)"
+        - label: "None yet"
+  - type: dropdown
+    id: difficulty
+    attributes:
+      label: How did the difficulty feel?
+      options:
+        - "Too easy"
+        - "About right"
+        - "Too hard"
+        - "Uneven — some parts off"
+    validations:
+      required: false
+  - type: textarea
+    id: liked
+    attributes:
+      label: What worked?
+      description: A moment, a mechanic, a line, the look — anything that landed.
+    validations:
+      required: false
+  - type: textarea
+    id: friction
+    attributes:
+      label: What didn't?
+      description: Anything that confused, frustrated, bored, or lost you.
+    validations:
+      required: false
+  - type: input
+    id: setup
+    attributes:
+      label: How did you play? (optional)
+      placeholder: "Desktop, keyboard + mouse, Firefox"
+    validations:
+      required: false
