@@ -55,7 +55,14 @@ export const DEV_EXTERIOR_ZONE: ZoneDef = {
   fogCells: [{ cells: [[7, 4], [7, 5], [7, 6], [8, 3]], farM: 11 }],
   props: [],
   lights: [],
-  enemies: [],
+  // Task 4 dev-only killables: an Ash-Hound out in the open field (it aggros,
+  // circles the fog edge, then lunges) and a Kneeling Hollow to its east (a
+  // scarecrow-still figure that rises when the brand pulses — press G to force
+  // the rise). Shadowed out the moment a real `gate-fields` ships.
+  enemies: [
+    { kind: 'hound', at: [7, 5] },
+    { kind: 'kneeler', at: [5, 8] },
+  ],
   lore: [],
   doors: [],
   ambience: [],

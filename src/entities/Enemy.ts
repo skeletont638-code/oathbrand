@@ -19,6 +19,10 @@ export type EnemyState =
   | 'idle'
   | 'alert'
   | 'approach'
+  // Ash-Hound only (Greater Vael, Task 4): the flanking stalk at the fog edge
+  // that precedes a lunge. Additive — no v1 enemy ever enters it, so their
+  // FSMs are byte-for-byte unaffected.
+  | 'circle'
   | 'attack'
   | 'recover'
   | 'reposition'

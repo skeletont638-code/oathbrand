@@ -27,6 +27,11 @@ export const CLIP_FOR_STATE: Record<EnemyState, string> = {
   idle: 'Idle',
   alert: 'Idle_Combat',
   approach: 'Walking_A',
+  // 'circle' is the Ash-Hound's own state and the hound is a procedural
+  // (non-skinned) view, so no skinned enemy ever resolves this — it exists only
+  // to keep the record total over EnemyState. A run reads closest for any future
+  // skinned circler.
+  circle: 'Running_A',
   attack: '1H_Melee_Attack_Chop',
   recover: 'Idle_Combat',
   reposition: 'Walking_A',
@@ -49,6 +54,39 @@ export const WRAITH_CLIPS: Partial<Record<EnemyState, string>> = {
 
 const HIT_CLIP = 'Hit_A';
 const FADE_MS = 140;
+
+/**
+ * The tall-entity stutter (Greater Vael, Task 4). Quantize a seconds clock to a
+ * stepped fps grid: the creepy exterior things (Ash-Hound, Kneeling Hollow) read
+ * their animation phase from THIS instead of raw time, so they pop between poses
+ * at ~12 fps while the world around them renders butter-smooth — the uncanny
+ * "not moving at the same framerate as reality" tell. We quantize the ANIMATION
+ * CLOCK, never the render; `fps <= 0` (a frozen presence like the Watcher) passes
+ * time through untouched.
+ *
+ * NOTE ON RIGS: the KayKit pack ships only humanoid biped rigs
+ * (skeleton-warrior/-archer, statue-knight) — there is NO quadruped and nothing
+ * with the elongated/underfed proportions the owner's tall-creepy directive
+ * requires. So the hound and the hollow are built as bespoke low-poly procedural
+ * meshes (in AshHound.ts / KneelingHollow.ts) driven off `steppedTime`, rather
+ * than a mixer + clip map layered on the warrior rig. `EntityView` is the shared
+ * render seam so main.ts can hold them next to the skinned `EnemyView`s.
+ */
+export function steppedTime(tSec: number, fps: number): number {
+  return fps > 0 ? Math.floor(tSec * fps) / fps : tSec;
+}
+
+/**
+ * The render seam every placed enemy view satisfies: main.ts adds `root` to the
+ * scene, ticks `update(dtMs)` each frame, and `dispose()`s on zone teardown. The
+ * skinned `EnemyView` and the bespoke procedural tall-entity views all implement
+ * it, so `{ logic, view }` can hold either without knowing which.
+ */
+export interface EntityView {
+  readonly root: Object3D;
+  update(dtMs: number): void;
+  dispose(): void;
+}
 
 /** Currently-playing action per mixer, for crossfades. */
 const current = new WeakMap<AnimationMixer, AnimationAction>();
@@ -110,7 +148,7 @@ function ps1ify(root: Object3D): void {
   });
 }
 
-export class EnemyView {
+export class EnemyView implements EntityView {
   readonly root: Object3D;
   private readonly mixer: AnimationMixer;
   private lastState: EnemyState | null = null;

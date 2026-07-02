@@ -12,12 +12,15 @@ import { ScreenScareKit } from './engine/ScreenScareKit';
 import { setSnapResolution } from './ps1/patchMaterial';
 import { installScreenshotKey } from './engine/screenshot';
 import { ARCHER_CLIPS, EnemyView, ForswornView, WraithView, loadSkeleton } from './entities/animator';
+import type { EntityView } from './entities/animator';
 import { Archer } from './entities/Archer';
 import type { Enemy, EnemyCtx } from './entities/Enemy';
 import { Projectile, ProjectilePool } from './entities/Projectile';
 import { Soldier } from './entities/Soldier';
 import { Wraith } from './entities/Wraith';
 import { Forsworn } from './entities/Forsworn';
+import { AshHound, HoundView } from './entities/AshHound';
+import { KneelingHollow, KneelerView } from './entities/KneelingHollow';
 import { BossArena, arenaWantsDark } from './entities/bossArena';
 import { Brand } from './player/Brand';
 import { Combat, inArc } from './player/Combat';
@@ -342,7 +345,7 @@ async function startScene(): Promise<void> {
   // Enemy roster — declared before the Brand so its nearest-enemy poll can
   // close over the array; REBUILT in place on every zone transition
   // (spawnEnemies), so every closure over `enemies` stays live.
-  const enemies: { logic: Enemy; view: EnemyView }[] = [];
+  const enemies: { logic: Enemy; view: EntityView }[] = [];
 
   // The Oath-Brand: embers-as-health, threat pulse, hollowing desaturation,
   // and the rekindle→save checkpoint loop. The pulse tracks the nearest
@@ -381,6 +384,11 @@ async function startScene(): Promise<void> {
       let best: number | null = null;
       for (const { logic } of enemies) {
         if (!logic.alive) continue;
+        // A DORMANT kneeling hollow is beneath notice — it must not feed the
+        // brand (which would let a field of them self-wake off their own pulse,
+        // or throb the brand forever beside an inert field-ward). It joins the
+        // reckoning the instant it rises.
+        if (logic instanceof KneelingHollow && logic.dormant) continue;
         let d = Math.hypot(logic.pos.x - controller.pos.x, logic.pos.z - controller.pos.z);
         // Wraiths — and the Forsworn — ALWAYS pulse: they report a distance
         // capped just inside the pulse range, so the brand never goes quiet
@@ -428,6 +436,9 @@ async function startScene(): Promise<void> {
     },
     mulberry32(runSeed),
   );
+  // A separate seeded stream for Ash-Hound flank/duration rolls, so their
+  // randomness is deterministic per run without perturbing the director's.
+  const houndRng = mulberry32((runSeed ^ 0x5bd1e995) >>> 0);
   // The reduced-flicker toggle drives the pipeline AND the kit (both strip their
   // per-frame-random layers; the kit's held timelines are unaffected).
   scareKit.setFlickerSafe(false);
@@ -1173,7 +1184,7 @@ async function startScene(): Promise<void> {
       if (spawn.kind === 'forsworn' && flags.has('forsworn-dead')) return;
       const id = `${zones.current}-${spawn.kind}-${i}`;
       let logic: Enemy;
-      let view: EnemyView;
+      let view: EntityView;
       if (spawn.kind === 'archer') {
         const archer = new Archer({ id, bus: game.bus, defense: combat, shots: bolts });
         view = new EnemyView(
@@ -1208,6 +1219,32 @@ async function startScene(): Promise<void> {
         );
         logic = forsworn;
         activeForsworn = forsworn;
+      } else if (spawn.kind === 'hound') {
+        // Ash-Hound (Greater Vael): the circler. `pantCue` is a footfall/pant
+        // one-shot that does NOT scale with the brand pulse (spec §9); the
+        // exterior positional voice is a later audio task, so wire a stub now.
+        const hound = new AshHound({
+          id,
+          bus: game.bus,
+          defense: combat,
+          rng: houndRng,
+          pantCue: () => {},
+        });
+        view = new HoundView(hound);
+        logic = hound;
+      } else if (spawn.kind === 'kneeler') {
+        // Kneeling Hollow (Greater Vael): dormant until the brand pulses. The
+        // scare beat (Tasks 5–12) will call `wake()`; `creakCue` is the low
+        // bone-creak on the rise (reuses the kneel motif voice).
+        const kneeler = new KneelingHollow({
+          id,
+          bus: game.bus,
+          defense: combat,
+          pulse: () => brand.pulse,
+          creakCue: () => game.bus.emit({ type: 'cue', id: 'motif-kneel' }),
+        });
+        view = new KneelerView(kneeler);
+        logic = kneeler;
       } else {
         // 'soldier'.
         const soldier = new Soldier({ id, bus: game.bus, defense: combat });
@@ -1490,6 +1527,10 @@ async function startScene(): Promise<void> {
       if (e.code === 'KeyH') brand.damage(1);
       else if (e.code === 'KeyR') brand.rekindle('dev-banner');
       else if (e.code === 'KeyK') activeForsworn?.takeHit(4);
+      // G raises every dormant kneeling hollow (QA the rise on demand).
+      else if (e.code === 'KeyG') {
+        for (const { logic } of enemies) if (logic instanceof KneelingHollow) logic.wake();
+      }
     });
   }
 
