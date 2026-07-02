@@ -86,7 +86,7 @@ export interface DoorDef {
   id: string;
   at: [number, number];
   to: ZoneId;
-  lock?: 'gatekey' | 'shortcut' | 'throne' | 'ngplus' | 'illusory' | 'forsworn';
+  lock?: 'gatekey' | 'shortcut' | 'throne' | 'ngplus' | 'illusory' | 'forsworn' | 'greatervael';
   /** Edge id shared by both ends of a passage (see PAIRING above). */
   pair?: string;
   /**
@@ -157,6 +157,68 @@ export interface NgPlusVariant {
   addedLore?: LoreSpot[];
 }
 
+// --- Greater Vael Drop 1 — exterior / dread surface ------------------------
+// All additive; every field below is optional on ZoneDef and absent on the
+// v1 castle zones, so those zones build byte-for-byte identical (spec §2).
+
+/** Which backdrop an exterior zone renders (sky/moon/horizon palette). */
+export type ExteriorSky = 'field' | 'forest' | 'gorge';
+
+/**
+ * A patch of low-fog "scare cells" (10–12 m) inside an otherwise 16 m
+ * exterior — the ONLY places aggro may exceed visual range, and only when
+ * paired with an audio tell (spec §4). `farM` is the fog far-plane inside
+ * `cells`.
+ */
+export interface FogCellBand {
+  cells: GridPos[];
+  farM: number;
+}
+
+/**
+ * The screen-effect a scare beat fires. All four glitch gimmicks are driven
+ * through the existing PS1/patchMaterial/mixer APIs (one glitch metaphor —
+ * "the engine notices IT"); `false-pulse` spoofs a brand pulse; `watcher` /
+ * `hag-glimpse` manifest a presence; `null` is a pure-visual beat (no gimmick).
+ */
+export type ScareGimmick =
+  | 'snap-grid'
+  | 'resolution-drop'
+  | 'desaturation'
+  | 'silence-spike'
+  | 'false-pulse'
+  | 'watcher'
+  | 'hag-glimpse'
+  | null;
+
+/** What arms a scare beat (the DreadDirector evaluates these per frame). */
+export type ScareTrigger =
+  | { on: 'cellEnter'; cells: GridPos[] }
+  | { on: 'approach'; at: GridPos; withinM: number }
+  | { on: 'brandPulse'; at: GridPos; withinM: number }
+  | { on: 'kneel'; at?: GridPos }
+  | { on: 'loreRead'; loreId: string }
+  | { on: 'timer'; at: GridPos; minSec: number }
+  | { on: 'seededClearing'; cells: GridPos[] } // GF-2 per-run seeded false pulse
+  | { on: 'vista'; vistaId: string }; // PD-1
+
+/** One authored scare beat (`id` e.g. 'GF-1' … 'PD-2'). */
+export interface ScareBeat {
+  id: string;
+  zone: ZoneId;
+  trigger: ScareTrigger;
+  gimmick: ScareGimmick;
+  /** AF-2, PD-1 manifest the Watcher when they fire. */
+  showsWatcher?: boolean;
+  oneLine: string;
+}
+
+/** The Hag-of-the-Fog-Line threshold: where she is glimpsed, receding. */
+export interface HagThresholdDef {
+  at: GridPos;
+  glimpseCells: GridPos[];
+}
+
 export interface ZoneDef {
   id: ZoneId;
   /** ASCII rows; every row the same length. */
@@ -186,5 +248,22 @@ export interface ZoneDef {
   /** Fog far-plane for this zone, meters. Default 16 (main.ts); the
    * ashen-gate courtyard uses 12 so the vista's 12→28 swell reads. */
   fogFarM?: number;
+  // --- Greater Vael Drop 1 (all optional; absent ⇒ v1 interior behavior) ---
+  /** 'interior' (default) keeps v1 behavior; 'exterior' opts into the outdoor
+   * zone engine — height layer, instanced forest, sky/moon/ash, DreadDirector. */
+  kind?: 'interior' | 'exterior';
+  /** Per-cell terrain step, same dims as `grid`; one digit '0'–'3' per cell.
+   * A visual y-lerp only — collision stays the flat v1 2D grid (no jump). */
+  heightGrid?: string[];
+  /** Low-fog scare-cell bands within this zone (spec §4). */
+  fogCells?: FogCellBand[];
+  /** Backdrop palette for an exterior zone. */
+  exteriorSky?: ExteriorSky;
+  /** Authored scare beats the DreadDirector may fire in this zone. */
+  scares?: ScareBeat[];
+  /** Watcher sighting positions (may be off-grid backdrop coordinates). */
+  watcherAnchors?: GridPos[];
+  /** The Hag-of-the-Fog-Line threshold for this zone, if any. */
+  hagThreshold?: HagThresholdDef;
   ngPlus?: NgPlusVariant;
 }

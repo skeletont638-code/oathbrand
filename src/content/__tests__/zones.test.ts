@@ -80,9 +80,14 @@ describe('zone registry', () => {
     expect(hasZone('queens-garden')).toBe(true);
   });
 
-  it('the future-zone allowlist is now empty (every door target is built)', () => {
-    expect(FUTURE_ZONE_IDS.size).toBe(0);
+  it('the future-zone allowlist holds only unbuilt Drop-2 targets (salt-road)', () => {
+    // Greater Vael Drop 1 re-arms the allowlist: Pilgrim's Descent authors a
+    // door into `salt-road` a drop early, so it is the sole allowlisted target.
+    expect([...FUTURE_ZONE_IDS].sort()).toEqual(['salt-road']);
+    // No registered/built zone may ever sit in the allowlist…
     for (const [id] of entries) expect(FUTURE_ZONE_IDS.has(id)).toBe(false);
+    // …and everything on the allowlist is genuinely unbuilt.
+    for (const id of FUTURE_ZONE_IDS) expect(hasZone(id)).toBe(false);
   });
 
   it('lore ids are unique game-wide', () => {

@@ -65,4 +65,35 @@ export const TUNING = {
       ember: 0.18, rekindle: 0.5, hollow: 0.6, ending: 0.6, eyeOpen: 0.5,
     },
   },
+  // --- Greater Vael Drop 1: "The Fields" (Tasks 3–5 read these names) ------
+  greaterVael: {
+    hound: {
+      hp: 2, speed: 2.6, aggroM: 13, alertMs: 500, leashMul: 1.5, heightM: 2.3,
+      circle: { speedM: 3.4, radiusM: 6, minMs: 1400, maxMs: 3200, flankRandom: true },
+      lunge:  { windupMs: 380, activeMs: 220, recoverMs: 900, speedM: 6.5, damage: 1, rangeM: 2.4 },
+      animFps: 12,
+    },
+    kneeler: {
+      hp: 3, speed: 1.7, aggroM: 10, wake: 'brand-pulse', heightM: 2.35,
+      idle:  { breathScalePct: 0.8, headTiltMaxDeg: 6, tiltPeriodMs: 5200 },
+      rise:  { holdMs: 700, firstStepMs: 900 },
+      attack:{ windupMs: 700, activeMs: 200, recoverMs: 900, damage: 1, rangeM: 2.0 },
+      inertRatio: 3, animFps: 12,
+    },
+    watcher: {
+      heightM: 3.0, sightingRangeMinM: 16, despawnM: 10, maxVisibleSec: 4,
+      sightingsPerDrop: { min: 3, max: 6 }, frozenWhileObserved: true,
+      sharesScareCooldown: true, damage: 0, animFps: 0,
+    },
+    hag: {
+      heightM: 2.5, glimpseRangeMinM: 16, recedeM: 10, damage: 0,
+      fights: false, chases: false, speaks: false,
+      animFps: 12,
+    },
+    dread: {
+      minScareGapSec: 90, maxBeatsPerDrop: 10, falsePulsePerZoneMax: 2,
+      gimmickUseMax: 2, watcherPerDropMax: 6,
+    },
+    exterior: { fogFarDefaultM: 16, lowFogCellM: 11, maxHeightStep: 3 },
+  } as const,
 } as const;

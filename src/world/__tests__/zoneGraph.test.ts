@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canPass, doorEntry, doorSpan, pairedDoor } from '../zoneGraph';
+import { canPass, doorEntry, doorSpan, lockFlag, pairedDoor } from '../zoneGraph';
 import type { DoorDef, ZoneDef } from '../zoneDef';
 import type { GameFlag } from '../../content/types';
 
@@ -81,6 +81,25 @@ describe('canPass', () => {
     expect(
       canPass(door('gatekey'), flags('shortcut-open', 'throne-open', 'ng-plus', 'garden-found')),
     ).toBe(false);
+  });
+
+  it('greatervael lock blocks the Fields door without greater-vael-open', () => {
+    expect(
+      canPass({ id: 'x', at: [0, 0], to: 'gate-fields', lock: 'greatervael' }, new Set()),
+    ).toBe(false);
+  });
+
+  it('greatervael lock opens the Fields door with greater-vael-open', () => {
+    expect(
+      canPass(
+        { id: 'x', at: [0, 0], to: 'gate-fields', lock: 'greatervael' },
+        new Set<GameFlag>(['greater-vael-open']),
+      ),
+    ).toBe(true);
+  });
+
+  it('lockFlag maps greatervael to greater-vael-open', () => {
+    expect(lockFlag('greatervael')).toBe('greater-vael-open');
   });
 });
 

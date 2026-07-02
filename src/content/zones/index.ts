@@ -29,13 +29,14 @@ export const ZONES: Partial<Record<ZoneId, ZoneDef>> = {
 
 /**
  * Zones the design names but later tasks build: a door may target one before
- * its zone ships, and main.ts treats an unbuilt destination as sealed. The
- * campaign is complete as of T16 (the Queen's Garden landed), so this allowlist
- * is now EMPTY — every door target is a real, registered zone, and the
- * structural tests demand a real pairing for each. Kept (empty) as the seam for
- * any future zone rather than deleting the mechanism.
+ * its zone ships, and main.ts treats an unbuilt destination as sealed. The v1
+ * castle campaign is complete (T16 landed the Queen's Garden), so every v1 door
+ * target is a real, registered zone. `salt-road` is the Greater Vael Drop 2
+ * target: Pilgrim's Descent authors a door into it a drop early, so it lives
+ * here until Drop 2 ships (then remove it and the structural tests demand a
+ * real pairing).
  */
-export const FUTURE_ZONE_IDS: ReadonlySet<ZoneId> = new Set<ZoneId>();
+export const FUTURE_ZONE_IDS: ReadonlySet<ZoneId> = new Set<ZoneId>(['salt-road']);
 
 /** True when `id` names a built, registered zone. */
 export function hasZone(id: ZoneId): boolean {
