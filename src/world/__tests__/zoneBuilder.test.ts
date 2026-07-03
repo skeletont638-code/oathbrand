@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { BoxGeometry, Group, InstancedMesh, Mesh, MeshStandardMaterial } from 'three';
-import { gridToPlacements, ZoneBuilder } from '../ZoneBuilder';
+import { gridToPlacements, planarUV, ZoneBuilder } from '../ZoneBuilder';
 import type { AssetCache } from '../assets';
 import type { ZoneDef, TileKind } from '../zoneDef';
 
@@ -47,6 +47,15 @@ function mergedNames(group: Group): string[] {
     }
   });
   return out;
+}
+
+/** First standalone Mesh in the group with the given name (e.g. `exterior-ground`). */
+function meshNamed(group: Group, name: string): Mesh | undefined {
+  let found: Mesh | undefined;
+  group.traverse((o) => {
+    if (o instanceof Mesh && o.name === name) found = o;
+  });
+  return found;
 }
 
 function zone(grid: string[], tiles: Record<string, TileKind> = {}): ZoneDef {
@@ -181,8 +190,9 @@ describe('ZoneBuilder.build (exterior)', () => {
     });
     // T/# rendered as trees, so the castle wall block never appears…
     expect(mergedNames(built.group)).not.toContain('merged:wall');
-    // …but the bare/floor cells still get a merged floor tile.
-    expect(mergedNames(built.group)).toContain('merged:floor');
+    // …and exterior floor cells no longer bucket as kit atlas tiles: the ground
+    // is now a standalone world-planar textured mesh, not `merged:floor`.
+    expect(mergedNames(built.group)).not.toContain('merged:floor');
   });
 
   it('renders an `H` ruin cell as the castle wall.glb block', () => {
@@ -211,5 +221,27 @@ describe('ZoneBuilder.build (exterior)', () => {
     expect(ext.moonDir!.y).toBeGreaterThan(0);
     const int = new ZoneBuilder().build(zone(['###', '#.#', '###']), fakeAssets()); // `zone()` is the file's interior helper
     expect(int.moonDir).toBeUndefined();
+  });
+
+  it('an exterior build emits one exterior-ground mesh with a uv attribute', () => {
+    const built = new ZoneBuilder().build(exteriorZone(['.,t', 'p#.']), fakeAssets());
+    const g = meshNamed(built.group, 'exterior-ground');
+    expect(g).toBeDefined();
+    expect(g!.geometry.getAttribute('uv')).toBeDefined();
+  });
+
+  it('keeps the kit merge bucket count at 1 for an exterior zone (≤6 budget)', () => {
+    const built = new ZoneBuilder().build(exteriorZone(['H,t', 'T#.']), fakeAssets());
+    // only the wall/H atlas remains a kit bucket; ground/skirt/forest are separate meshes
+    expect(mergedNames(built.group).length).toBeLessThanOrEqual(6);
+    expect(mergedNames(built.group)).toContain('merged:wall'); // the H ruin block still buckets
+    expect(mergedNames(built.group)).not.toContain('merged:floor');
+  });
+});
+
+describe('planarUV', () => {
+  it('tiles seamlessly at 2 m per repeat', () => {
+    expect(planarUV(0, 0)).toEqual([0, 0]);
+    expect(planarUV(2, 4)).toEqual([1, 2]);
   });
 });

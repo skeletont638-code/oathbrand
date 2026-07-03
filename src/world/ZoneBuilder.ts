@@ -35,6 +35,7 @@ import type { AssetCache } from './assets';
 import type { DoorDef, EnemySpawn, GridPos, ItemSpot, LoreSpot, TileKind, ZoneDef } from './zoneDef';
 import { grassGeometry, pineGeometry, trunkGeometry } from './exteriorForest';
 import { buildExteriorSky } from './exteriorSky';
+import { getTexture } from './textures';
 import type { Anomaly } from '../content/anomalies';
 
 /** One kit piece placed on the grid. `x`/`z` are world meters, `rotY` yaw. */
@@ -123,6 +124,15 @@ const TRUNK_KIND = 'pine-sparse'; // walkable partial-occlusion trunk on `t`
 const TREE_KIND = 'pine-dense'; // blocking treeline/border on `T`/`#`
 /** Dark rock skirt filling the risers between height steps (ramps/cliffs). */
 const TERRAIN_COLOR = 0x2b2a2c;
+/** One ground-texture repeat spans this many world metres (texel density ≈ kit atlas). */
+const GROUND_TILE_M = 2;
+/** Flat ground colour when the crunched dirt map is absent (tests / fetch not run). */
+const GROUND_FLAT_HEX = 0x3a3632;
+
+/** World-space planar UV for a ground point (pure; exported for the test). */
+export function planarUV(worldX: number, worldZ: number, tileM = GROUND_TILE_M): [number, number] {
+  return [worldX / tileM, worldZ / tileM];
+}
 
 // Neighbor scan orders (row/col deltas). Ortho: N, S, W, E.
 const ORTHO: readonly (readonly [number, number])[] = [
@@ -370,9 +380,62 @@ function stampForest(group: Group, name: string, geometry: BufferGeometry, spots
 }
 
 /**
+ * One merged textured ground mesh over the exterior floor cells, world-planar
+ * UV'd (seamless tiling), each cell quad at its terrain height. Replaces the kit
+ * floor tiles for exteriors so the ground carries the dirt map, NOT the wall
+ * atlas — a standalone Mesh, so the kit merge-bucket count does not grow. Falls
+ * back to a flat colour when the crunched dirt map is absent (tests / no fetch).
+ * Returns null when the zone has no floor cells.
+ */
+function buildExteriorGround(cell: number, spots: ForestSpot[]): Mesh | null {
+  if (spots.length === 0) return null;
+  const pos: number[] = [];
+  const uv: number[] = [];
+  for (const { x, y, z } of spots) {
+    const x0 = x - cell / 2;
+    const x1 = x + cell / 2;
+    const z0 = z - cell / 2;
+    const z1 = z + cell / 2;
+    // two tris, CCW facing +y
+    const corners: [number, number][] = [
+      [x0, z0],
+      [x1, z0],
+      [x1, z1],
+      [x0, z0],
+      [x1, z1],
+      [x0, z1],
+    ];
+    for (const [cx, cz] of corners) {
+      pos.push(cx, y, cz);
+      const [u, v] = planarUV(cx, cz);
+      uv.push(u, v);
+    }
+  }
+  const geo = new BufferGeometry();
+  geo.setAttribute('position', new Float32BufferAttribute(new Float32Array(pos), 3));
+  geo.setAttribute('uv', new Float32BufferAttribute(new Float32Array(uv), 2));
+  geo.computeVertexNormals();
+  const map = getTexture('ground-dirt');
+  const material = new MeshStandardMaterial({
+    color: map ? 0xffffff : GROUND_FLAT_HEX, // white so the crunched map shows at its own brightness
+    roughness: 1,
+    metalness: 0,
+    flatShading: true,
+  });
+  if (map) material.map = map; // set BEFORE patchMaterial/first compile so the affine warp binds
+  forceNearest(material);
+  patchMaterial(material);
+  const mesh = new Mesh(geo, material);
+  mesh.name = 'exterior-ground';
+  return mesh;
+}
+
+/**
  * A single dark-rock mesh filling the vertical risers between height steps
  * (every ramp/cliff seam), so stepped terrain never shows a gap under a floor
- * tile. Returns null when the zone is flat.
+ * tile. World-planar UV'd so the crunched rock map tiles across the risers
+ * (vertical faces map by x/z footprint — acceptable at PS1 crunch). Returns
+ * null when the zone is flat.
  */
 function buildTerrainSkirt(def: ZoneDef, cellHeightM: (r: number, c: number) => number): Mesh | null {
   const seams = buildHeightRamps(def);
@@ -398,16 +461,27 @@ function buildTerrainSkirt(def: ZoneDef, cellHeightM: (r: number, c: number) => 
       v.push(x0, ylo, bz, x1, ylo, bz, x1, yhi, bz, x0, ylo, bz, x1, yhi, bz, x0, yhi, bz);
     }
   }
+  // World-planar UV per vertex (from its x/z footprint), so the rock map tiles
+  // seamlessly across the risers — same tiling as the ground for matched density.
+  const uvArr: number[] = [];
+  for (let i = 0; i < v.length; i += 3) {
+    const [u, w] = planarUV(v[i], v[i + 2]);
+    uvArr.push(u, w);
+  }
   const geo = new BufferGeometry();
   geo.setAttribute('position', new Float32BufferAttribute(new Float32Array(v), 3));
+  geo.setAttribute('uv', new Float32BufferAttribute(new Float32Array(uvArr), 2));
   geo.computeVertexNormals();
+  const map = getTexture('rock');
   const material = new MeshStandardMaterial({
-    color: TERRAIN_COLOR,
+    color: map ? 0xffffff : TERRAIN_COLOR,
     roughness: 1,
     metalness: 0,
     side: DoubleSide,
     flatShading: true,
   });
+  if (map) material.map = map; // set BEFORE patchMaterial/first compile so the affine warp binds
+  forceNearest(material);
   patchMaterial(material);
   const mesh = new Mesh(geo, material);
   mesh.name = 'exterior-terrain';
@@ -490,6 +564,7 @@ export class ZoneBuilder {
     const grass: ForestSpot[] = [];
     const sparse: ForestSpot[] = [];
     const dense: ForestSpot[] = [];
+    const ground: ForestSpot[] = [];
     if (def.kind === 'exterior') {
       for (let row = 0; row < def.grid.length; row++) {
         const line = def.grid[row];
@@ -498,7 +573,12 @@ export class ZoneBuilder {
           const x = col * cell + half;
           const z = row * cell + half;
           const y = cellHeightM(row, col);
-          const floorTile = (): void => addPiece('floor', x, y, z, 0, KIT_SCALE);
+          // Exteriors collect floor cells into ONE world-planar textured ground
+          // mesh (buildExteriorGround) instead of emitting kit floor.glb tiles,
+          // so the ground carries the dirt map, not the wall atlas.
+          const floorTile = (): void => {
+            ground.push({ x, y, z, row, col });
+          };
           const spot = (): ForestSpot => ({ x, y, z, row, col });
           if (ch === '~') continue; // the gorge — open air, no tile
           else if (ch === ',') {
@@ -605,6 +685,9 @@ export class ZoneBuilder {
       stampForest(group, GRASS_KIND, grassGeometry(), grass);
       stampForest(group, TRUNK_KIND, trunkGeometry(), sparse);
       stampForest(group, TREE_KIND, pineGeometry(), dense);
+
+      const groundMesh = buildExteriorGround(cell, ground);
+      if (groundMesh) group.add(groundMesh);
 
       const skirt = buildTerrainSkirt(def, cellHeightM);
       if (skirt) group.add(skirt);
