@@ -164,6 +164,28 @@ export const LORE: Record<string, LoreEntry> = {
     body: 'A toll-post at the crossing, its ledger-slot worn smooth by cold coin. Here a traveller bought back an hour of warmth against the fog, hearth-fire measured out by the finger-length. The Flame lent a kingdom its fire; the kingdom sold it on by the ember. None of the debt ran the other way.',
   },
 
+  // ─── GREATER VAEL DROP 1 — THE ASHEN FOREST N (Task 10) ────────────────
+  'gv-forest-fogline': {
+    title: 'The Fog-Line',
+    body: 'The road ends where the trees begin, and the fog begins with them. This is the mark past which a tithe once went unpaid and was not forgiven. The debt did not lift. It put down roots, and learned to wait in the dark between the trunks.',
+  },
+  'gv-forest-hag-cairn': {
+    title: 'The Carved Cairn',
+    body: 'A cairn of pale stones, and no words on any of them — only marks, cut by a hand that had stopped trusting words: an open palm, an ember, a line drawn out and away. She does not speak. She sets her meaning in the stone, and waits to see what you will lay down.',
+  },
+  'gv-forest-sold-brand': {
+    title: 'The Sold Brand',
+    body: 'A brand-scar, cold, pressed into the bark like a seal in wax. A soldier’s oath-fire was struck from her the night the ledgers came due, and carried off to warm a hall she would never be let into. She did not hollow with the others. Something out here took up her debt, and will not let her die of it.',
+  },
+  'gv-forest-hound-kennels': {
+    title: 'The Loosed Kennels',
+    body: 'Ring-bolts in a row, the leashes long rotted through. The collectors kept dogs to walk the tithe-roads, lean things fed on what the debtors could not pay. When the flame guttered and the collectors did not come back, no one loosed them. They loosed themselves. They are still collecting.',
+  },
+  'gv-forest-watcher-note': {
+    title: 'A Scratched Line',
+    body: 'One line, cut at a running height by someone who did not stop to finish the letters: it does not come closer. it does not need to. Below it, in a steadier hand that had made its peace: so do not run. it likes the running.',
+  },
+
   // ─── NG+ (T16): the recontextualisations. Defined now, placed later. ────
   'ng-queen-knew': {
     ngOnly: true,

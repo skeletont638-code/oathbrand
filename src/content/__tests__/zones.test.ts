@@ -69,8 +69,12 @@ describe('zone registry', () => {
 
   it('registers the first Greater Vael exterior — the Gate Fields hub (Task 9)', () => {
     expect(ZONES['gate-fields']).toBeDefined();
-    // Seven castle zones + the Gate Fields hub.
-    expect(Object.keys(ZONES)).toHaveLength(8);
+  });
+
+  it('registers the second Greater Vael exterior — the Ashen Forest N (Task 10)', () => {
+    expect(ZONES['ashen-forest-n']).toBeDefined();
+    // Seven castle zones + the Gate Fields hub + the Ashen Forest N.
+    expect(Object.keys(ZONES)).toHaveLength(9);
   });
 
   it('zoneOrThrow returns every registered zone (the campaign is complete)', () => {
@@ -90,9 +94,8 @@ describe('zone registry', () => {
     // opens roads into three zones that Tasks 10–12 build — cinder-village,
     // ashen-forest-n, pilgrims-descent — plus the Drop-2 salt-road forward ref.
     // Each is removed as its zone ships (the structural tests then demand a real
-    // pairing).
+    // pairing). Task 10 shipped ashen-forest-n, so it is gone from the list.
     expect([...FUTURE_ZONE_IDS].sort()).toEqual([
-      'ashen-forest-n',
       'cinder-village',
       'pilgrims-descent',
       'salt-road',
@@ -201,6 +204,22 @@ describe('zone registry', () => {
     // Walking the postern lands the player at the OTHER zone's paired door.
     expect(pairedDoor('ashen-gate', gateToFields!, fields)?.to).toBe('ashen-gate');
     expect(pairedDoor('gate-fields', gfToGate!, gate)?.to).toBe('gate-fields');
+  });
+
+  it('the Gate Fields E road pairs both ways with the Ashen Forest N (Task 10)', () => {
+    const fields = zoneOrThrow('gate-fields');
+    const forest = zoneOrThrow('ashen-forest-n');
+    const gfToForest = fields.doors.find((d) => d.id === 'gf-to-forest');
+    const afToFields = forest.doors.find((d) => d.id === 'af-to-fields');
+    expect(gfToForest, 'gate-fields is missing the gf-to-forest road').toBeDefined();
+    expect(afToFields, 'ashen-forest-n is missing the af-to-fields road').toBeDefined();
+    // Both ends share the single passage edge — the forest's only door.
+    expect(gfToForest!.pair).toBe('gf-forest');
+    expect(afToFields!.pair).toBe('gf-forest');
+    expect(forest.doors).toHaveLength(1); // the forest dead-ends at the fog-line
+    // Walking the road lands the player at the OTHER zone's paired door.
+    expect(pairedDoor('gate-fields', gfToForest!, forest)?.to).toBe('gate-fields');
+    expect(pairedDoor('ashen-forest-n', afToFields!, fields)?.to).toBe('ashen-forest-n');
   });
 });
 
