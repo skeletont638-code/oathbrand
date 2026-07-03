@@ -81,3 +81,18 @@ From the GV re-review minors: (a) `main.ts` boot-persist reassigns in-memory `sa
 - **7/4** — Lighting v2 + vertex-color rebalance + Gate Fields ratification.
 - **7/5** — Texture pass (ground → trees → entities), per-zone sweep.
 - **7/6** — Props + atmosphere + housekeeping + owner playtest → merge → v1.1.0 release.
+
+---
+
+## 11. Curves addendum (owner-directed, 2026-07-03 — supersedes any box-geometry assumption above)
+
+**Owner feedback after playing the lit build:** the remaining "programmer art" tell is geometry, not surfaces — "not just Minecraft straight lines, actual curves." Real PS1 games were low-poly but ORGANIC (tapered limbs, bent trunks, lumpy ground); our box rigs and perfect cones read Minecraft, not PS1. This addendum inserts a curves pass BEFORE the atmosphere task (owner-approved sequencing; atmosphere shrinks if time runs short, curves do not).
+
+Scope, in priority order:
+
+1. **Organic entities (procedural curved rigs — owner-picked method).** Rebuild AshHound, KneelingHollow, WatcherPresence, HagPresence, CrossingSilhouette visual builds from tapered capsules / bent cylinders / lathe shapes in code. HARD CONSTRAINTS: same named joint-group structure (animation + FSM code untouched), same TUNING heights (hound 2.3 etc.), same palette contract (Watcher/Hag pure black), stepped 12fps animation untouched, faceless preserved, dark-but-formed luma band held (T8 numbers as reference). Underfed/attenuated frames per the proportion research — curves must make them MORE unsettling, not cuddly. Tri budget: ≤~600 tris/entity (vs ~12/box) — negligible against 100k.
+2. **Undulating terrain.** Gentle seeded-noise height variation on the exterior ground mesh + smoothed risers between height steps. ⚠️ GAMEPLAY-SAFETY: collision/walkability is 2D grid logic with per-cell heights — the undulation is visual; the plan must solve entity/player/prop y-grounding against the displaced surface (shared noise function sampled by view-y, or amplitude small enough (≲0.15 m) that feet never visibly float; plan-writer reads the y-grounding code (GV T12) and decides).
+3. **Crooked trees.** Bent trunks (2-3 segment lean), seeded per-instance noise displacement on canopy cones, asymmetric silhouettes. Per-tree tri caps MAY be raised (they are budget guards, not design targets) with explicit accounting — total zone tris stay <100k, 1 draw/kind stays.
+4. **Boulder-ized props.** Noise-displaced icosahedron rocks/rubble; rounded gibbet bars if not already cylindrical; lumpy clutter geometry (feeds Task 10's scatter).
+
+Determinism: the game already has a seeded mulberry32 precedent (audio knock jitter) — all noise seeded, never Math.random, so builds stay reproducible and testable. All hand-authored geometry keeps the phase policy: orientation/UV assertions + tri accounting in unit tests. Sequencing: curves tasks (C1-C4) land after Task 9, before Task 10 (atmosphere; its wind then animates the new shapes); Tasks 11-12 close the phase as planned.
