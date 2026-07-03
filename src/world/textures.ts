@@ -32,15 +32,22 @@ export function configureTexture(tex: Texture): Texture {
   return tex;
 }
 
-/** Load + configure every tex PNG. Missing files → flat fallback (never throws). */
+/** Load + configure every tex PNG. Missing/failed loads → flat fallback (never throws). */
 export async function preloadTextures(): Promise<void> {
   loader ??= new TextureLoader();
   await Promise.all(
     (Object.keys(FILES) as TexName[]).map(async (name) => {
-      const resolve = TEX_URLS[`/assets/tex/${FILES[name]}.png`];
-      if (!resolve) return;
-      const tex = await loader!.loadAsync(await resolve());
-      cache.set(name, configureTexture(tex));
+      try {
+        const resolve = TEX_URLS[`/assets/tex/${FILES[name]}.png`];
+        if (!resolve) return;
+        const tex = await loader!.loadAsync(await resolve());
+        cache.set(name, configureTexture(tex));
+      } catch {
+        // Load failure (404, flaky fetch, headless node with no `document`):
+        // the texture simply stays unregistered → getTexture returns undefined
+        // → callers keep the flat-colour fallback. NEVER reject — a single bad
+        // texture must not become the whole-boot failure screen.
+      }
     }),
   );
 }
