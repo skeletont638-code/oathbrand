@@ -120,11 +120,20 @@ export const PILGRIMS_DESCENT: ZoneDef = {
     // the false read is on the set-dressing across the gorge only.
     { id: 'PD-2', zone: 'pilgrims-descent', trigger: { on: 'approach', at: [7, 10], withinM: 3 }, gimmick: 'desaturation', oneLine: 'A banner burns where you can’t reach; yours is safe.' },
   ],
-  // Far cliff across the chasm: far, elevated, unreachable — off-grid backdrop
-  // (col -8, worldPos x=-15 → ≥18 m from every vista trigger cell [1,1]..[1,4]),
-  // PD-1's manifest anchor. Must sit beyond watcher.sightingRangeMinM (16 m) or
-  // the DreadDirector voids the sighting (rule 10) — [1,-3] was only 8 m, so the
-  // Watcher manifested-and-receded before a single visible frame. Kept KEYED BY
-  // ZONE by the run-scoped DreadDirector.
-  watcherAnchors: [[1, -8]],
+  // PD-1's "across it, the watcher" anchor — a far figure ACROSS the chasm void.
+  // [9,5] is a `~` gorge-void cell: the player can never stand there (stepping in
+  // is the lethal fall → ember loss + reset), so it is unreachable, and it sits
+  // across the void the top-ledge vista looks over. The 3rd tuple element is the
+  // anchor's ELEVATION in metres (5.0 m): a void cell's heightGrid is 0, so the
+  // anchor carries its own height — the Watcher stands on a far-cliff top at ~the
+  // band-3 ledge height (4.5 m), his 3 m silhouette BREAKING THE HORIZON against
+  // the sky, instead of the y=0 gorge floor (round 1 left him ~4.5 m below the
+  // ledge sill → occluded + fog-dissolved). Distance matters for visibility: at
+  // 22 m the vista's open fog (far ≈32 m) fully dissolves the black silhouette
+  // (0 pixel delta); [9,5] is ~16 m from the vista ledge — far enough that the
+  // DreadDirector's min-range rule (10) keeps the sighting (fire is from the
+  // arrival cell [1,1], 17 m away), close enough that the vista window reveals a
+  // clear column (≥16 m from EVERY vista trigger cell [1,1]..[1,4]: 16.1 m from
+  // [1,3]/[1,4], 17.9 m from [1,1]). Kept KEYED BY ZONE by the run-scoped director.
+  watcherAnchors: [[9, 5, 5.0]],
 };

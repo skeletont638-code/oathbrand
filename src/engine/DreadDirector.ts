@@ -34,7 +34,7 @@
  */
 import { TUNING } from '../content/tuning';
 import type { ZoneId } from '../content/types';
-import type { GridPos, HagThresholdDef, ScareBeat } from '../world/zoneDef';
+import type { GridPos, HagThresholdDef, ScareBeat, WatcherAnchor } from '../world/zoneDef';
 
 const D = TUNING.greaterVael.dread;
 const W = TUNING.greaterVael.watcher;
@@ -77,7 +77,7 @@ const SCREEN_GIMMICKS: ReadonlySet<string> = new Set<ScreenGimmick>([
 export type ScareActivation =
   | { kind: ScreenGimmick; beatId: string; oneLine: string; everSeen: boolean }
   | { kind: 'pure-visual'; beatId: string; oneLine: string; everSeen: boolean }
-  | { kind: 'watcher'; anchor: GridPos; beatId?: string }
+  | { kind: 'watcher'; anchor: WatcherAnchor; beatId?: string }
   | { kind: 'hag-glimpse'; beatId?: string }; // beatId absent ⇒ a threshold glimpse
 
 /** Distance in meters between two grid cells (2 m grid). */
@@ -111,7 +111,7 @@ export class DreadDirector {
     /** Watcher anchors KEYED BY ZONE (T5 review): one run-scoped director spans
      *  every exterior zone, so a beat's manifest anchor must come from the beat's
      *  OWN zone — never another zone's flattened in. */
-    private readonly anchorsByZone: Partial<Record<ZoneId, GridPos[]>>,
+    private readonly anchorsByZone: Partial<Record<ZoneId, WatcherAnchor[]>>,
     private readonly hag: HagThresholdDef | undefined,
     state: { glitchSeen: string[]; watcherSightings: number },
     private readonly rng: () => number,
@@ -298,7 +298,9 @@ export class DreadDirector {
     // (its cycle reads `sightings - 1`); roll it back if the anchor is too close.
     this.sightings += 1;
     const anchor = this.pickAnchor(beat);
-    if (cellDistM(playerCell, anchor) < W.sightingRangeMinM) {
+    // The range rule is horizontal only — the anchor's optional elevation (index
+    // 2) never shortens the sighting distance, so cellDistM reads the [row,col].
+    if (cellDistM(playerCell, [anchor[0], anchor[1]]) < W.sightingRangeMinM) {
       this.sightings -= 1; // void sighting — never charged, never advances the cycle
       return null;
     }
@@ -314,7 +316,7 @@ export class DreadDirector {
 
   /** Resolve the Watcher's manifest anchor for a beat — from the beat's OWN
    *  zone's anchors only (never another zone's; T5 review). */
-  private pickAnchor(beat: ScareBeat): GridPos {
+  private pickAnchor(beat: ScareBeat): WatcherAnchor {
     const zoneAnchors = this.anchorsByZone[beat.zone] ?? [];
     if (zoneAnchors.length > 0) {
       // Cycle this zone's authored anchors so successive sightings vary position.

@@ -20,7 +20,7 @@ import { BoxGeometry, Color, Group, Mesh, MeshStandardMaterial } from 'three';
 import type { Material } from 'three';
 import { TUNING } from '../content/tuning';
 import { patchMaterial } from '../ps1/patchMaterial';
-import type { GridPos } from '../world/zoneDef';
+import type { WatcherAnchor } from '../world/zoneDef';
 import type { EntityView } from './animator';
 
 const W = TUNING.greaterVael.watcher;
@@ -56,8 +56,8 @@ export class WatcherPresence {
   /** The ACTIVE zone's anchors — re-scoped per zone entry (setAnchors). The
    *  run-scoped presence spans the drop, but a reposition must never wander to
    *  another zone's anchor, so the set it cycles is always the live zone's. */
-  private anchors: GridPos[];
-  private cur: GridPos;
+  private anchors: WatcherAnchor[];
+  private cur: WatcherAnchor;
   private visibleMs = 0;
   private observed = false;
   private sightings: number;
@@ -69,7 +69,7 @@ export class WatcherPresence {
    *   respected and clamped to the per-drop budget.
    */
   constructor(
-    anchors: GridPos[],
+    anchors: WatcherAnchor[],
     private readonly cellM: number,
     seedSightings = 0,
   ) {
@@ -82,7 +82,7 @@ export class WatcherPresence {
    *  is run-scoped for its sighting budget, but the anchor set it may reposition
    *  among is the ACTIVE zone's only — never a cross-zone flatten. Resets the
    *  reposition index; a live manifest is left in place until it recedes. */
-  setAnchors(anchors: GridPos[]): void {
+  setAnchors(anchors: WatcherAnchor[]): void {
     this.anchors = anchors;
     this.idx = 0;
   }
@@ -102,14 +102,18 @@ export class WatcherPresence {
   }
 
   /** The anchor it currently stands on. */
-  get cell(): GridPos {
+  get cell(): WatcherAnchor {
     return this.cur;
   }
 
-  /** World-space centre of the current anchor (a 3 m-tall silhouette's mid-body). */
+  /** World-space centre of the current anchor (a 3 m-tall silhouette's mid-body).
+   *  `y` rides the anchor's optional elevation (index 2, the feet's ground height
+   *  for an off-grid far-cliff backdrop) so the frustum sphere tracks the raised
+   *  column; a 2-tuple anchor keeps its y at mid-body over y=0 (elevation 0). */
   worldPos(): Vec3Like {
     const [row, col] = this.cur;
-    return { x: (col + 0.5) * this.cellM, y: W.heightM * 0.5, z: (row + 0.5) * this.cellM };
+    const elevM = this.cur[2] ?? 0;
+    return { x: (col + 0.5) * this.cellM, y: elevM + W.heightM * 0.5, z: (row + 0.5) * this.cellM };
   }
 
   /**
@@ -117,7 +121,7 @@ export class WatcherPresence {
    * sighting (clamped to the budget) and stands FROZEN. `observed` seeds whether
    * the anchor is currently in view; `update` refreshes it from the live frustum.
    */
-  manifest(anchor: GridPos, observed = false): void {
+  manifest(anchor: WatcherAnchor, observed = false): void {
     this.cur = anchor;
     const i = this.anchors.findIndex(([r, c]) => r === anchor[0] && c === anchor[1]);
     this.idx = i < 0 ? 0 : i;
@@ -237,7 +241,10 @@ export class WatcherView implements EntityView {
     this.root.visible = present;
     if (!present) return;
     const wp = this.watcher.worldPos();
-    this.root.position.set(wp.x, 0, wp.z);
+    // The figure is modelled feet-at-0; `worldPos.y` is the column's MID-body, so
+    // the feet sit at `y - heightM/2` = the anchor's ground elevation (0 for a
+    // ground-level 2-tuple anchor, the far-cliff top for an elevated one).
+    this.root.position.set(wp.x, wp.y - W.heightM * 0.5, wp.z);
   }
 
   dispose(): void {

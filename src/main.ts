@@ -49,7 +49,7 @@ import { dialogueSequence } from './content/dialogue';
 import type { BuiltZone, PlacedDoor } from './world/ZoneBuilder';
 import { ZoneManager } from './world/ZoneManager';
 import { kickOpen, takeItem } from './world/mechanics';
-import type { GridPos, HagThresholdDef, ScareBeat, ZoneDef } from './world/zoneDef';
+import type { HagThresholdDef, ScareBeat, WatcherAnchor, ZoneDef } from './world/zoneDef';
 import { canPass, doorEntry, doorSpan, lockFlag, pairedDoor } from './world/zoneGraph';
 import { VistaDirector } from './world/vista';
 import { buildDragon, disposeDragon } from './world/dragon';
@@ -218,11 +218,11 @@ function mulberry32(seed: number): () => number {
  *  so an off-screen reposition can never wander into another zone's anchor. */
 function exteriorScareData(): {
   scares: ScareBeat[];
-  anchorsByZone: Partial<Record<ZoneId, GridPos[]>>;
+  anchorsByZone: Partial<Record<ZoneId, WatcherAnchor[]>>;
   hag: HagThresholdDef | undefined;
 } {
   const scares: ScareBeat[] = [];
-  const anchorsByZone: Partial<Record<ZoneId, GridPos[]>> = {};
+  const anchorsByZone: Partial<Record<ZoneId, WatcherAnchor[]>> = {};
   let hag: HagThresholdDef | undefined;
   const defs: ZoneDef[] = Object.values(ZONES).filter((d): d is ZoneDef => d !== undefined);
   for (const def of defs) {

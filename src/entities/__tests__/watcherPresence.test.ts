@@ -105,6 +105,25 @@ describe('WatcherPresence — the thing at the fog-line', () => {
     expect(w.present).toBe(false);
   });
 
+  it('lifts worldPos.y by an elevated anchor\'s ground height (off-grid far cliff)', () => {
+    // Round-2 PD-1 fix: an off-grid backdrop anchor carries its own elevation
+    // (tuple index 2) so the Watcher stands on the far cliff-top, not the y=0
+    // gorge floor. worldPos.y is the 3 m column's MID-body, so it reads
+    // elevM + heightM/2; a plain 2-tuple anchor keeps its feet at 0.
+    const elevM = 6;
+    const w = new WatcherPresence([[12, 4, elevM]], CELL, 0);
+    w.manifest([12, 4, elevM]);
+    const raised = w.worldPos();
+    expect(raised.y).toBeCloseTo(elevM + W.heightM * 0.5);
+    // The x/z mapping is unchanged by the elevation.
+    expect(raised.x).toBeCloseTo((4 + 0.5) * CELL);
+    expect(raised.z).toBeCloseTo((12 + 0.5) * CELL);
+
+    const ground = new WatcherPresence(ANCHORS, CELL, 0);
+    ground.manifest(ANCHORS[0]);
+    expect(ground.worldPos().y).toBeCloseTo(W.heightM * 0.5); // feet at 0
+  });
+
   it('auto-recedes after maxVisibleSec, even observed and far', () => {
     const w = new WatcherPresence(ANCHORS, CELL, 0);
     w.manifest(ANCHORS[0]);

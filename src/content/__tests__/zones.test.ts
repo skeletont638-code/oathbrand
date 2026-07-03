@@ -322,6 +322,33 @@ describe('Pilgrim\'s Descent height layer (Task 12)', () => {
       }
     }
   });
+
+  it('the PD-1 Watcher anchor is unreachable and elevated onto the far cliff', () => {
+    // Round-2 visibility fix: the "across it, the watcher" anchor must (a) be a
+    // place the player can never STAND — off-grid, or a gorge-void `~` / border
+    // `#` cell (a void cell is a lethal fall → reset, so it is unreachable) — and
+    // (b) carry an ELEVATION that stands it near/above the band-3 vista ledge
+    // (4.5 m), so its 3 m silhouette breaks the horizon against the sky instead of
+    // sitting on the y=0 gorge floor (round 1: ~4.5 m below the ledge sill →
+    // occluded + fog-dissolved, zero pixel delta).
+    const rows = def.grid.length;
+    const cols = def.grid[0].length;
+    const LEDGE_M = 4.5; // band 3 (heightGrid digit 3 × 1.5 m/level)
+    for (const anchor of def.watcherAnchors!) {
+      const [r, c, elevM] = anchor;
+      const offGrid = r < 0 || r >= rows || c < 0 || c >= cols;
+      const cell = offGrid ? undefined : def.grid[r][c];
+      const unreachable = offGrid || cell === '~' || cell === '#';
+      expect(
+        unreachable,
+        `Watcher anchor ${String(anchor)} must be unreachable (off-grid, void '~', or wall '#') — got cell '${cell}'`,
+      ).toBe(true);
+      expect(
+        elevM ?? 0,
+        `Watcher anchor ${String(anchor)} must carry an elevation ≥ ~the vista ledge (${LEDGE_M} m)`,
+      ).toBeGreaterThanOrEqual(LEDGE_M);
+    }
+  });
 });
 
 describe.each(entries)('zone %s', (id, def) => {

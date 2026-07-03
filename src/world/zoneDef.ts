@@ -22,6 +22,16 @@ export type TileKind = 'wall' | 'floor' | 'void';
 /** Grid coordinate as [row, col] into `ZoneDef.grid`. */
 export type GridPos = [number, number];
 
+/** A Watcher sighting position: `[row, col]` (on the ground, y=0) or
+ *  `[row, col, elevM]` for an OFF-GRID backdrop that stands elevated on a far
+ *  cliff-top rather than the gorge floor. `elevM` is the anchor's ground
+ *  elevation in metres (the Watcher's feet); absent ⇒ 0. An off-grid anchor has
+ *  no `heightGrid` cell to read a height from, so PD-1's "across the chasm"
+ *  Watcher carries its own elevation to break the vista-ledge horizon. Existing
+ *  2-tuple anchors are unchanged (elevation 0). The `[row, col]` prefix still
+ *  drives every distance/cycle check (they read indices 0 and 1). */
+export type WatcherAnchor = [number, number] | [number, number, number];
+
 /** A static decoration/mesh placed on the grid. */
 export interface Prop {
   kind: string;
@@ -261,8 +271,9 @@ export interface ZoneDef {
   exteriorSky?: ExteriorSky;
   /** Authored scare beats the DreadDirector may fire in this zone. */
   scares?: ScareBeat[];
-  /** Watcher sighting positions (may be off-grid backdrop coordinates). */
-  watcherAnchors?: GridPos[];
+  /** Watcher sighting positions (may be off-grid backdrop coordinates, and may
+   *  carry an optional elevation — see WatcherAnchor). */
+  watcherAnchors?: WatcherAnchor[];
   /** The Hag-of-the-Fog-Line threshold for this zone, if any. */
   hagThreshold?: HagThresholdDef;
   ngPlus?: NgPlusVariant;
