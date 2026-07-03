@@ -21,9 +21,11 @@ function minY(geo: BufferGeometry): number {
 }
 
 describe('exteriorForest geometry', () => {
+  // C3 (spec §11.3): caps RAISED with accounting — guards, not targets.
+  // Worst forest ≈ 60 dense + 20 sparse ⇒ ~12k tris; <100k holds with 8× headroom.
   for (const [name, build, triCap] of [
-    ['pine (dense)', pineGeometry, 60],
-    ['trunk (sparse)', trunkGeometry, 40],
+    ['pine (dense)', pineGeometry, 160],
+    ['trunk (sparse)', trunkGeometry, 120],
     ['grass tuft', grassGeometry, 12],
   ] as const) {
     it(`${name}: low-poly, vertex-coloured, base on the ground`, () => {
@@ -57,6 +59,24 @@ describe('exteriorForest geometry', () => {
       const g = build();
       expect(g.getAttribute('uv')).toBeDefined();
       g.dispose();
+    }
+  });
+
+  it('C3: trees are asymmetric (bent trunk breaks mirror symmetry) and deterministic', () => {
+    for (const build of [pineGeometry, trunkGeometry]) {
+      const a = build();
+      const pos = a.getAttribute('position');
+      let minX = Infinity, maxX = -Infinity;
+      for (let i = 0; i < pos.count; i++) {
+        minX = Math.min(minX, pos.getX(i));
+        maxX = Math.max(maxX, pos.getX(i));
+      }
+      expect(Math.abs(minX + maxX)).toBeGreaterThan(0.05); // the lean: |minX| ≠ maxX
+      const b = build();
+      const pb = b.getAttribute('position');
+      for (let i = 0; i < pos.count; i++) expect(pos.getX(i)).toBe(pb.getX(i)); // seeded, reproducible
+      a.dispose();
+      b.dispose();
     }
   });
 

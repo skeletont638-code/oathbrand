@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { BoxGeometry, Group, InstancedMesh, Mesh, MeshStandardMaterial } from 'three';
+import { BoxGeometry, Group, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Quaternion, Vector3 } from 'three';
 import { gridToPlacements, planarUV, ZoneBuilder } from '../ZoneBuilder';
 import { UNDULATION_AMP_M, undulation } from '../noise';
 import type { AssetCache } from '../assets';
@@ -254,6 +254,23 @@ describe('ZoneBuilder.build (exterior)', () => {
       }
     });
     expect(checked).toBeGreaterThan(0);
+  });
+
+  it('C3: tree instances carry seeded tilt; roof wedges stay upright', () => {
+    const built = new ZoneBuilder().build(exteriorZone(['TH', 'T.']), fakeAssets());
+    const m = new Matrix4(); const q = new Quaternion(); const p = new Vector3(); const s = new Vector3();
+    let treeTilted = false;
+    built.group.traverse((o) => {
+      if (!(o instanceof InstancedMesh)) return;
+      for (let i = 0; i < o.count; i++) {
+        o.getMatrixAt(i, m);
+        m.decompose(p, q, s);
+        const tilted = Math.abs(q.x) > 1e-4 || Math.abs(q.z) > 1e-4;
+        if (o.name === 'pine-dense' && tilted) treeTilted = true;
+        if (o.name === 'roof-wedge') expect(tilted).toBe(false); // buildings never lean
+      }
+    });
+    expect(treeTilted).toBe(true);
   });
 
   it('keeps the kit merge bucket count at exactly 1 for an exterior zone (≤6 budget)', () => {

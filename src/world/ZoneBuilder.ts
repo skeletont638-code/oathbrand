@@ -16,6 +16,7 @@
 import {
   BufferGeometry,
   DoubleSide,
+  Euler,
   Float32BufferAttribute,
   Group,
   InstancedMesh,
@@ -377,7 +378,7 @@ function cellNoise(row: number, col: number, salt: number): number {
  * the crunched bark map is absent (tests / no fetch) `map` is undefined and
  * the material reads as the flat vertex-coloured look — never throws.
  */
-function stampForest(group: Group, name: string, geometry: BufferGeometry, spots: ForestSpot[]): void {
+function stampForest(group: Group, name: string, geometry: BufferGeometry, spots: ForestSpot[], opts: { tilt?: boolean } = {}): void {
   if (spots.length === 0) {
     geometry.dispose();
     return;
@@ -398,12 +399,22 @@ function stampForest(group: Group, name: string, geometry: BufferGeometry, spots
   mesh.receiveShadow = false;
   const m = new Matrix4();
   const q = new Quaternion();
+  const euler = new Euler();
   const s = new Vector3();
   const p = new Vector3();
   spots.forEach((spot, i) => {
     const yaw = cellNoise(spot.row, spot.col, 1) * Math.PI * 2;
     const scale = 0.85 + cellNoise(spot.row, spot.col, 2) * 0.35; // 0.85–1.2
-    m.compose(p.set(spot.x, spot.y, spot.z), q.setFromAxisAngle(UP, yaw), s.set(scale, scale, scale));
+    if (opts.tilt) {
+      // Seeded per-instance lean + squash (C3): the instance matrix carries the
+      // per-tree crookedness the shared geometry can't — 1 draw/kind held.
+      const tx = (cellNoise(spot.row, spot.col, 4) - 0.5) * 0.16; // ±0.08 rad
+      const tz = (cellNoise(spot.row, spot.col, 6) - 0.5) * 0.16;
+      const squash = 0.88 + cellNoise(spot.row, spot.col, 5) * 0.28; // 0.88–1.16 y
+      m.compose(p.set(spot.x, spot.y, spot.z), q.setFromEuler(euler.set(tx, yaw, tz)), s.set(scale, scale * squash, scale));
+    } else {
+      m.compose(p.set(spot.x, spot.y, spot.z), q.setFromAxisAngle(UP, yaw), s.set(scale, scale, scale));
+    }
     mesh.setMatrixAt(i, m);
   });
   mesh.instanceMatrix.needsUpdate = true;
@@ -781,9 +792,9 @@ export class ZoneBuilder {
     // Each forest kind becomes ONE InstancedMesh (1 draw call); the skirt is a
     // single dark-rock mesh; the backdrop is a dome + moon + ash Points.
     if (def.kind === 'exterior') {
-      stampForest(group, GRASS_KIND, grassGeometry(), grass);
-      stampForest(group, TRUNK_KIND, trunkGeometry(), sparse);
-      stampForest(group, TREE_KIND, pineGeometry(), dense);
+      stampForest(group, GRASS_KIND, grassGeometry(), grass, { tilt: true });
+      stampForest(group, TRUNK_KIND, trunkGeometry(), sparse, { tilt: true });
+      stampForest(group, TREE_KIND, pineGeometry(), dense, { tilt: true });
 
       const groundMesh = buildExteriorGround(cell, ground);
       if (groundMesh) group.add(groundMesh);

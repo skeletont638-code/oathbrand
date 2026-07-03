@@ -9,7 +9,8 @@
  * by its population, so the forest must be *very* low-poly to hold the drop's
  * `tris < 100k visible` budget across dozens of trees (a fetched CC0 pine we
  * evaluated was ~1.7k tris — ~40 of them alone would blow it). Authoring the
- * geometry here caps the dense pine at ~25 tris and bakes the OATHBRAND ash
+ * geometry here caps the dense pine at ~74 tris (crooked rebuild, C3; budget
+ * guard 160) and bakes the OATHBRAND ash
  * palette straight into vertex colours (no texture, no download, ~0 bundle
  * weight) — the flat-shaded PS1 look the whole game targets. These meshes are
  * original CC0 work (see assets/LICENSES.md → "Procedural geometry").
@@ -20,6 +21,7 @@
  */
 import { BufferGeometry, ConeGeometry, CylinderGeometry, Float32BufferAttribute } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { displaceRadial } from './noise';
 
 // Dark, desaturated ash/forest palette (the world is dead; nothing is lush).
 // Rebalanced under the moon key light (Task 3): the old values were darkened
@@ -49,17 +51,27 @@ function paint(geo: BufferGeometry, hex: number): BufferGeometry {
   return geo;
 }
 
-/** A cone with its base sitting at `baseY` (three centres cones on the origin). */
-function coneAt(radius: number, height: number, baseY: number, hex: number): BufferGeometry {
-  const g = new ConeGeometry(radius, height, SEG, 1, true); // open-ended: skip the base cap
-  g.translate(0, baseY + height / 2, 0);
+/** A trunk bowed toward +x with a progressive (t²) lean — base planted, crown
+ *  carried sideways. 2 height segments = 3 lean stations: the low-poly PS1
+ *  "segmented bend", not a smooth arc. Open-ended like the old `trunk()`. */
+function bentTrunk(radiusTop: number, radiusBottom: number, height: number, leanM: number, hex: number): BufferGeometry {
+  const g = new CylinderGeometry(radiusTop, radiusBottom, height, SEG, 2, true);
+  g.translate(0, height / 2, 0);
+  const pos = g.getAttribute('position');
+  for (let i = 0; i < pos.count; i++) {
+    const t = pos.getY(i) / height;
+    pos.setX(i, pos.getX(i) + leanM * t * t);
+  }
+  pos.needsUpdate = true;
   return paint(g, hex);
 }
 
-/** A trunk cylinder with its base at y = 0. */
-function trunk(radiusTop: number, radiusBottom: number, height: number, hex: number): BufferGeometry {
-  const g = new CylinderGeometry(radiusTop, radiusBottom, height, SEG, 1, true); // open-ended sides
-  g.translate(0, height / 2, 0);
+/** A needle cone with seeded lumpy displacement, its axis carried `xOff` off
+ *  the root line (following the trunk's lean) — the asymmetric dead canopy. */
+function crookedCone(radius: number, height: number, baseY: number, wobbleM: number, seed: number, xOff: number, hex: number): BufferGeometry {
+  const g = new ConeGeometry(radius, height, SEG + 1, 2, true);
+  displaceRadial(g, wobbleM, seed);
+  g.translate(xOff, baseY + height / 2, 0);
   return paint(g, hex);
 }
 
@@ -72,26 +84,31 @@ function merge(parts: BufferGeometry[]): BufferGeometry {
 }
 
 /**
- * A dead pine: a short trunk under three stacked needle cones. ~25 tris, ~3.1 m.
+ * A dead pine, CROOKED (C3): a bowed trunk under three lumpy, offset needle
+ * cones — the crown carried ~0.22 m off the root line. ~74 tris (cap 160), ~3.1 m.
  * The dense treeline/field-border instance (blocks; renders where `T`/`#`).
  */
 export function pineGeometry(): BufferGeometry {
+  const LEAN = 0.22;
+  const at = (y: number): number => LEAN * (y / 3.1) ** 2; // the trunk's lean at height y
   return merge([
-    trunk(0.11, 0.15, 0.7, BARK),
-    coneAt(0.9, 1.2, 0.5, NEEDLE),
-    coneAt(0.68, 1.1, 1.3, NEEDLE),
-    coneAt(0.46, 1.0, 2.1, NEEDLE),
+    bentTrunk(0.1, 0.16, 0.9, at(0.9), BARK),
+    crookedCone(0.92, 1.2, 0.5, 0.11, 0xf1, at(1.1), NEEDLE),
+    crookedCone(0.66, 1.1, 1.3, 0.1, 0xf2, at(1.85), NEEDLE),
+    crookedCone(0.44, 1.0, 2.1, 0.09, 0xf3, at(2.6), NEEDLE),
   ]);
 }
 
 /**
- * A bare/sparse trunk with a thin crown — the walkable, partial-occlusion
- * instance (`t` cells). Tall and mostly bald: you can see (and walk) past it.
+ * A bare/sparse trunk, CROOKED: a hard 0.28 m bow with one thin lumpy crown.
+ * ~38 tris (cap 120). The walkable, partial-occlusion instance (`t` cells) —
+ * tall and mostly bald: you can see (and walk) past it, as before.
  */
 export function trunkGeometry(): BufferGeometry {
+  const LEAN = 0.28;
   return merge([
-    trunk(0.13, 0.17, 1.9, BARK),
-    coneAt(0.5, 0.9, 1.7, NEEDLE),
+    bentTrunk(0.12, 0.18, 1.9, LEAN, BARK),
+    crookedCone(0.5, 0.9, 1.7, 0.08, 0xf4, LEAN * 0.8, NEEDLE),
   ]);
 }
 

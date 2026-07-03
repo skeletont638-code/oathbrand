@@ -47,7 +47,7 @@ so the drop's `tris < 100k visible` budget forces *very* low-poly trees; real
 CC0 pines evaluated for this task (Quaternius "Pine", poly.pizza `79gmlLnweB`,
 CC0 — ~1.7k tris; and "Pine Tree with Snow" `17vQv2X5rh`, CC0 — ~1.7k tris)
 would blow the budget at a few dozen dense trees. Authoring the geometry caps
-the dense pine at ~25 tris, keeps the bundle unchanged (no GLB, no texture), and
+the dense pine at ~74 tris (crooked rebuild, C3; budget guard 160), keeps the bundle unchanged (no GLB, no texture), and
 gives the flat-shaded PS1 look directly — so no `downsample-textures` darkening
 pass is needed (the palette is authored dark). Verified in-browser at 9 draw
 calls / ~16k triangles for a 105-tree test zone (`docs/shots/gv-task2-*.png`).
