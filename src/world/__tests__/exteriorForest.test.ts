@@ -40,6 +40,26 @@ describe('exteriorForest geometry', () => {
     });
   }
 
+  it('grass has a uv attribute so the affine bark map can sample it', () => {
+    const geo = grassGeometry();
+    const uv = geo.getAttribute('uv');
+    expect(uv).toBeDefined();
+    // Lesson (1): a hand-authored UV claim gets a real assertion, not just
+    // "defined" — every blade vertex must be UV'd or a partial-attribute merge
+    // would silently drop uv (three's mergeGeometries keeps only shared attrs).
+    expect(uv!.itemSize).toBe(2);
+    expect(uv!.count).toBe(geo.getAttribute('position').count);
+    geo.dispose();
+  });
+
+  it('pine/trunk already carry uv (cone/cylinder) for the map', () => {
+    for (const build of [pineGeometry, trunkGeometry]) {
+      const g = build();
+      expect(g.getAttribute('uv')).toBeDefined();
+      g.dispose();
+    }
+  });
+
   it('rebalanced under the key light: vertex colours sit in the readable band', () => {
     for (const build of [pineGeometry, trunkGeometry, grassGeometry]) {
       const geo = build();

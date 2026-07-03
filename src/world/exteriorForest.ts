@@ -111,6 +111,14 @@ export function grassGeometry(): BufferGeometry {
       w, 0, 0, -w, 0, 0, 0.02, h, 0, // back (wound the other way)
     ]);
     g.setAttribute('position', new Float32BufferAttribute(verts, 3));
+    // Per-blade UVs so the affine bark map (a multiply over the BLADE tint)
+    // has coordinates to sample — cones/cylinders carry their own UVs, but a
+    // hand-built quad does not. One texture span per blade (base→tip),
+    // vertex order matched to `verts` above (front tri, then back tri).
+    g.setAttribute('uv', new Float32BufferAttribute(new Float32Array([
+      0, 0, 1, 0, 0.5, 1, // front tri
+      1, 0, 0, 0, 0.5, 1, // back tri
+    ]), 2));
     g.rotateY((i * Math.PI) / 3);
     blades.push(paint(g, BLADE));
   }

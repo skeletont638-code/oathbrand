@@ -47,6 +47,16 @@ PHOTO_SOURCES = {
     'kneeler-cloth': os.path.join(CACHE, 'ambientcg', 'kneeler-cloth.jpg'),
 }
 
+# MULTIPLY / detail maps (Task 7). These are NOT standalone albedos: the material
+# keeps `vertexColors` ON and the map is a multiply over a baked vertex tint, so
+# the tint supplies the HUE and the map supplies only high-frequency luminance
+# "crunch". Palette-darkening them (process_atlas) double-darkens — map(≈0.27) ×
+# already-dark tint(≈0.35) crushes the render below the sky (verified: forest
+# trees went pure black). So a detail map is instead DESATURATED to grey and
+# lifted HIGH-KEY (95th-percentile → white) so the multiply modulates ~×0.9
+# rather than darkening, keeping the baked readable band while adding the crunch.
+DETAIL_MAPS = {'bark'}  # bark multiplies the BARK/NEEDLE forest vertex tints
+
 
 def process_atlas(src_path):
     """1024 px atlas -> 128 px, darkened toward palette, posterized 5 bits."""
@@ -64,6 +74,31 @@ def process_atlas(src_path):
                 cache[key] = out
             px[x, y] = (out[0], out[1], out[2], a)
     return im
+
+
+def process_detail_map(src_path):
+    """A MULTIPLY/detail map -> 128 px, desaturated + high-key, posterized 5 bits.
+
+    Unlike process_atlas (standalone albedo, palette-darkened), this is meant to
+    be multiplied by a material's vertex tint (which owns the hue): so drop the
+    colour to greyscale, gain so the 95th-percentile luma hits white (mean lands
+    ~0.9, the multiply barely darkens), keep the crunch, posterize 5-bit. Idempotent.
+    """
+    im = Image.open(src_path).convert('RGB').resize((SIZE, SIZE), Image.BILINEAR)
+    grey = im.convert('L')  # luminance only — the vertex tint supplies the hue
+    px = grey.load()
+    vals = sorted(px[x, y] for y in range(SIZE) for x in range(SIZE))
+    p95 = vals[int(0.95 * (len(vals) - 1))]
+    gain = 255.0 / max(p95, 1)
+    levels = (1 << G.POSTERIZE_BITS) - 1
+    out = Image.new('RGB', (SIZE, SIZE))
+    op = out.load()
+    for y in range(SIZE):
+        for x in range(SIZE):
+            v = min(255.0, px[x, y] * gain)
+            q = round(round(v / 255 * levels) / levels * 255)
+            op[x, y] = (q, q, q)
+    return out
 
 
 def png_bytes(im):
@@ -91,7 +126,9 @@ def main():
         if not os.path.exists(src):
             print(f'MISSING photo source: {src} — run scripts/fetch-assets.sh first.', file=sys.stderr)
             sys.exit(1)
-        im = process_atlas(src)  # resize 128 → darken toward palette → posterize 5-bit
+        # Detail/multiply maps get a high-key greyscale treatment; standalone
+        # albedos get the palette-darken. (Task 7 — see DETAIL_MAPS above.)
+        im = process_detail_map(src) if name in DETAIL_MAPS else process_atlas(src)
         # The palette-darken + 5-bit posterize leaves ≤~256 distinct colours, so
         # an indexed PNG is LOSSLESS (verified pixel-identical) yet ~half the size
         # of RGBA — high-frequency natural photo detail is dense, and this keeps

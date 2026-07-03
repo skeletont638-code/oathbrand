@@ -348,16 +348,28 @@ function cellNoise(row: number, col: number, salt: number): number {
  * Stamp one forest kind into a single `InstancedMesh` (1 draw call), grounded
  * at each cell's terrain height with a deterministic yaw + slight scale jitter
  * so the treeline never looks tiled. Empty lists build nothing (and free the
- * geometry). The material is flat-shaded, vertex-coloured, PS1-patched.
+ * geometry). The material is flat-shaded, PS1-patched, and samples ONE shared
+ * crunchy bark map (Task 7) MULTIPLIED by the baked BARK/NEEDLE/BLADE vertex
+ * tints — one map per instanced kind, so trunk+cones stay a single draw call
+ * and per-instance vertex-colour variation survives (map × vertexColor). When
+ * the crunched bark map is absent (tests / no fetch) `map` is undefined and
+ * the material reads as the flat vertex-coloured look — never throws.
  */
 function stampForest(group: Group, name: string, geometry: BufferGeometry, spots: ForestSpot[]): void {
   if (spots.length === 0) {
     geometry.dispose();
     return;
   }
-  const material = new MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, flatShading: true });
-  forceNearest(material); // no map on procedural geometry — a no-op, kept for parity
-  patchMaterial(material);
+  const map = getTexture('bark'); // one bark map shared by trunk + canopy (kept 1 draw/kind)
+  const material = new MeshStandardMaterial({
+    vertexColors: true, // per-instance BARK/NEEDLE/BLADE tint stays ON — it multiplies the map
+    roughness: 1,
+    metalness: 0,
+    flatShading: true,
+  });
+  if (map) material.map = map; // set BEFORE patchMaterial/first compile so the affine warp binds (absent → flat fallback)
+  forceNearest(material); // crunchy PS1 sampler when a map is present; no-op when absent
+  patchMaterial(material); // affine applies (map set); vertexColors × map = tinted crunch
   const mesh = new InstancedMesh(geometry, material, spots.length);
   mesh.name = name;
   mesh.castShadow = false;

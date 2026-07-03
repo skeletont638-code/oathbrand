@@ -242,6 +242,19 @@ describe('ZoneBuilder.build (exterior)', () => {
     }
   });
 
+  it('forest instanced materials keep vertexColors (multiply tint) with a map slot', () => {
+    const built = new ZoneBuilder().build(exteriorZone([',t', 'T#']), fakeAssets());
+    let checked = 0;
+    built.group.traverse((o) => {
+      if (o instanceof InstancedMesh) {
+        const m = o.material as MeshStandardMaterial;
+        expect(m.vertexColors).toBe(true); // per-instance tint survives × bark map
+        checked++;
+      }
+    });
+    expect(checked).toBeGreaterThan(0);
+  });
+
   it('keeps the kit merge bucket count at exactly 1 for an exterior zone (≤6 budget)', () => {
     const built = new ZoneBuilder().build(exteriorZone(['H,t', 'T#.']), fakeAssets());
     // only the wall/H atlas remains a kit bucket; ground/skirt/forest are separate meshes
