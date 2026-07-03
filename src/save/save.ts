@@ -155,6 +155,33 @@ export function migrateV1toV2(v1: SaveDataV1): SaveData {
 }
 
 /**
+ * The greaterVael block a main.ts checkpoint writes (Task 13, T7 obligation).
+ * Copies the live dread ledger + Hag slice and mirrors the REAL
+ * `greater-vael-open` flag into `open`, so a v2 checkpoint is authoritative and
+ * self-describing — no longer a version-1 payload the migration back-fills on
+ * read (which made `open` inert and oscillated the stored version every
+ * save/load). Kept here (not inline in main.ts's start-scene closure) so the
+ * write shape is unit-tested and every checkpoint site writes an identical
+ * block. Arrays are copied so a later mutation of the run-state source can
+ * never leak into a written save.
+ */
+export function greaterVaelCheckpoint(live: {
+  open: boolean;
+  glitchSeen: string[];
+  watcherSightings: number;
+  maxEmberCap: number;
+  bargains: string[];
+}): DreadSave {
+  return {
+    open: live.open,
+    glitchSeen: [...live.glitchSeen],
+    watcherSightings: live.watcherSightings,
+    maxEmberCap: live.maxEmberCap,
+    bargains: [...live.bargains],
+  };
+}
+
+/**
  * A malformed `greaterVael` degrades to a fresh ledger per-block — never sinks
  * the whole save. Absent or well-formed ledgers are returned untouched (so a
  * clean v2 save round-trips exactly). Applied before validation in `loadGame`.

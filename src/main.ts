@@ -34,7 +34,7 @@ import type { Interactable } from './player/Interactor';
 import { KneelRitual } from './player/Kneel';
 import { moveVector } from './player/movement';
 import { PS1Pipeline } from './ps1/PS1Pipeline';
-import { clearSave, loadGame, saveGame, secondVigilSave } from './save/save';
+import { clearSave, greaterVaelCheckpoint, loadGame, saveGame, secondVigilSave } from './save/save';
 import type { SaveData } from './save/save';
 import { VisionPlayer } from './engine/VisionPlayer';
 import type { GhostSprite } from './engine/VisionPlayer';
@@ -425,7 +425,10 @@ async function startScene(): Promise<void> {
       // Merge over any prior save so progression fields survive checkpoints.
       const prev = loadGame();
       const data: SaveData = {
-        version: 1,
+        // Task 13 (T7): write the canonical v2 shape DIRECTLY — no more version-1
+        // checkpoints that loadGame re-migrates + rewrites on every read (the
+        // benign v1↔v2 oscillation). The save/load round-trip is now a no-op.
+        version: 2,
         zone: zones.current,
         bannerId,
         embers: brand.embers,
@@ -444,7 +447,14 @@ async function startScene(): Promise<void> {
         // spent this drop, so fidelity scarcity + the caps survive a reload.
         // Carries the prior save's ledger forward until an exterior run advances it.
         // Task 5: also banks the Hag ember cap + bargains struck this drop.
-        greaterVael: { ...dread.snapshot(), maxEmberCap: emberCap, bargains: [...hagBargains] },
+        // Task 13 (T7): mirror the REAL `greater-vael-open` flag into `open`, so
+        // the postern derives from the save (authoritative), not just endingsSeen.
+        greaterVael: greaterVaelCheckpoint({
+          open: flags.has('greater-vael-open'),
+          ...dread.snapshot(),
+          maxEmberCap: emberCap,
+          bargains: hagBargains,
+        }),
       };
       saveGame(data);
     },
@@ -1179,7 +1189,8 @@ async function startScene(): Promise<void> {
     flags.add('greater-vael-open');
     const prev = loadGame();
     const base: SaveData = prev ?? {
-      version: 1,
+      // Task 13 (T7): the no-prior-save fallback writes the canonical v2 shape too.
+      version: 2,
       zone: zones.current,
       bannerId: '',
       embers: brand.embers,
@@ -1190,7 +1201,22 @@ async function startScene(): Promise<void> {
       ngPlus,
     };
     const endingsSeen = [...new Set([...(base.endingsSeen ?? []), ending])];
-    saveGame({ ...base, zone: zones.current, endingsSeen, flags: [...flags], ngPlus });
+    saveGame({
+      ...base,
+      // Task 13 (T7): normalise a migrated-in prev to v2 and mirror the now-open
+      // postern into save.greaterVael.open (the ending just unsealed it).
+      version: 2,
+      zone: zones.current,
+      endingsSeen,
+      flags: [...flags],
+      ngPlus,
+      greaterVael: greaterVaelCheckpoint({
+        open: flags.has('greater-vael-open'),
+        ...dread.snapshot(),
+        maxEmberCap: emberCap,
+        bargains: hagBargains,
+      }),
+    });
   }
 
   /** Hand the finished ending off to the credits, then the restart card. */
@@ -1322,7 +1348,14 @@ async function startScene(): Promise<void> {
       visionsSeen: [
         ...new Set([...(prev.visionsSeen ?? []), ...vista.seenIds, ...visionPlayer.seenIds]),
       ],
-      greaterVael: { ...dread.snapshot(), maxEmberCap: emberCap, bargains: [...hagBargains] },
+      // Task 13 (T7): mirror the live postern flag into `open` here too, so a
+      // bargain-time write keeps the block authoritative.
+      greaterVael: greaterVaelCheckpoint({
+        open: flags.has('greater-vael-open'),
+        ...dread.snapshot(),
+        maxEmberCap: emberCap,
+        bargains: hagBargains,
+      }),
     });
   }
 

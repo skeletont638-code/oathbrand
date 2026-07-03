@@ -1,5 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { saveGame, loadGame, clearSave, migrateV1toV2, secondVigilSave, SAVE_KEY } from '../save';
+import {
+  saveGame,
+  loadGame,
+  clearSave,
+  migrateV1toV2,
+  secondVigilSave,
+  greaterVaelCheckpoint,
+  SAVE_KEY,
+} from '../save';
 import type { SaveData, SaveDataV1 } from '../save';
 
 /** Minimal in-memory localStorage stand-in (vitest runs in node, no DOM). */
@@ -244,6 +252,72 @@ describe('save schema v2 + v1→v2 migration', () => {
       watcherSightings: 0,
       glitchSeen: [],
     });
+  });
+
+  it('greaterVaelCheckpoint mirrors the live greater-vael-open flag into `open`', () => {
+    // Task 13 (T7 obligation): main.ts checkpoints write the REAL flag state into
+    // save.greaterVael.open — no longer an inert field the migration back-fills.
+    expect(
+      greaterVaelCheckpoint({
+        open: true,
+        glitchSeen: ['knock'],
+        watcherSightings: 2,
+        maxEmberCap: 3,
+        bargains: ['hag-tithed'],
+      }),
+    ).toEqual({
+      open: true,
+      glitchSeen: ['knock'],
+      watcherSightings: 2,
+      maxEmberCap: 3,
+      bargains: ['hag-tithed'],
+    });
+    // A still-sealed postern writes open:false, not an absent field.
+    expect(
+      greaterVaelCheckpoint({
+        open: false,
+        glitchSeen: [],
+        watcherSightings: 0,
+        maxEmberCap: 5,
+        bargains: [],
+      }).open,
+    ).toBe(false);
+  });
+
+  it('greaterVaelCheckpoint copies its arrays (a later source mutation never leaks)', () => {
+    const glitchSeen = ['knock'];
+    const bargains = ['hag-tithed'];
+    const block = greaterVaelCheckpoint({
+      open: true,
+      glitchSeen,
+      watcherSightings: 1,
+      maxEmberCap: 4,
+      bargains,
+    });
+    glitchSeen.push('creak');
+    bargains.push('curdle');
+    expect(block.glitchSeen).toEqual(['knock']);
+    expect(block.bargains).toEqual(['hag-tithed']);
+  });
+
+  it('a v2 checkpoint block round-trips with NO migration rewrite (no v1↔v2 churn)', () => {
+    // The T7 bug: main.ts wrote version:1, loadGame migrated to v2 on read and
+    // rewrote in place → the payload oscillated every save/load. A v2 checkpoint
+    // must load back byte-identical and leave the stored version at 2.
+    const data: SaveData = {
+      ...SAMPLE_V2,
+      greaterVael: greaterVaelCheckpoint({
+        open: true,
+        glitchSeen: [],
+        watcherSightings: 0,
+        maxEmberCap: 5,
+        bargains: [],
+      }),
+    };
+    saveGame(data);
+    expect(loadGame()).toEqual(data);
+    const stored: unknown = JSON.parse(localStorage.getItem(SAVE_KEY) as string);
+    expect((stored as { version: number }).version).toBe(2); // not touched by migration
   });
 
   it('secondVigilSave bumps to v2 and DROPS greaterVael so the tithed cap restores', () => {
