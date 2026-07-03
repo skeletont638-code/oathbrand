@@ -511,6 +511,8 @@ async function startScene(): Promise<void> {
     {
       glitchSeen: save?.greaterVael?.glitchSeen ?? [],
       watcherSightings: save?.greaterVael?.watcherSightings ?? 0,
+      // Finding 1: beats already fired this drop stay spent across a reload.
+      firedBeatIds: save?.greaterVael?.firedBeatIds ?? [],
     },
     mulberry32(runSeed),
   );

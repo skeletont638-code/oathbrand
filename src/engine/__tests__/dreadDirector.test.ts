@@ -272,6 +272,61 @@ describe('DreadDirector — scheduling rules', () => {
     expect(d.watcherSightings).toBe(2);
   });
 
+  // --- Finding 1: authored beats are one-shot per drop (firedBeatIds) --------
+
+  it('an approach beat, once fired, never re-fires on re-approach (AF-3 no-refire)', () => {
+    // AF-3 (approach the Hag cairn) used to RE-FIRE every frame the player was
+    // within range through the multi-step bargain, capping desaturation at 2 and
+    // permanently suppressing PD-2. With the per-beat guard it fires exactly once.
+    const beat: ScareBeat[] = [{
+      id: 'AF-3', zone: 'ashen-forest-n',
+      trigger: { on: 'approach', at: [8, 9], withinM: 4 }, gimmick: 'desaturation', oneLine: 'hag',
+    }];
+    const d = new DreadDirector(beat, {}, undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
+    expect(d.update(ctx([8, 9], { zone: 'ashen-forest-n' })).map((a) => a.kind)).toEqual(['desaturation']);
+    expect(d.beatsFired).toBe(1);
+    // Leave + burn the full cooldown in-zone, then re-approach: no second fire.
+    d.update(ctx([1, 1], { zone: 'ashen-forest-n', dtMs: D.minScareGapSec * 1000 + 1000 }));
+    expect(d.update(ctx([8, 9], { zone: 'ashen-forest-n' }))).toEqual([]);
+    expect(d.beatsFired).toBe(1); // still one — the fired beat is spent
+  });
+
+  it('a re-crossed beat does not burn its gimmick budget, so a later same-gimmick beat still fires (AF-2 → PD-1)', () => {
+    // AF-2 and PD-1 both use snap-grid (cap 2×). Re-crossing AF-2's cell must not
+    // spend the snap-grid budget, or the hero beat PD-1 could never fire. (Both
+    // beats stand in with cellEnter triggers to exercise the mechanism headlessly.)
+    const beats: ScareBeat[] = [
+      { id: 'AF-2', zone: 'ashen-forest-n', trigger: { on: 'cellEnter', cells: [[6, 7]] }, gimmick: 'snap-grid', oneLine: 'af2' },
+      { id: 'PD-1', zone: 'pilgrims-descent', trigger: { on: 'cellEnter', cells: [[1, 1]] }, gimmick: 'snap-grid', oneLine: 'pd1' },
+    ];
+    const d = new DreadDirector(beats, {}, undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
+    d.update(ctx([5, 5], { zone: 'ashen-forest-n' })); // baseline
+    expect(d.update(ctx([6, 7], { zone: 'ashen-forest-n' })).map((a) => a.kind)).toEqual(['snap-grid']); // AF-2 fires
+    // Re-cross AF-2's cell three times — each is a no-op (per-beat guard).
+    for (let i = 0; i < 3; i++) {
+      d.update(ctx([5, 5], { zone: 'ashen-forest-n', dtMs: D.minScareGapSec * 1000 + 1000 }));
+      expect(d.update(ctx([6, 7], { zone: 'ashen-forest-n' }))).toEqual([]);
+    }
+    // PD-1 in its own zone still has snap-grid budget (used 1/2), so it fires.
+    d.update(ctx([9, 9], { zone: 'pilgrims-descent', dtMs: D.minScareGapSec * 1000 + 1000 }));
+    expect(d.update(ctx([1, 1], { zone: 'pilgrims-descent' })).map((a) => a.kind)).toEqual(['snap-grid']);
+    expect(d.beatsFired).toBe(2); // exactly two distinct beats, never more
+  });
+
+  it('banks firedBeatIds in the snapshot and honours a beat already fired in a prior save', () => {
+    const beat: ScareBeat[] = [{
+      id: 'AF-3', zone: 'gate-fields',
+      trigger: { on: 'approach', at: [9, 3], withinM: 3 }, gimmick: 'silence-spike', oneLine: 'x',
+    }];
+    const d = new DreadDirector(beat, {}, undefined, { glitchSeen: [], watcherSightings: 0, firedBeatIds: [] }, () => 0);
+    d.update(ctx([9, 3]));
+    expect(d.snapshot().firedBeatIds).toContain('AF-3');
+    // A reload seeded with AF-3 already fired must NOT fire it again.
+    const d2 = new DreadDirector(beat, {}, undefined, { glitchSeen: [], watcherSightings: 0, firedBeatIds: ['AF-3'] }, () => 0);
+    expect(d2.update(ctx([9, 3]))).toEqual([]);
+    expect(d2.beatsFired).toBe(0);
+  });
+
   it('only evaluates beats belonging to the current zone', () => {
     const cross: ScareBeat[] = [{
       id: 'X', zone: 'ashen-forest-n',

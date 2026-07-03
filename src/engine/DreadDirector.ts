@@ -94,6 +94,13 @@ export class DreadDirector {
   private firedBeats = 0;
   private sightings: number;
   private readonly glitchSeen: Set<string>;
+  /** Finding 1: authored beats are ONE-SHOT per drop. A beat whose id is banked
+   *  here has already fired and can never fire again — the triggers are level-
+   *  gated (approach/brandPulse re-satisfy every frame in range; cellEnter re-
+   *  crosses), so without this guard a beat re-fires until its gimmick hits the
+   *  2× cap and starves a later same-gimmick beat (AF-3→PD-2, AF-2→PD-1). Seeded
+   *  from the save so a reload never re-arms a beat the drop already spent. */
+  private readonly firedBeatIds: Set<string>;
   /** Per-gimmick usage counter (rule 5), keyed by the screen-gimmick id. */
   private readonly gimmickUse = new Map<string, number>();
   /** False-pulse fires already spent per zone (rule 7). */
@@ -113,11 +120,12 @@ export class DreadDirector {
      *  OWN zone — never another zone's flattened in. */
     private readonly anchorsByZone: Partial<Record<ZoneId, WatcherAnchor[]>>,
     private readonly hag: HagThresholdDef | undefined,
-    state: { glitchSeen: string[]; watcherSightings: number },
+    state: { glitchSeen: string[]; watcherSightings: number; firedBeatIds?: string[] },
     private readonly rng: () => number,
   ) {
     this.glitchSeen = new Set(state.glitchSeen);
     this.sightings = state.watcherSightings;
+    this.firedBeatIds = new Set(state.firedBeatIds ?? []);
     // Bank the seeded target crossing for every false-pulse beat, once, at
     // construction — so the choice is stable for the whole run.
     for (const beat of this.scares) {
@@ -144,8 +152,12 @@ export class DreadDirector {
   }
 
   /** The persistable slice for the save (banked at each kneel checkpoint). */
-  snapshot(): { glitchSeen: string[]; watcherSightings: number } {
-    return { glitchSeen: [...this.glitchSeen], watcherSightings: this.sightings };
+  snapshot(): { glitchSeen: string[]; watcherSightings: number; firedBeatIds: string[] } {
+    return {
+      glitchSeen: [...this.glitchSeen],
+      watcherSightings: this.sightings,
+      firedBeatIds: [...this.firedBeatIds],
+    };
   }
 
   /**
@@ -193,6 +205,7 @@ export class DreadDirector {
     if (this.firedBeats < D.maxBeatsPerDrop) {
       for (const beat of this.scares) {
         if (beat.zone !== ctx.zone) continue;
+        if (this.firedBeatIds.has(beat.id)) continue; // rule: one-shot per drop (finding 1)
         if (!this.triggerMatches(beat, ctx, crossedInto)) continue;
         if (!this.passesCaps(beat, ctx.zone)) continue;
         return this.fire(beat, ctx.zone, ctx.cell);
@@ -260,6 +273,7 @@ export class DreadDirector {
     // Rule 1: the fire (re)starts the full shared cooldown.
     this.cooldownMs = D.minScareGapSec * 1000;
     this.firedBeats += 1;
+    this.firedBeatIds.add(beat.id); // finding 1: spent — never fires again this drop
     const out: ScareActivation[] = [];
     const g = beat.gimmick;
 

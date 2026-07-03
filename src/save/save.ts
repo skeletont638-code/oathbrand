@@ -31,6 +31,10 @@ export interface DreadSave {
   maxEmberCap?: number;
   /** The Hag bargains struck this drop (mirrors HagState). Absent ⇒ none. */
   bargains?: string[];
+  /** Authored scare beats already fired this drop (finding 1): each beat is
+   *  one-shot per drop, so the ids survive a reload and a spent beat never
+   *  re-arms. OPTIONAL + additive — absent on pre-fix v2 saves ⇒ none fired. */
+  firedBeatIds?: string[];
 }
 
 /** Fields shared by every save-schema version. */
@@ -125,12 +129,21 @@ function isDreadSave(v: unknown): v is DreadSave | undefined {
   // The Task-5 Hag slice is optional + additive: if present it must be well-formed.
   if (o.maxEmberCap !== undefined && typeof o.maxEmberCap !== 'number') return false;
   if (o.bargains !== undefined && !isStringArray(o.bargains)) return false;
+  // The finding-1 one-shot ledger is optional + additive: string[] if present.
+  if (o.firedBeatIds !== undefined && !isStringArray(o.firedBeatIds)) return false;
   return true;
 }
 
 /** A fresh dread ledger (Task 5 default cap + no bargains/glitches spent). */
 function freshDread(open: boolean): DreadSave {
-  return { open, glitchSeen: [], watcherSightings: 0, maxEmberCap: DEFAULT_EMBER_CAP, bargains: [] };
+  return {
+    open,
+    glitchSeen: [],
+    watcherSightings: 0,
+    maxEmberCap: DEFAULT_EMBER_CAP,
+    bargains: [],
+    firedBeatIds: [],
+  };
 }
 
 /**
@@ -152,6 +165,7 @@ export function migrateV1toV2(v1: SaveDataV1): SaveData {
       watcherSightings: prev?.watcherSightings ?? 0,
       maxEmberCap: prev?.maxEmberCap ?? DEFAULT_EMBER_CAP,
       bargains: prev?.bargains ?? [],
+      firedBeatIds: prev?.firedBeatIds ?? [],
     },
   };
 }
@@ -173,6 +187,7 @@ export function greaterVaelCheckpoint(live: {
   watcherSightings: number;
   maxEmberCap: number;
   bargains: string[];
+  firedBeatIds?: string[];
 }): DreadSave {
   return {
     open: live.open,
@@ -180,6 +195,7 @@ export function greaterVaelCheckpoint(live: {
     watcherSightings: live.watcherSightings,
     maxEmberCap: live.maxEmberCap,
     bargains: [...live.bargains],
+    firedBeatIds: [...(live.firedBeatIds ?? [])],
   };
 }
 

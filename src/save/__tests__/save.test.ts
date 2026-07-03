@@ -176,6 +176,7 @@ describe('save schema v2 + v1→v2 migration', () => {
       bargains: [],
       watcherSightings: 0,
       glitchSeen: [],
+      firedBeatIds: [], // finding 1: one-shot beat ledger, defaulted empty
     });
   });
 
@@ -229,6 +230,7 @@ describe('save schema v2 + v1→v2 migration', () => {
       watcherSightings: 3,
       maxEmberCap: 2,
       bargains: ['hag-tithed'],
+      firedBeatIds: [], // finding 1: absent on the pre-fix ledger ⇒ defaulted empty
     });
   });
 
@@ -251,6 +253,7 @@ describe('save schema v2 + v1→v2 migration', () => {
       bargains: [],
       watcherSightings: 0,
       glitchSeen: [],
+      firedBeatIds: [], // finding 1: fresh ledger defaults it empty
     });
   });
 
@@ -264,6 +267,7 @@ describe('save schema v2 + v1→v2 migration', () => {
         watcherSightings: 2,
         maxEmberCap: 3,
         bargains: ['hag-tithed'],
+        firedBeatIds: ['GF-1', 'AF-2'],
       }),
     ).toEqual({
       open: true,
@@ -271,7 +275,14 @@ describe('save schema v2 + v1→v2 migration', () => {
       watcherSightings: 2,
       maxEmberCap: 3,
       bargains: ['hag-tithed'],
+      firedBeatIds: ['GF-1', 'AF-2'], // finding 1: banked so a spent beat never re-arms
     });
+    // Absent firedBeatIds defaults to an empty array (a pre-fire checkpoint).
+    expect(
+      greaterVaelCheckpoint({
+        open: true, glitchSeen: [], watcherSightings: 0, maxEmberCap: 5, bargains: [],
+      }).firedBeatIds,
+    ).toEqual([]);
     // A still-sealed postern writes open:false, not an absent field.
     expect(
       greaterVaelCheckpoint({
@@ -282,6 +293,22 @@ describe('save schema v2 + v1→v2 migration', () => {
         bargains: [],
       }).open,
     ).toBe(false);
+  });
+
+  it('a v2 save carrying firedBeatIds round-trips unchanged (finding 1 persistence)', () => {
+    const data: SaveData = {
+      ...SAMPLE_V2,
+      greaterVael: greaterVaelCheckpoint({
+        open: true,
+        glitchSeen: ['knock'],
+        watcherSightings: 2,
+        maxEmberCap: 4,
+        bargains: ['hag-tithed'],
+        firedBeatIds: ['GF-1', 'GF-2', 'AF-2'],
+      }),
+    };
+    saveGame(data);
+    expect(loadGame()?.greaterVael?.firedBeatIds).toEqual(['GF-1', 'GF-2', 'AF-2']);
   });
 
   it('greaterVaelCheckpoint copies its arrays (a later source mutation never leaks)', () => {
