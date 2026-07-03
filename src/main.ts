@@ -23,7 +23,7 @@ import { KneelingHollow, KneelerView } from './entities/KneelingHollow';
 import { WatcherPresence, WatcherView } from './entities/WatcherPresence';
 import type { ViewTest } from './entities/WatcherPresence';
 import { HagPresence, HagView } from './entities/HagPresence';
-import { FOGLINE_PART_M, MIN_EMBER_CAP, offerToHag, restoreEmberCap } from './content/hagBargain';
+import { FOGLINE_PART_M, MIN_EMBER_CAP, offerToHag, restoreEmberCap, zoneVisitFogFarM } from './content/hagBargain';
 import type { HagState, Offering, Boon } from './content/hagBargain';
 import { BossArena, arenaWantsDark } from './entities/bossArena';
 import { Brand } from './player/Brand';
@@ -346,6 +346,10 @@ async function startScene(): Promise<void> {
   let activeDef = resolveZone(zones.current);
   /** Current fog far baseline; the vista adds its boost on top per frame. */
   let baseFogFar = DEFAULT_FOG_FAR;
+  /** The active zone's fog far WITHOUT the Hag fog-line boost (Task 10). `baseFogFar`
+   *  is RECOMPUTED from this + `forestFogBoost` via `zoneVisitFogFarM`, never `+=`,
+   *  so a repeat in-zone tithe (reachable at this zone's threshold) can't stack +6. */
+  let zoneBaseFogFar = DEFAULT_FOG_FAR;
   /** Visual eye-height offset from the exterior terrain layer (0 in interiors);
    *  eased toward the current cell's `cellHeightM` each frame — camera only,
    *  collision is unchanged (no jump). */
@@ -1312,10 +1316,17 @@ async function startScene(): Promise<void> {
     switch (boon.kind) {
       case 'fogline-part':
         // Ashen Forest N fogFar +FOGLINE_PART_M for the visit (its lore cache
-        // unseals when that zone ships, Tasks 9–12). Armed now; enterZone
-        // applies it on entry, and immediately if already standing there.
+        // unseals with the zone, Tasks 9–12). Armed now; enterZone applies it on
+        // entry, and immediately if already standing there. Task 10 stacking guard:
+        // RECOMPUTE baseFogFar from the un-boosted zone base (never `+=`) so a
+        // repeat in-zone tithe — reachable here, where the threshold lives — can't
+        // stack the bump to +12. Re-entry is idempotent for the same reason.
         forestFogBoost = FOGLINE_PART_M;
-        if (zones.current === 'ashen-forest-n') baseFogFar += forestFogBoost;
+        baseFogFar = zoneVisitFogFarM({
+          zone: zones.current,
+          zoneBaseFarM: zoneBaseFogFar,
+          forestBoostM: forestFogBoost,
+        });
         showCard('The fog-line parts. North, the ash thins — and a sealed cache gives up its word.');
         break;
       case 'play-vision':
@@ -1562,11 +1573,17 @@ async function startScene(): Promise<void> {
     const skyHex = isExterior ? skyFogColor(activeDef.exteriorSky ?? 'field') : INTERIOR_FOG_HEX;
     fog.color.setHex(skyHex);
     (scene.background as THREE.Color).setHex(skyHex);
-    baseFogFar =
+    zoneBaseFogFar =
       activeDef.fogFarM ?? (isExterior ? TUNING.greaterVael.exterior.fogFarDefaultM : DEFAULT_FOG_FAR);
-    // Task 5: an ember tithe parts the fog-line — Ashen Forest N's far-plane
-    // opens +6 m for the visit (armed by the `fogline-part` boon).
-    if (zones.current === 'ashen-forest-n') baseFogFar += forestFogBoost;
+    // Task 5: an ember tithe parts the fog-line — Ashen Forest N's far-plane opens
+    // +FOGLINE_PART_M for the visit (armed by the `fogline-part` boon). Task 10:
+    // RECOMPUTE from the un-boosted zone base each visit (never accumulate), so
+    // re-entry with the boost still armed re-derives base+6 rather than stacking.
+    baseFogFar = zoneVisitFogFarM({
+      zone: zones.current,
+      zoneBaseFarM: zoneBaseFogFar,
+      forestBoostM: forestFogBoost,
+    });
     fog.far = baseFogFar;
     ambient.intensity = activeDef.ambientFloor ?? DEFAULT_AMBIENT;
     // Snap the visual ground height to the arrival cell so exterior entry does

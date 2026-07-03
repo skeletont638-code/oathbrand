@@ -194,6 +194,34 @@ describe('DreadDirector — scheduling rules', () => {
     expect(afW?.anchor).toEqual([9, 9]); // ashen-forest-n anchor — NEVER [6,16]
   });
 
+  it('two Watcher beats in the SAME zone both manifest at that zone\'s anchor (T10 re-flatten guard)', () => {
+    // The cross-zone test above can pass even if anchorsByZone were FLATTENED into
+    // one shared list: the anchor-cycle index happens to line up (sighting 1 → 0,
+    // sighting 2 → 1). Firing TWO sightings in ONE zone that has a SINGLE anchor
+    // is the case that catches a re-flatten — a flattened list would cycle the 2nd
+    // sighting into ANOTHER zone's anchor.
+    const two: ScareBeat[] = [
+      { id: 'W1', zone: 'ashen-forest-n', trigger: { on: 'cellEnter', cells: [[1, 1]] }, gimmick: 'watcher', oneLine: 'a' },
+      { id: 'W2', zone: 'ashen-forest-n', trigger: { on: 'cellEnter', cells: [[2, 2]] }, gimmick: 'watcher', oneLine: 'b' },
+    ];
+    // The forest has ONE anchor; gate-fields' differing anchor must never leak in.
+    const anchorsByZone = {
+      'ashen-forest-n': [[6, 15]] as [number, number][],
+      'gate-fields': [[9, 9]] as [number, number][],
+    };
+    const d = new DreadDirector(two, anchorsByZone, undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
+    d.update(ctx([0, 0], { zone: 'ashen-forest-n' }));                          // baseline
+    const first = d.update(ctx([1, 1], { zone: 'ashen-forest-n' }));            // W1 fires
+    // Burn the shared cooldown in-zone (staying in the forest keeps prevCell sane).
+    d.update(ctx([5, 5], { zone: 'ashen-forest-n', dtMs: D.minScareGapSec * 1000 + 1000 }));
+    const second = d.update(ctx([2, 2], { zone: 'ashen-forest-n' }));          // W2 fires
+    const a1 = first.find((a) => a.kind === 'watcher') as { anchor: [number, number] } | undefined;
+    const a2 = second.find((a) => a.kind === 'watcher') as { anchor: [number, number] } | undefined;
+    expect(a1?.anchor).toEqual([6, 15]);
+    expect(a2?.anchor).toEqual([6, 15]); // 2nd sighting STILL the forest anchor — never [9,9]
+    expect(d.watcherSightings).toBe(2);
+  });
+
   it('only evaluates beats belonging to the current zone', () => {
     const cross: ScareBeat[] = [{
       id: 'X', zone: 'ashen-forest-n',

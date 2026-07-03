@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { TUNING } from '../tuning';
-import { offerToHag, restoreEmberCap } from '../hagBargain';
+import { offerToHag, restoreEmberCap, zoneVisitFogFarM, FOGLINE_PART_M } from '../hagBargain';
 import type { HagState } from '../hagBargain';
 
 const base: HagState = { maxEmberCap: TUNING.brand.maxEmbers, bargains: [] };
@@ -64,6 +64,37 @@ describe('offerToHag — the bargain table', () => {
     const once = offerToHag('ember', base, false).state;
     const twice = offerToHag('ember', once, false).state;
     expect(twice.maxEmberCap).toBe(3);
+  });
+});
+
+describe('zoneVisitFogFarM — the fog-line boost applies once per visit (T10 guard)', () => {
+  it('adds the boost only in Ashen Forest N (every other zone ignores it)', () => {
+    expect(zoneVisitFogFarM({ zone: 'ashen-forest-n', zoneBaseFarM: 16, forestBoostM: FOGLINE_PART_M })).toBe(22);
+    // The boon is armed run-wide, but it only opens the forest's own far-plane.
+    expect(zoneVisitFogFarM({ zone: 'gate-fields', zoneBaseFarM: 16, forestBoostM: FOGLINE_PART_M })).toBe(16);
+    // Unarmed → the plain zone base, in the forest too.
+    expect(zoneVisitFogFarM({ zone: 'ashen-forest-n', zoneBaseFarM: 16, forestBoostM: 0 })).toBe(16);
+  });
+
+  it('is idempotent under a repeat in-zone tithe (recompute from base, never +=)', () => {
+    // main.ts arms forestBoost = FOGLINE_PART_M on the FIRST tithe, then RECOMPUTES
+    // baseFogFar from the un-boosted zone base on EVERY tithe. Tithing again in the
+    // same visit (reachable here — the threshold lives in this zone) re-arms the
+    // same value and re-derives base+6 — it must never accumulate to base+12.
+    const zoneBaseFarM = 16;
+    let forestBoostM = 0;
+    forestBoostM = FOGLINE_PART_M; // 1st tithe arms the boost
+    const first = zoneVisitFogFarM({ zone: 'ashen-forest-n', zoneBaseFarM, forestBoostM });
+    forestBoostM = FOGLINE_PART_M; // 2nd tithe re-arms (no change) and recomputes
+    const second = zoneVisitFogFarM({ zone: 'ashen-forest-n', zoneBaseFarM, forestBoostM });
+    expect(first).toBe(22);
+    expect(second).toBe(22); // NOT 28 — the +6 never stacks
+  });
+
+  it('re-entry recomputes from the base (never carries a doubled far)', () => {
+    // enterZone re-derives from the zone base each visit, so leaving and returning
+    // with the boost still armed yields base+6, not base+12.
+    expect(zoneVisitFogFarM({ zone: 'ashen-forest-n', zoneBaseFarM: 16, forestBoostM: FOGLINE_PART_M })).toBe(22);
   });
 });
 

@@ -11,7 +11,7 @@
  * it when the player leaves Greater Vael or begins the next Vigil.
  */
 import { TUNING } from './tuning';
-import type { GameFlag } from './types';
+import type { GameFlag, ZoneId } from './types';
 
 /** The Hag's persisted state — MIRRORS `save.greaterVael`: the current ember
  *  cap (a tithe lowers it, persisting across the Drop) and the bargains struck. */
@@ -48,6 +48,24 @@ const FULL_CAP = TUNING.brand.maxEmbers;
 /** Spec §6.4's `fogline-part` magnitude: Ashen Forest N `fogFar +6 m` for the
  *  visit. Lives HERE with the table it belongs to (main reads it — one source). */
 export const FOGLINE_PART_M = 6;
+
+/**
+ * The effective fog far for a zone VISIT (meters): the zone's own base far, plus
+ * the fog-line boost — but ONLY in Ashen Forest N (the boon is armed run-wide,
+ * yet it opens that forest's far-plane alone). This is the T10 fog-boost STACKING
+ * guard: it always RECOMPUTES `base (+ boost)` from the un-boosted base rather
+ * than accumulating. main.ts arms `forestBoostM` once (0 → FOGLINE_PART_M) and
+ * calls this from BOTH enterZone and the `fogline-part` boon, so a repeat in-zone
+ * tithe re-derives `base + 6` instead of doing `+= 6` twice (which would stack to
+ * +12); re-entry is idempotent for the same reason.
+ */
+export function zoneVisitFogFarM(args: {
+  zone: ZoneId;
+  zoneBaseFarM: number;
+  forestBoostM: number;
+}): number {
+  return args.zone === 'ashen-forest-n' ? args.zoneBaseFarM + args.forestBoostM : args.zoneBaseFarM;
+}
 
 /** The cap floor the wiring enforces on the tithe: the Hag never caps the brand
  *  below one ember (a 0-cap brand would rekindle to nothing yet not be hollow —
