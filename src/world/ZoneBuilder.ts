@@ -34,6 +34,7 @@ import { GridCollider } from './collision';
 import type { AssetCache } from './assets';
 import type { DoorDef, EnemySpawn, GridPos, ItemSpot, LoreSpot, TileKind, ZoneDef } from './zoneDef';
 import { grassGeometry, pineGeometry, trunkGeometry } from './exteriorForest';
+import { undulation } from './noise';
 import { gibbetGeometry, roofWedgeGeometry } from './exteriorProps';
 import { buildExteriorSky } from './exteriorSky';
 import { getTexture } from './textures';
@@ -88,6 +89,10 @@ export interface BuiltZone {
   /** Visual floor height (m) of a cell — the exterior height layer; always 0
    *  for interior zones (no `heightGrid`), so `main` can lerp it uniformly. */
   cellHeightM(row: number, col: number): number;
+  /** Surface height (m) at a world point: cell base + the C2 undulation on
+   *  exteriors; flat `cellHeightM` on interiors. THE one function every static
+   *  placement and dynamic view-y consumer samples, so feet can never drift. */
+  groundYAt(worldX: number, worldZ: number): number;
   /** Per-frame tick for exterior ambient FX (ash-fall drift). Undefined on
    *  interior zones — the ZoneManager only calls it when present. */
   updateExterior?(dtMs: number): void;
@@ -138,6 +143,9 @@ const TREE_KIND = 'pine-dense'; // blocking treeline/border on `T`/`#`
 const TERRAIN_COLOR = 0x2b2a2c;
 /** One ground-texture repeat spans this many world metres (texel density ≈ kit atlas). */
 const GROUND_TILE_M = 2;
+/** Ground sub-quads per cell axis: 1 m facets give the undulation edges to
+ *  catch the moon under flatShading (2 m corners alone read as flat plates). */
+const GROUND_SUB = 2;
 /** Flat ground colour when the crunched dirt map is absent (tests / fetch not run). */
 const GROUND_FLAT_HEX = 0x3a3632;
 
@@ -417,28 +425,32 @@ function buildExteriorGround(cell: number, spots: ForestSpot[]): Mesh | null {
   if (spots.length === 0) return null;
   const pos: number[] = [];
   const uv: number[] = [];
+  const subM = cell / GROUND_SUB;
   for (const { x, y, z } of spots) {
     const x0 = x - cell / 2;
-    const x1 = x + cell / 2;
     const z0 = z - cell / 2;
-    const z1 = z + cell / 2;
-    // Two tris wound so the FRONT face (three.js CCW) is +y — the ground must
-    // render from the player's above-ground viewpoint and catch the moonlight.
-    // (Reversed order, e.g. [x0,z0],[x1,z0],[x1,z1], yields normal (0,-1,0):
-    // FrontSide-culled from above. Correct winding beats DoubleSide — half the
-    // fragment work.)
-    const corners: [number, number][] = [
-      [x0, z0],
-      [x0, z1],
-      [x1, z1],
-      [x0, z0],
-      [x1, z1],
-      [x1, z0],
-    ];
-    for (const [cx, cz] of corners) {
-      pos.push(cx, y, cz);
-      const [u, v] = planarUV(cx, cz);
-      uv.push(u, v);
+    for (let sx = 0; sx < GROUND_SUB; sx++) {
+      for (let sz = 0; sz < GROUND_SUB; sz++) {
+        const ax = x0 + sx * subM;
+        const az = z0 + sz * subM;
+        const bx = ax + subM;
+        const bz = az + subM;
+        // Two tris wound so the FRONT face (three.js CCW) is +y — the ground
+        // must render from the player's above-ground viewpoint and catch the
+        // moonlight. (+y winding preserved through the subdivision → the Task 6
+        // orientation guard keeps passing.) Per-VERTEX undulation: shared corners
+        // sample the same world position → the same offset → the sheet stays
+        // watertight across sub-quads AND cells.
+        const corners: [number, number][] = [
+          [ax, az], [ax, bz], [bx, bz],
+          [ax, az], [bx, bz], [bx, az],
+        ];
+        for (const [cx, cz] of corners) {
+          pos.push(cx, y + undulation(cx, cz), cz);
+          const [u, v] = planarUV(cx, cz);
+          uv.push(u, v);
+        }
+      }
     }
   }
   const geo = new BufferGeometry();
@@ -480,18 +492,31 @@ function buildTerrainSkirt(def: ZoneDef, cellHeightM: (r: number, c: number) => 
     const [rb, cb] = b;
     const ylo = Math.min(cellHeightM(ra, ca), cellHeightM(rb, cb));
     const yhi = Math.max(cellHeightM(ra, ca), cellHeightM(rb, cb));
+    // Both edges sample the SAME undulation as the ground at the shared world
+    // positions (ends + midpoint) — the riser meets the displaced ground
+    // watertight on both its lips (ground verts sit at 1 m spacing too). A
+    // midpoint splits each seam into two sub-quads, killing the razor-straight step.
+    const pushQuad = (x0: number, z0: number, x1: number, z1: number): void => {
+      const lo0 = ylo + undulation(x0, z0);
+      const lo1 = ylo + undulation(x1, z1);
+      const hi0 = yhi + undulation(x0, z0);
+      const hi1 = yhi + undulation(x1, z1);
+      v.push(x0, lo0, z0, x1, lo1, z1, x1, hi1, z1, x0, lo0, z0, x1, hi1, z1, x0, hi0, z0);
+    };
     if (cb !== ca) {
       // East/West seam: a vertical plane at the shared x, spanning the row's z.
       const bx = Math.max(ca, cb) * cell;
       const z0 = ra * cell;
-      const z1 = z0 + cell;
-      v.push(bx, ylo, z0, bx, ylo, z1, bx, yhi, z1, bx, ylo, z0, bx, yhi, z1, bx, yhi, z0);
+      const zm = z0 + cell / 2;
+      pushQuad(bx, z0, bx, zm);
+      pushQuad(bx, zm, bx, z0 + cell);
     } else {
       // North/South seam: a vertical plane at the shared z, spanning the col's x.
       const bz = Math.max(ra, rb) * cell;
       const x0 = ca * cell;
-      const x1 = x0 + cell;
-      v.push(x0, ylo, bz, x1, ylo, bz, x1, yhi, bz, x0, ylo, bz, x1, yhi, bz, x0, yhi, bz);
+      const xm = x0 + cell / 2;
+      pushQuad(x0, bz, xm, bz);
+      pushQuad(xm, bz, x0 + cell, bz);
     }
   }
   // World-planar UV per vertex (from its x/z footprint), so the rock map tiles
@@ -542,6 +567,16 @@ export class ZoneBuilder {
     // and a v1 interior builds byte-for-byte identical.
     const cellHeightM = (row: number, col: number): number =>
       Number(heightDigit(def, row, col)) * HEIGHT_LEVEL_M;
+    /** Surface height at a world point: cell base + the C2 undulation
+     *  (exteriors; interiors stay flat). THE one function placements and
+     *  view-y consumers use — exposed on BuiltZone as groundYAt. */
+    const groundYAt = (worldX: number, worldZ: number): number => {
+      const base = cellHeightM(Math.floor(worldZ / cell), Math.floor(worldX / cell));
+      return def.kind === 'exterior' ? base + undulation(worldX, worldZ) : base;
+    };
+    /** Kit architecture settles slightly INTO the dirt — a block may sink a
+     *  few cm on a swell but can never float on one (ruins sit, they don't hover). */
+    const KIT_SETTLE_M = 0.05;
     /** Set by the exterior branch to drift the ash-fall each frame. */
     let updateExterior: ((dtMs: number) => void) | undefined;
     /** Set by the exterior branch: unit direction toward the moon (key light). */
@@ -616,7 +651,7 @@ export class ZoneBuilder {
           const floorTile = (): void => {
             ground.push({ x, y, z, row, col });
           };
-          const spot = (): ForestSpot => ({ x, y, z, row, col });
+          const spot = (): ForestSpot => ({ x, y: groundYAt(x, z), z, row, col });
           if (ch === '~') continue; // the gorge — open air, no tile
           else if (ch === ',') {
             floorTile();
@@ -630,14 +665,14 @@ export class ZoneBuilder {
             dense.push(spot()); // treeline/border — a dense tree, never a wall block
           } else if (ch === 'H') {
             floorTile();
-            addExteriorWall(row, col, x, y, z); // a built ruin (Cinder Village house)
+            addExteriorWall(row, col, x, groundYAt(x, z) - KIT_SETTLE_M, z); // a built ruin (Cinder Village house)
             houseCells.push([row, col]); // gets a charred roof-wedge cap
           } else if (ch === 'A') {
             // Door-void ruin house-block: a `wall-arch.glb` (SAME atlas → SAME
             // merge bucket as `wall`) in place of the solid wall, so the house
             // reads as a burnt home with a gaping doorway rather than castle wall.
             floorTile();
-            addExteriorWall(row, col, x, y, z, 'wall-arch');
+            addExteriorWall(row, col, x, groundYAt(x, z) - KIT_SETTLE_M, z, 'wall-arch');
             houseCells.push([row, col]); // capped by the same roof-wedge stamp
           } else {
             const kind = cellKind(ch, def, row, col);
@@ -645,9 +680,9 @@ export class ZoneBuilder {
             floorTile();
             if (kind === 'door') {
               const d = ORTHO.find(([dr, dc]) => kindAt(def, row + dr, col + dc) !== 'wall');
-              addPiece('wall-door', x, y, z, d ? Math.atan2(d[1], d[0]) : 0, KIT_SCALE);
+              addPiece('wall-door', x, groundYAt(x, z) - KIT_SETTLE_M, z, d ? Math.atan2(d[1], d[0]) : 0, KIT_SCALE);
             } else if (kind === 'wall') {
-              addExteriorWall(row, col, x, y, z); // unknown solid letter → ruin block
+              addExteriorWall(row, col, x, groundYAt(x, z) - KIT_SETTLE_M, z); // unknown solid letter → ruin block
             }
           }
         }
@@ -661,7 +696,7 @@ export class ZoneBuilder {
     // standalone mesh (NOT a kit GLB and NOT merged into a bucket — 1 draw each).
     for (const prop of def.props) {
       const [row, col] = prop.at;
-      const px = col * cell + half, pz = row * cell + half, py = cellHeightM(row, col);
+      const px = col * cell + half, pz = row * cell + half, py = groundYAt(px, pz);
       // Own-key guard: a bare index reaches Object.prototype, so a kit prop
       // named e.g. 'toString' would false-positive as procedural.
       const make = Object.hasOwn(PROCEDURAL_PROPS, prop.kind) ? PROCEDURAL_PROPS[prop.kind] : undefined;
@@ -686,7 +721,7 @@ export class ZoneBuilder {
       const cx = col * cell + half;
       const cz = row * cell + half;
       const [dr, dc] = wallDirFrom(def, row, col) ?? [-1, 0];
-      const ty = cellHeightM(row, col);
+      const ty = groundYAt(cx, cz);
       addPiece('torch', cx + dc * half, TORCH_MOUNT_Y + ty, cz + dr * half, Math.atan2(-dc, -dr), 1);
       if (lights.length >= MAX_POINT_LIGHTS) {
         console.warn(`zone "${def.id}": more than ${MAX_POINT_LIGHTS} torches — extra lights skipped`);
@@ -716,7 +751,7 @@ export class ZoneBuilder {
       // field/gorge); interior banners stay at kit scale to fit the 2 m walls.
       const bScale = def.kind === 'exterior' ? BANNER_EXT_SCALE : KIT_SCALE;
       const setback = half - BANNER_BACK_M * bScale;
-      addPiece('banner', cx + dc * setback, cellHeightM(row, col), cz + dr * setback, Math.atan2(dc, dr), bScale);
+      addPiece('banner', cx + dc * setback, groundYAt(cx + dc * setback, cz + dr * setback), cz + dr * setback, Math.atan2(dc, dr), bScale);
       banner = { name: def.banner.name, position: new Vector3(cx, 0, cz) };
     }
 
@@ -757,7 +792,7 @@ export class ZoneBuilder {
       // InstancedMesh (1 draw call), Cinder Village only (no H/A ⇒ nothing stamped).
       if (houseCells.length > 0) {
         const spots: ForestSpot[] = houseCells.map(([r, c]) => ({
-          x: c * cell + half, y: cellHeightM(r, c), z: r * cell + half, row: r, col: c,
+          x: c * cell + half, y: groundYAt(c * cell + half, r * cell + half) - KIT_SETTLE_M, z: r * cell + half, row: r, col: c,
         }));
         stampForest(group, 'roof-wedge', roofWedgeGeometry(), spots);
       }
@@ -790,6 +825,7 @@ export class ZoneBuilder {
       items: (def.items ?? []).map((spot) => ({ spot, position: toWorld(spot.at) })),
       lights,
       cellHeightM,
+      groundYAt,
       updateExterior,
       moonDir,
     };

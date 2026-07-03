@@ -664,7 +664,7 @@ async function startScene(): Promise<void> {
         if (cross && crossingSilhouette) {
           const world = ([r, c]: [number, number]): { x: number; y: number; z: number } => ({
             x: (c + 0.5) * built.cellM,
-            y: built.cellHeightM(r, c),
+            y: built.groundYAt((c + 0.5) * built.cellM, (r + 0.5) * built.cellM),
             z: (r + 0.5) * built.cellM,
           });
           crossingSilhouette.arm(world(cross[0]), world(cross[1]));
@@ -1345,7 +1345,7 @@ async function startScene(): Promise<void> {
       // Exterior height layer (Task 12): ground the static priest on his terrace
       // — the Pilgrim's Descent stands him on band-1 floor. He never moves, so a
       // one-time set holds; flat/interior zones read 0 (v1-exact).
-      priest.root.position.y = built.cellHeightM(placement.at[0], placement.at[1]);
+      priest.root.position.y = built.groundYAt((placement.at[1] + 0.5) * built.cellM, (placement.at[0] + 0.5) * built.cellM);
       scene.add(priest.root);
       ashPriests.push(priest);
     }
@@ -1644,7 +1644,7 @@ async function startScene(): Promise<void> {
       const [row, col] = spawn.at;
       logic.pos.set((col + 0.5) * built.cellM, 0, (row + 0.5) * built.cellM);
       scene.add(view.root);
-      enemies.push({ logic, view, groundY: built.cellHeightM(row, col) });
+      enemies.push({ logic, view, groundY: built.groundYAt((col + 0.5) * built.cellM, (row + 0.5) * built.cellM) });
     });
   }
 
@@ -1724,10 +1724,7 @@ async function startScene(): Promise<void> {
     hemiLight.intensity = lit.hemi.intensity;
     // Snap the visual ground height to the arrival cell so exterior entry does
     // not lerp up from 0 (interior zones are flat → this stays 0).
-    groundY = built.cellHeightM(
-      Math.floor(controller.pos.z / built.cellM),
-      Math.floor(controller.pos.x / built.cellM),
-    );
+    groundY = built.groundYAt(controller.pos.x, controller.pos.z);
     // The Queen's Garden alone has colour (T16): a soft green ambient over the
     // ash-grey kit stone, so the whole zone reads living. Every other zone keeps
     // the cold grey. NOT a desaturation override — that channel is the brand's
@@ -2324,9 +2321,7 @@ async function startScene(): Promise<void> {
         // cell's terrain height — the enemy-side twin of the camera's groundY, so
         // feet sit on the terrace (not buried/floating). Purely visual: the flat
         // 2D collider still owns movement. Flat/interior zones read 0 → no-op.
-        const er = Math.floor(e.logic.pos.z / built.cellM);
-        const ec = Math.floor(e.logic.pos.x / built.cellM);
-        e.groundY += (built.cellHeightM(er, ec) - e.groundY) * Math.min(1, dt / GROUND_EASE_MS);
+        e.groundY += (built.groundYAt(e.logic.pos.x, e.logic.pos.z) - e.groundY) * Math.min(1, dt / GROUND_EASE_MS);
         e.view.root.position.y += e.groundY;
       }
 
@@ -2568,7 +2563,7 @@ async function startScene(): Promise<void> {
     // is byte-identical to v1.
     const gRow = Math.floor(controller.pos.z / built.cellM);
     const gCol = Math.floor(controller.pos.x / built.cellM);
-    groundY += (built.cellHeightM(gRow, gCol) - groundY) * Math.min(1, dt / GROUND_EASE_MS);
+    groundY += (built.groundYAt(controller.pos.x, controller.pos.z) - groundY) * Math.min(1, dt / GROUND_EASE_MS);
     // The vista's lift rides on top of the eye height (0 when idle); the
     // undercroft drop subtracts a brief landing crouch (fallDip → 0); the
     // kneel sinks the eye ~0.5m to one knee (Task 14).

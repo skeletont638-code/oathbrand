@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { BoxGeometry, Group, InstancedMesh, Mesh, MeshStandardMaterial } from 'three';
 import { gridToPlacements, planarUV, ZoneBuilder } from '../ZoneBuilder';
+import { UNDULATION_AMP_M, undulation } from '../noise';
 import type { AssetCache } from '../assets';
 import type { ZoneDef, TileKind } from '../zoneDef';
 
@@ -285,6 +286,37 @@ describe('ZoneBuilder.build (exterior)', () => {
     const built = new ZoneBuilder().build(
       exteriorZone(['..', '..'], { props: [{ kind: 'toString', at: [0, 0] }] }), fakeAssets());
     expect(mergedNames(built.group)).toContain('merged:toString');
+  });
+
+  // --- Task C2: undulating terrain + shared y-grounding -----------------------
+
+  it('the ground undulates within the amplitude and stays watertight at shared corners', () => {
+    const built = new ZoneBuilder().build(exteriorZone(['..', '..']), fakeAssets());
+    const g = meshNamed(built.group, 'exterior-ground')!;
+    const pos = g.geometry.getAttribute('position');
+    let deviated = false;
+    const atKey = new Map<string, number>();
+    for (let i = 0; i < pos.count; i++) {
+      const y = pos.getY(i);
+      expect(Math.abs(y)).toBeLessThanOrEqual(UNDULATION_AMP_M + 1e-6); // flat heightGrid ⇒ pure undulation
+      if (Math.abs(y) > 0.01) deviated = true;
+      const key = `${pos.getX(i).toFixed(3)},${pos.getZ(i).toFixed(3)}`;
+      const prev = atKey.get(key);
+      if (prev !== undefined) expect(y).toBeCloseTo(prev, 6); // duplicated corners weld
+      atKey.set(key, y);
+    }
+    expect(deviated).toBe(true);
+  });
+  it('ground orientation still faces +y after the undulation (Task 6 guard extended)', () => {
+    const built = new ZoneBuilder().build(exteriorZone(['..']), fakeAssets());
+    const normal = meshNamed(built.group, 'exterior-ground')!.geometry.getAttribute('normal');
+    for (let i = 0; i < normal.count; i++) expect(normal.getY(i)).toBeGreaterThan(0);
+  });
+  it('groundYAt = cell height + undulation on exteriors; flat on interiors', () => {
+    const ext = new ZoneBuilder().build(exteriorZone(['..']), fakeAssets());
+    expect(ext.groundYAt(1, 1)).toBeCloseTo(undulation(1, 1), 6);
+    const int = new ZoneBuilder().build(zone(['###', '#.#', '###']), fakeAssets());
+    expect(int.groundYAt(3, 3)).toBe(0);
   });
 });
 

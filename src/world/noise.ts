@@ -45,3 +45,32 @@ export function displaceRadial(geo: BufferGeometry, ampM: number, seed: number):
   geo.computeVertexNormals();
   return geo;
 }
+
+// --- C2: terrain undulation ------------------------------------------------
+/** Max height offset of the exterior ground undulation, metres. Small enough
+ *  that even an unsampled consumer could never visibly float — but every
+ *  consumer DOES sample it (belt and braces). */
+export const UNDULATION_AMP_M = 0.12;
+/** NOT a multiple of the 2 m cell — the swell never reads as per-cell steps. */
+const UNDULATION_WAVELENGTH_M = 3.7;
+const UNDULATION_SEED = 0x51e7;
+const smooth = (t: number): number => t * t * (3 - 2 * t);
+const mix = (a: number, b: number, t: number): number => a + (b - a) * t;
+
+/**
+ * Smooth seeded value-noise height offset (m) at a world position — the ONE
+ * undulation function: ground verts, skirt edges, placements, and every
+ * view-y consumer sample IT, so feet can never drift from the surface.
+ */
+export function undulation(worldX: number, worldZ: number): number {
+  const gx = worldX / UNDULATION_WAVELENGTH_M;
+  const gz = worldZ / UNDULATION_WAVELENGTH_M;
+  const x0 = Math.floor(gx);
+  const z0 = Math.floor(gz);
+  const fx = smooth(gx - x0);
+  const fz = smooth(gz - z0);
+  const v = (ix: number, iz: number): number => seededAt(ix, 0, iz, UNDULATION_SEED) * 2 - 1;
+  const a = mix(v(x0, z0), v(x0 + 1, z0), fx);
+  const b = mix(v(x0, z0 + 1), v(x0 + 1, z0 + 1), fx);
+  return mix(a, b, fz) * UNDULATION_AMP_M;
+}
