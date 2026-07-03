@@ -6,7 +6,15 @@
  */
 import { describe, it, expect } from 'vitest';
 import { grassGeometry, pineGeometry, trunkGeometry } from '../exteriorForest';
+import { ZONES } from '../../content/zones';
 import type { BufferGeometry } from 'three';
+
+// C3 (spec §11.3): per-kind tri caps RAISED with accounting — guards, not
+// targets (measured: pine 74, trunk 38, grass 6). Named consts so the per-kind
+// cap tests and the worst-case zone budget test below can never drift apart.
+const PINE_TRI_CAP = 160;
+const TRUNK_TRI_CAP = 120;
+const GRASS_TRI_CAP = 12;
 
 function tris(geo: BufferGeometry): number {
   const pos = geo.getAttribute('position');
@@ -21,12 +29,12 @@ function minY(geo: BufferGeometry): number {
 }
 
 describe('exteriorForest geometry', () => {
-  // C3 (spec §11.3): caps RAISED with accounting — guards, not targets.
-  // Worst forest ≈ 60 dense + 20 sparse ⇒ ~12k tris; <100k holds with 8× headroom.
+  // Worst forest ≈ 60 dense + 20 sparse ⇒ ~12k tris at guard caps; <100k holds
+  // with 8× headroom (see the zone-derived budget test at the bottom).
   for (const [name, build, triCap] of [
-    ['pine (dense)', pineGeometry, 160],
-    ['trunk (sparse)', trunkGeometry, 120],
-    ['grass tuft', grassGeometry, 12],
+    ['pine (dense)', pineGeometry, PINE_TRI_CAP],
+    ['trunk (sparse)', trunkGeometry, TRUNK_TRI_CAP],
+    ['grass tuft', grassGeometry, GRASS_TRI_CAP],
   ] as const) {
     it(`${name}: low-poly, vertex-coloured, base on the ground`, () => {
       const geo = build();
@@ -54,10 +62,16 @@ describe('exteriorForest geometry', () => {
     geo.dispose();
   });
 
-  it('pine/trunk already carry uv (cone/cylinder) for the map', () => {
+  it('pine/trunk carry a full uv attribute (cone/cylinder) for the map', () => {
     for (const build of [pineGeometry, trunkGeometry]) {
       const g = build();
-      expect(g.getAttribute('uv')).toBeDefined();
+      const uv = g.getAttribute('uv');
+      expect(uv).toBeDefined();
+      // Lesson (1) again for the C3 rebuild: pine/trunk are MERGED geometries
+      // (bentTrunk + crookedCones) — the exact partial-attribute-merge failure
+      // mode. EVERY vertex must be UV'd or mergeGeometries silently drops uv.
+      expect(uv!.itemSize).toBe(2);
+      expect(uv!.count).toBe(g.getAttribute('position').count);
       g.dispose();
     }
   });
@@ -93,5 +107,40 @@ describe('exteriorForest geometry', () => {
       expect(maxLuma).toBeLessThan(0.45);    // still a dead, desaturated forest
       geo.dispose();
     }
+  });
+
+  it('C3: worst REAL zone forest, costed at guard caps, holds the <100k tri budget (spec §8)', () => {
+    // Spec §8 claims the <100k visible-tri budget is asserted, but the e2e only
+    // reads draw calls — and C3 raised the per-tree guards (160/120), widening
+    // the unguarded ceiling. This derives instance counts from the REAL zone
+    // grids (ZoneBuilder's exterior classification: ',' → grass tuft, 't' →
+    // sparse trunk, 'T'/'#' → dense pine), so future zone AUTHORING is guarded
+    // too: plant a big enough forest and this test fails before any playtest.
+    const exteriors = Object.entries(ZONES).filter(([, def]) => def?.kind === 'exterior');
+    expect(exteriors.length).toBeGreaterThan(0); // the derivation must see real zones
+    let worstTris = 0;
+    let worstId = '';
+    for (const [id, def] of exteriors) {
+      let dense = 0, sparse = 0, grass = 0;
+      for (const line of def!.grid) {
+        for (const ch of line) {
+          if (ch === 'T' || ch === '#') dense++;
+          else if (ch === 't') sparse++;
+          else if (ch === ',') grass++;
+        }
+      }
+      // Every instance costed at its GUARD cap (not its measured size) — the
+      // worst the caps permit, not the best the current meshes deliver.
+      const forestTris = dense * PINE_TRI_CAP + sparse * TRUNK_TRI_CAP + grass * GRASS_TRI_CAP;
+      if (forestTris > worstTris) { worstTris = forestTris; worstId = id; }
+    }
+    expect(worstTris).toBeGreaterThan(0); // at least one exterior actually plants a forest
+    // Conservative allowance for everything that is NOT forest: undulating
+    // ground (~8 tris/cell × ~200 cells ≈ 1.6k), terrain skirt, sky dome +
+    // moon + ash Points, kit ruin blocks, roof wedges, props (gibbet ~96),
+    // entities (≤600 each, ~4 visible ≈ 2.4k) — 50k dwarfs all of it combined
+    // (plan header accounts the true worst zone at ~20–25k INCLUDING forest).
+    const STATIC_ALLOWANCE = 50_000;
+    expect(worstTris + STATIC_ALLOWANCE, `worst forest zone: ${worstId}`).toBeLessThan(100_000);
   });
 });
