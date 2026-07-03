@@ -16,6 +16,7 @@ import { doorEntry, doorSpan, pairedDoor } from '../../world/zoneGraph';
 import { FUTURE_ZONE_IDS, ZONES, hasZone, zoneOrThrow } from '../zones';
 import { LORE } from '../lore';
 import { TUNING } from '../tuning';
+import { isQuietSighting } from '../../engine/DreadDirector';
 
 const entries = Object.entries(ZONES) as [ZoneId, ZoneDef][];
 
@@ -368,6 +369,20 @@ describe('Greater Vael Watcher sightings (finding 2)', () => {
     const ids = exterior.flatMap(([, d]) => d.scares ?? []).filter((s) => s.showsWatcher).map((s) => s.id);
     expect(ids.sort()).toEqual(['AF-2', 'CV-4', 'GF-3', 'PD-1']);
     expect(ids.length).toBeLessThanOrEqual(TUNING.greaterVael.watcher.sightingsPerDrop.max);
+  });
+
+  it('ceiling arithmetic is consistent: ceiling-COUNTING beats fit maxBeatsPerDrop exactly (quiet sightings exempt)', () => {
+    // Finding-2 resolution (owner, option b): quiet watcher-only sightings are
+    // exempt from the beat ceiling — asserted with the scheduler's OWN predicate
+    // (isQuietSighting), so authoring and enforcement can never diverge. The
+    // drop authors 12 beats = 10 counting (spec §5's gimmick table) + 2 quiet
+    // (GF-3, CV-4); a future beat addition that breaks the 10 cap fails HERE.
+    const all = exterior.flatMap(([, d]) => d.scares ?? []);
+    const quiet = all.filter((s) => isQuietSighting(s));
+    const counting = all.length - quiet.length;
+    expect(quiet.map((s) => s.id).sort()).toEqual(['CV-4', 'GF-3']);
+    expect(counting).toBeLessThanOrEqual(TUNING.greaterVael.dread.maxBeatsPerDrop);
+    expect(counting).toBe(10); // the exact §5 table
   });
 
   it('every showsWatcher beat manifests only BEYOND the min sighting range from each of its trigger cells', () => {

@@ -336,4 +336,94 @@ describe('DreadDirector — scheduling rules', () => {
     expect(d.update(ctx([9, 3]))).toEqual([]);            // wrong zone → inert
     expect(d.update(ctx([9, 3], { zone: 'ashen-forest-n' })).map((a) => a.kind)).toEqual(['desaturation']);
   });
+
+  // --- Finding-2 resolution (owner, option b): quiet watcher-only sightings ---
+  // A beat with `gimmick === null && showsWatcher` and no other payload (no
+  // crossing) is EXEMPT from the maxBeatsPerDrop ceiling: spec §5's table of 10
+  // is the GIMMICK beats; sightings budget separately under rule 9 (4 ≤ 6).
+  // One-shot behavior (firedBeatIds) and the sighting budget still apply.
+
+  /** Ten ceiling-counting gimmick beats (2 × each of the five screen gimmicks,
+   *  distinct cellEnter cells [1,0]..[10,0]) — fill the 10-beat ceiling exactly
+   *  without tripping the per-gimmick 2× cap or the per-zone false-pulse cap. */
+  function tenGimmickBeats(): ScareBeat[] {
+    const gimmicks = ['snap-grid', 'resolution-drop', 'desaturation', 'silence-spike', 'false-pulse'] as const;
+    return Array.from({ length: 10 }, (_, i) => ({
+      id: `G${i + 1}`, zone: 'gate-fields' as const,
+      trigger: { on: 'cellEnter' as const, cells: [[i + 1, 0]] as [number, number][] },
+      gimmick: gimmicks[Math.floor(i / 2)], oneLine: String(i + 1),
+    }));
+  }
+
+  /** Drive all ten to fired (burning the shared cooldown between each). */
+  function fireAllTen(d: DreadDirector): void {
+    for (let i = 1; i <= 10; i++) {
+      cooldownOut(d);
+      expect(d.update(ctx([i, 0])).length, `gimmick beat G${i} should fire`).toBeGreaterThan(0);
+    }
+    expect(d.beatsFired).toBe(D.maxBeatsPerDrop); // the ceiling is FULL
+  }
+
+  it('a quiet watcher-only sighting fires even at the beat ceiling, and does not count toward it', () => {
+    const quiet: ScareBeat = {
+      id: 'GF-3', zone: 'gate-fields',
+      trigger: { on: 'cellEnter', cells: [[11, 0]] }, gimmick: null, showsWatcher: true, oneLine: 'quiet',
+    };
+    // Anchor [11,20] is 40 m from the trigger — rule 10 keeps the sighting.
+    const d = new DreadDirector([...tenGimmickBeats(), quiet], { 'gate-fields': [[11, 20]] }, undefined,
+      { glitchSeen: [], watcherSightings: 0 }, () => 0);
+    d.update(ctx([12, 12])); // baseline
+    fireAllTen(d);
+    cooldownOut(d);
+    const out = d.update(ctx([11, 0]));
+    expect(out.some((a) => a.kind === 'watcher')).toBe(true); // still fires AT the cap
+    expect(d.watcherSightings).toBe(1);                       // budgets under rule 9 (sightings)
+    expect(d.beatsFired).toBe(D.maxBeatsPerDrop);             // NOT under rule 6 (counter unmoved)
+    // One-shot behavior stays: banked into firedBeatIds, never re-fires.
+    expect(d.snapshot().firedBeatIds).toContain('GF-3');
+    cooldownOut(d);
+    expect(d.update(ctx([11, 0]))).toEqual([]);
+  });
+
+  it('the starvation scenario: with all 10 gimmick beats fired, BOTH GF-3/CV-4-shaped quiet sightings still fire', () => {
+    const gf3: ScareBeat = {
+      id: 'GF-3', zone: 'gate-fields',
+      trigger: { on: 'cellEnter', cells: [[11, 0]] }, gimmick: null, showsWatcher: true, oneLine: 'gf',
+    };
+    const cv4: ScareBeat = {
+      id: 'CV-4', zone: 'cinder-village',
+      trigger: { on: 'cellEnter', cells: [[4, 2]] }, gimmick: null, showsWatcher: true, oneLine: 'cv',
+    };
+    const anchors = {
+      'gate-fields': [[11, 20]] as [number, number][],
+      'cinder-village': [[2, 12, 2]] as [number, number, number][],
+    };
+    const d = new DreadDirector([...tenGimmickBeats(), gf3, cv4], anchors, undefined,
+      { glitchSeen: [], watcherSightings: 0 }, () => 0);
+    d.update(ctx([12, 12])); // baseline
+    fireAllTen(d);
+    cooldownOut(d);
+    expect(d.update(ctx([11, 0])).some((a) => a.kind === 'watcher')).toBe(true); // GF-3 fires
+    // Re-baseline in the village + burn the shared cooldown, then CV-4 fires too.
+    d.update(ctx([9, 9], { zone: 'cinder-village', dtMs: D.minScareGapSec * 1000 + 1000 }));
+    expect(d.update(ctx([4, 2], { zone: 'cinder-village' })).some((a) => a.kind === 'watcher')).toBe(true);
+    expect(d.watcherSightings).toBe(2);           // both budget as sightings (2 ≤ 6)
+    expect(d.beatsFired).toBe(D.maxBeatsPerDrop); // the ceiling never moved
+  });
+
+  it('the ceiling still binds every COUNTING beat: at cap, a non-quiet pure-visual beat is blocked', () => {
+    // AF-1-shaped: gimmick null but NOT watcher-only (it carries a crossing
+    // payload) — it counts toward the ceiling, so at cap it must NOT fire.
+    const af1: ScareBeat = {
+      id: 'AF-1x', zone: 'gate-fields',
+      trigger: { on: 'cellEnter', cells: [[11, 0]] }, gimmick: null, crossing: [[3, 8], [7, 8]], oneLine: 'cross',
+    };
+    const d = new DreadDirector([...tenGimmickBeats(), af1], {}, undefined,
+      { glitchSeen: [], watcherSightings: 0 }, () => 0);
+    d.update(ctx([12, 12]));
+    fireAllTen(d);
+    cooldownOut(d);
+    expect(d.update(ctx([11, 0]))).toEqual([]);   // rule 6 unchanged for counting beats
+    expect(d.beatsFired).toBe(D.maxBeatsPerDrop);
+  });
 });

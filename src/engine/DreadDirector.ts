@@ -19,7 +19,11 @@
  *  4. Banner never spoofed — there is no code path that targets the player's
  *     banner/kneel; a `kneel` trigger only READS a completed kneel.
  *  5. Gimmick cap — each screen gimmick fires at most gimmickUseMax (2×)/drop.
- *  6. Beat ceiling — `beatsFired` never exceeds maxBeatsPerDrop (10).
+ *  6. Beat ceiling — `beatsFired` never exceeds maxBeatsPerDrop (10). QUIET
+ *     watcher-only sightings (`isQuietSighting`) are exempt: they neither count
+ *     toward nor are blocked by the ceiling — spec §5's table of 10 is the
+ *     gimmick beats; sightings budget separately under rule 9 (owner decision,
+ *     2026-07-03, finding-2 resolution option b).
  *  7. False-pulse — a `seededClearing` beat fires only on the run-seeded
  *     crossing and at most falsePulsePerZoneMax (2) per zone.
  *  8. Fidelity scarcity — the first fire of a gimmick banks its id in
@@ -79,6 +83,21 @@ export type ScareActivation =
   | { kind: 'pure-visual'; beatId: string; oneLine: string; everSeen: boolean }
   | { kind: 'watcher'; anchor: WatcherAnchor; beatId?: string }
   | { kind: 'hag-glimpse'; beatId?: string }; // beatId absent ⇒ a threshold glimpse
+
+/**
+ * A QUIET watcher-only sighting (finding-2 resolution, owner option b): a beat
+ * whose ONLY payload is the Watcher — `gimmick: null`, `showsWatcher`, and no
+ * pure-visual crossing. GF-3 (Gate Fields quiet) and CV-4 (Cinder rooftop) are
+ * the two authored ones. Exempt from the rule-6 beat ceiling: the spec's §5
+ * table of 10 counts the GIMMICK beats, and its sightings line ("4 across the
+ * drop") budgets these separately — mirrored in code so the ceiling keeps its
+ * pacing meaning. Still one-shot (firedBeatIds) and still charged against the
+ * rule-9 sighting budget. Exported so the zone structural tests share the
+ * exact predicate the scheduler enforces.
+ */
+export function isQuietSighting(beat: ScareBeat): boolean {
+  return beat.gimmick === null && beat.showsWatcher === true && beat.crossing === undefined;
+}
 
 /** Distance in meters between two grid cells (2 m grid). */
 function cellDistM(a: GridPos, b: GridPos): number {
@@ -141,7 +160,8 @@ export class DreadDirector {
     return this.cooldownMs / 1000;
   }
 
-  /** Authored beats fired this drop (capped at maxBeatsPerDrop). */
+  /** Ceiling-COUNTING beats fired this drop (capped at maxBeatsPerDrop). Quiet
+   *  watcher-only sightings are excluded — they budget under rule 9 instead. */
   get beatsFired(): number {
     return this.firedBeats;
   }
@@ -199,17 +219,17 @@ export class DreadDirector {
     // Rule 1: the shared cooldown blocks every scare type.
     if (this.cooldownMs > 0) return [];
 
-    // At most one thing fires per frame. Authored beats first (subject to the
-    // rule-6 beat ceiling), then the Hag threshold (not a beat → not ceiling-
-    // gated, but it still consumes the shared cooldown — rule 1).
-    if (this.firedBeats < D.maxBeatsPerDrop) {
-      for (const beat of this.scares) {
-        if (beat.zone !== ctx.zone) continue;
-        if (this.firedBeatIds.has(beat.id)) continue; // rule: one-shot per drop (finding 1)
-        if (!this.triggerMatches(beat, ctx, crossedInto)) continue;
-        if (!this.passesCaps(beat, ctx.zone)) continue;
-        return this.fire(beat, ctx.zone, ctx.cell);
-      }
+    // At most one thing fires per frame. Authored beats first — the rule-6
+    // ceiling gates each COUNTING beat (quiet watcher-only sightings are
+    // exempt, see isQuietSighting) — then the Hag threshold (not a beat → not
+    // ceiling-gated, but it still consumes the shared cooldown — rule 1).
+    for (const beat of this.scares) {
+      if (beat.zone !== ctx.zone) continue;
+      if (this.firedBeatIds.has(beat.id)) continue; // rule: one-shot per drop (finding 1)
+      if (!isQuietSighting(beat) && this.firedBeats >= D.maxBeatsPerDrop) continue; // rule 6
+      if (!this.triggerMatches(beat, ctx, crossedInto)) continue;
+      if (!this.passesCaps(beat, ctx.zone)) continue;
+      return this.fire(beat, ctx.zone, ctx.cell);
     }
     if (this.hag && crossedInto(this.hag.glimpseCells)) {
       this.cooldownMs = D.minScareGapSec * 1000;
@@ -272,7 +292,9 @@ export class DreadDirector {
   private fire(beat: ScareBeat, zone: ZoneId, playerCell: GridPos): ScareActivation[] {
     // Rule 1: the fire (re)starts the full shared cooldown.
     this.cooldownMs = D.minScareGapSec * 1000;
-    this.firedBeats += 1;
+    // Rule 6: only COUNTING beats advance the ceiling — a quiet watcher-only
+    // sighting budgets under rule 9 (sightings) instead, never both.
+    if (!isQuietSighting(beat)) this.firedBeats += 1;
     this.firedBeatIds.add(beat.id); // finding 1: spent — never fires again this drop
     const out: ScareActivation[] = [];
     const g = beat.gimmick;
