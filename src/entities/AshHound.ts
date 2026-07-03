@@ -251,7 +251,12 @@ function box(w: number, h: number, d: number, mat: Material): Mesh {
   return new Mesh(new BoxGeometry(w, h, d), mat);
 }
 
-const HOUND_LEG_LEN = 1.7;
+/** The body stack that rises ABOVE the hip line: the torso offset (0.05) + the
+ *  gaunt ridge's offset (0.3) + its half-height (0.11). The silhouette's TOP is
+ *  the ridge, so the leg length is back-solved from the tuned `heightM` (2.3 m,
+ *  previously a dead field): ridge-top = HOUND_LEG_LEN + HOUND_BACK_RISE = heightM. */
+const HOUND_BACK_RISE = 0.46;
+const HOUND_LEG_LEN = H.heightM - HOUND_BACK_RISE; // 2.3 − 0.46 → 1.84 m of too-long leg
 const HOUND_HIP_Y = HOUND_LEG_LEN;
 const HOUND_TORSO_Y = HOUND_HIP_Y + 0.05;
 

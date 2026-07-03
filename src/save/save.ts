@@ -57,9 +57,11 @@ export interface SaveDataV1 extends SaveDataBase {
 }
 
 /**
- * The current save shape. `version` is `1 | 2` because the game still writes
- * version-1 checkpoints (see main.ts) that `loadGame` migrates to v2 on read;
- * `migrateV1toV2`/`secondVigilSave` produce version 2 — the canonical shape.
+ * The current save shape. `version` is `1 | 2` because a PRE-v2 save may still
+ * exist in a player's localStorage: `loadGame` accepts it and migrates it to v2
+ * on read (in place). The game itself now only ever WRITES version 2 — every
+ * checkpoint (`main.ts onSave`), `migrateV1toV2`, and `secondVigilSave` produce
+ * the canonical v2 shape (the old version-1 checkpoint write was retired in T7).
  */
 export interface SaveData extends SaveDataBase {
   version: 1 | 2;
