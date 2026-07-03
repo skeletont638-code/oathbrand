@@ -24,10 +24,11 @@ const base = loreEntries.filter(([, e]) => !e.ngOnly);
 const ng = loreEntries.filter(([, e]) => e.ngOnly);
 
 describe('LORE content', () => {
-  it('writes 25 placed base inscriptions + 8 NG+ inscriptions (33 total)', () => {
-    expect(base.length).toBe(25);
+  it('writes 30 placed base inscriptions + 8 NG+ inscriptions (38 total)', () => {
+    // 25 castle-campaign base entries + the 5 Gate Fields inscriptions (Task 9).
+    expect(base.length).toBe(30);
     expect(ng.length).toBe(8);
-    expect(loreEntries.length).toBe(33);
+    expect(loreEntries.length).toBe(38);
   });
 
   it('every entry has a real title and body (no leftover placeholders)', () => {

@@ -142,6 +142,28 @@ export const LORE: Record<string, LoreEntry> = {
     body: 'From here the whole vigil watched the last host form up and ride for the cliff of embers, banners like a second, redder dawn. Every brand in that column has since gone out. One brand was not in the column. Yours.',
   },
 
+  // ─── GREATER VAEL DROP 1 — THE GATE FIELDS (Task 9) ────────────────────
+  'gv-field-boundary-stone': {
+    title: 'The Boundary-Stone',
+    body: 'Its old blessing is chiselled off, and a tally cut in the bare place. Past this mark the flame was not given to the fields — it was lent to them, at interest. The fields have been paying ever since, and the fields are bare.',
+  },
+  'gv-field-scarecrow-ward': {
+    title: 'The Straw Ward',
+    body: 'It wears a soldier’s ruined brand for a face. When the fog first came off the tree-line the village had no ward against it but its own hollowed dead, so they knelt one here and called it a scarecrow. It has knelt a hundred years. It is still listening.',
+  },
+  'gv-field-childs-shoe': {
+    title: 'A Child’s Shoe',
+    body: 'Ash-grey, pulled from a fallen chimney-throat. Scratched beside the hearth-door, a daisy-wheel — six petals in one unbroken line, to snare any evil that came down the flue. It snared nothing. The shoe is here and the child is not.',
+  },
+  'gv-field-gibbet': {
+    title: 'The Empty Gibbet',
+    body: 'An iron cage hangs from the oak, rusted open, high where every road could see it. Something was kept in it once — a warning, or a payment left where the collector could find it. The cage is empty now. Nothing broke the lock from outside.',
+  },
+  'gv-field-tithe-post': {
+    title: 'The Tithe-Post',
+    body: 'A toll-post at the crossing, its ledger-slot worn smooth by cold coin. Here a traveller bought back an hour of warmth against the fog, hearth-fire measured out by the finger-length. The Flame lent a kingdom its fire; the kingdom sold it on by the ember. None of the debt ran the other way.',
+  },
+
   // ─── NG+ (T16): the recontextualisations. Defined now, placed later. ────
   'ng-queen-knew': {
     ngOnly: true,

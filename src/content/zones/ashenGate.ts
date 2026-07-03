@@ -21,7 +21,7 @@ export const ASHEN_GATE: ZoneDef = {
     '#..........#',
     '#...####...#',
     '#...#..#...#',
-    '#..........#',
+    '2..........#',
     '#....11....#',
     '############',
   ],
@@ -82,7 +82,14 @@ export const ASHEN_GATE: ZoneDef = {
     { id: 'gate-ash', at: [3, 8] }, // the ash that never settles
     { id: 'watchpost-ledger', at: [6, 6] }, // the muster-roll by the watch-post
   ],
-  doors: [{ id: 'gate-to-hall', at: [7, 5], to: 'great-hall', pair: 'gate-hall' }],
+  doors: [
+    { id: 'gate-to-hall', at: [7, 5], to: 'great-hall', pair: 'gate-hall' },
+    // Greater Vael Drop 1 (Task 9): the postern west out of the courtyard,
+    // sealed until the castle is beaten (`greater-vael-open`). Its `2` anchor
+    // sits at [6,0] on the west wall, well clear of the vista row and the
+    // banner — pairs with the Gate Fields `gf-to-gate` postern.
+    { id: 'gate-to-fields', at: [6, 0], to: 'gate-fields', lock: 'greatervael', pair: 'gate-fields-postern' },
+  ],
   ambience: ['amb-ash-wind', 'amb-vigil-synth'],
   // Clip #1: first entry to the northern row — fog opens 12→28, camera
   // lifts over the parapet (VistaDirector). Row 1, cols 3–8 per the plan.

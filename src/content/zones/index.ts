@@ -15,8 +15,10 @@ import { RAMPARTS } from './ramparts';
 import { THRONE } from './throne';
 import { SUMMIT } from './summit';
 import { QUEENS_GARDEN } from './queensGarden';
+import { GATE_FIELDS } from './gateFields';
 
-/** Every built zone, by id. All seven have landed (T16 built the garden). */
+/** Every built zone, by id. The seven-zone castle campaign (T11–T16) plus the
+ *  first Greater Vael exterior — the Gate Fields hub (Task 9). */
 export const ZONES: Partial<Record<ZoneId, ZoneDef>> = {
   'ashen-gate': ASHEN_GATE,
   'great-hall': GREAT_HALL,
@@ -25,18 +27,27 @@ export const ZONES: Partial<Record<ZoneId, ZoneDef>> = {
   throne: THRONE,
   summit: SUMMIT,
   'queens-garden': QUEENS_GARDEN,
+  'gate-fields': GATE_FIELDS,
 };
 
 /**
  * Zones the design names but later tasks build: a door may target one before
  * its zone ships, and main.ts treats an unbuilt destination as sealed. The v1
  * castle campaign is complete (T16 landed the Queen's Garden), so every v1 door
- * target is a real, registered zone. `salt-road` is the Greater Vael Drop 2
- * target: Pilgrim's Descent authors a door into it a drop early, so it lives
- * here until Drop 2 ships (then remove it and the structural tests demand a
- * real pairing).
+ * target is a real, registered zone.
+ *
+ * Greater Vael Drop 1 re-arms the allowlist: the Gate Fields hub (Task 9) opens
+ * three roads — `cinder-village`, `ashen-forest-n`, `pilgrims-descent` — whose
+ * zones land in Tasks 10–12, so they live here until then (each is removed as
+ * its zone ships, and the structural tests then demand a real pairing).
+ * `salt-road` is the Drop-2 target Pilgrim's Descent will door into a drop early.
  */
-export const FUTURE_ZONE_IDS: ReadonlySet<ZoneId> = new Set<ZoneId>(['salt-road']);
+export const FUTURE_ZONE_IDS: ReadonlySet<ZoneId> = new Set<ZoneId>([
+  'cinder-village',
+  'ashen-forest-n',
+  'pilgrims-descent',
+  'salt-road',
+]);
 
 /** True when `id` names a built, registered zone. */
 export function hasZone(id: ZoneId): boolean {

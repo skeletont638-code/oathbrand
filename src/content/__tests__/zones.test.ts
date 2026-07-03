@@ -63,9 +63,14 @@ describe('zone registry', () => {
     expect(ZONES['summit']).toBeDefined();
   });
 
-  it('registers the Task 16 zone (queens-garden), completing all seven', () => {
+  it('registers the Task 16 zone (queens-garden), completing the castle seven', () => {
     expect(ZONES['queens-garden']).toBeDefined();
-    expect(Object.keys(ZONES)).toHaveLength(7);
+  });
+
+  it('registers the first Greater Vael exterior — the Gate Fields hub (Task 9)', () => {
+    expect(ZONES['gate-fields']).toBeDefined();
+    // Seven castle zones + the Gate Fields hub.
+    expect(Object.keys(ZONES)).toHaveLength(8);
   });
 
   it('zoneOrThrow returns every registered zone (the campaign is complete)', () => {
@@ -80,10 +85,18 @@ describe('zone registry', () => {
     expect(hasZone('queens-garden')).toBe(true);
   });
 
-  it('the future-zone allowlist holds only unbuilt Drop-2 targets (salt-road)', () => {
-    // Greater Vael Drop 1 re-arms the allowlist: Pilgrim's Descent authors a
-    // door into `salt-road` a drop early, so it is the sole allowlisted target.
-    expect([...FUTURE_ZONE_IDS].sort()).toEqual(['salt-road']);
+  it('the future-zone allowlist holds only the unbuilt Greater Vael targets', () => {
+    // Greater Vael Drop 1 re-arms the allowlist: the Gate Fields hub (Task 9)
+    // opens roads into three zones that Tasks 10–12 build — cinder-village,
+    // ashen-forest-n, pilgrims-descent — plus the Drop-2 salt-road forward ref.
+    // Each is removed as its zone ships (the structural tests then demand a real
+    // pairing).
+    expect([...FUTURE_ZONE_IDS].sort()).toEqual([
+      'ashen-forest-n',
+      'cinder-village',
+      'pilgrims-descent',
+      'salt-road',
+    ]);
     // No registered/built zone may ever sit in the allowlist…
     for (const [id] of entries) expect(FUTURE_ZONE_IDS.has(id)).toBe(false);
     // …and everything on the allowlist is genuinely unbuilt.
@@ -171,6 +184,23 @@ describe('zone registry', () => {
 
   it('the game start zone (ashen-gate) carries the vista', () => {
     expect(ZONES['ashen-gate']?.vista?.id).toBeTruthy();
+  });
+
+  it('the Ashen Gate postern pairs both ways with the Gate Fields hub (Task 9)', () => {
+    const gate = zoneOrThrow('ashen-gate');
+    const fields = zoneOrThrow('gate-fields');
+    const gateToFields = gate.doors.find((d) => d.id === 'gate-to-fields');
+    const gfToGate = fields.doors.find((d) => d.id === 'gf-to-gate');
+    expect(gateToFields, 'ashen-gate is missing the gate-to-fields postern').toBeDefined();
+    expect(gfToGate, 'gate-fields is missing the gf-to-gate postern').toBeDefined();
+    // Both ends share the passage edge and the Greater Vael lock.
+    expect(gateToFields!.pair).toBe('gate-fields-postern');
+    expect(gfToGate!.pair).toBe('gate-fields-postern');
+    expect(gateToFields!.lock).toBe('greatervael');
+    expect(gfToGate!.lock).toBe('greatervael');
+    // Walking the postern lands the player at the OTHER zone's paired door.
+    expect(pairedDoor('ashen-gate', gateToFields!, fields)?.to).toBe('ashen-gate');
+    expect(pairedDoor('gate-fields', gfToGate!, gate)?.to).toBe('gate-fields');
   });
 });
 

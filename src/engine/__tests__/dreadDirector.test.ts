@@ -45,7 +45,7 @@ function cooldownOut(d: DreadDirector): void {
 
 describe('DreadDirector — scheduling rules', () => {
   it('fires A on approach, then holds the 90s cooldown', () => {
-    const d = new DreadDirector(beats, [], undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
+    const d = new DreadDirector(beats, {}, undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
     const near = ctx([9, 3]);
     expect(d.update(near).map((a) => a.kind)).toEqual(['silence-spike']);
     expect(d.cooldownRemainingSec).toBeCloseTo(90);
@@ -53,13 +53,13 @@ describe('DreadDirector — scheduling rules', () => {
   });
 
   it('never fires in combat, and does not consume the cooldown', () => {
-    const d = new DreadDirector(beats, [], undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
+    const d = new DreadDirector(beats, {}, undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
     expect(d.update(ctx([9, 3], { inCombat: true }))).toEqual([]);
     expect(d.cooldownRemainingSec).toBe(0); // suppressed, not consumed
   });
 
   it('activations carry no damage field (a damaging scare is unrepresentable)', () => {
-    const d = new DreadDirector(beats, [], undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
+    const d = new DreadDirector(beats, {}, undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
     const [a] = d.update(ctx([9, 3]));
     expect(a).toBeDefined();
     expect(Object.keys(a)).not.toContain('damage');
@@ -71,7 +71,7 @@ describe('DreadDirector — scheduling rules', () => {
       trigger: { on: 'cellEnter', cells: [[n, n]] as [number, number][] },
       gimmick: 'desaturation', oneLine: String(n),
     }));
-    const d = new DreadDirector(desat, [], undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
+    const d = new DreadDirector(desat, {}, undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
     d.update(ctx([0, 0]));                                             // establish baseline
     expect(d.update(ctx([1, 1])).map((a) => a.kind)).toEqual(['desaturation']); // D1
     cooldownOut(d);
@@ -88,7 +88,7 @@ describe('DreadDirector — scheduling rules', () => {
       trigger: { on: 'cellEnter', cells: [[n, n]] as [number, number][] },
       gimmick: 'desaturation', oneLine: String(n),
     }));
-    const d = new DreadDirector(desat, [], undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
+    const d = new DreadDirector(desat, {}, undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
     d.update(ctx([0, 0]));
     const [first] = d.update(ctx([1, 1]));
     expect(first.kind).toBe('desaturation');
@@ -104,7 +104,7 @@ describe('DreadDirector — scheduling rules', () => {
       id: 'D1', zone: 'gate-fields',
       trigger: { on: 'cellEnter', cells: [[1, 1]] }, gimmick: 'desaturation', oneLine: '1',
     }];
-    const d = new DreadDirector(desat, [], undefined, { glitchSeen: ['desaturation'], watcherSightings: 0 }, () => 0);
+    const d = new DreadDirector(desat, {}, undefined, { glitchSeen: ['desaturation'], watcherSightings: 0 }, () => 0);
     d.update(ctx([0, 0]));
     const [a] = d.update(ctx([1, 1]));
     expect((a as { everSeen?: boolean }).everSeen).toBe(true);
@@ -112,7 +112,7 @@ describe('DreadDirector — scheduling rules', () => {
 
   it('fires the false-pulse only on the seeded clearing crossing', () => {
     // rng 0.5 → the middle of a 3-visit window → target crossing 2.
-    const d = new DreadDirector([beats[1]], [], undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0.5);
+    const d = new DreadDirector([beats[1]], {}, undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0.5);
     d.update(ctx([0, 0]));                              // baseline
     expect(d.update(ctx([6, 7]))).toEqual([]);          // crossing 1 — not the seed
     cooldownOut(d);
@@ -128,7 +128,7 @@ describe('DreadDirector — scheduling rules', () => {
       trigger: { on: 'cellEnter', cells: [[i, 0]] as [number, number][] },
       gimmick: 'watcher', oneLine: 'w',
     }));
-    const d = new DreadDirector(watchers, [[3, 3]], undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
+    const d = new DreadDirector(watchers, { 'gate-fields': [[3, 3]] }, undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
     for (let i = 0; i < 7; i++) {
       cooldownOut(d);            // neutral cell + full cooldown between each
       d.update(ctx([i, 0]));     // crossing into Wi's cell
@@ -142,7 +142,7 @@ describe('DreadDirector — scheduling rules', () => {
       id: 'AF-2', zone: 'gate-fields',
       trigger: { on: 'cellEnter', cells: [[4, 4]] }, gimmick: 'snap-grid', showsWatcher: true, oneLine: 'z',
     }];
-    const d = new DreadDirector(beat, [[2, 2]], undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
+    const d = new DreadDirector(beat, { 'gate-fields': [[2, 2]] }, undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
     d.update(ctx([0, 0]));
     const out = d.update(ctx([4, 4]));
     expect(out.map((a) => a.kind).sort()).toEqual(['snap-grid', 'watcher']);
@@ -155,7 +155,7 @@ describe('DreadDirector — scheduling rules', () => {
       id: 'T', zone: 'gate-fields',
       trigger: { on: 'timer', at: [5, 5], minSec: 2 }, gimmick: 'snap-grid', oneLine: 't',
     }];
-    const d = new DreadDirector(timer, [], undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
+    const d = new DreadDirector(timer, {}, undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
     // Standing near [5,5] but only 1s in → not yet.
     expect(d.update(ctx([5, 5], { dtMs: 1000 }))).toEqual([]);
     // Another 1s (2s total) → fires.
@@ -164,11 +164,34 @@ describe('DreadDirector — scheduling rules', () => {
 
   it('glimpses the Hag on crossing her threshold (consuming the shared cooldown)', () => {
     const hag = { at: [8, 8] as [number, number], glimpseCells: [[8, 8]] as [number, number][] };
-    const d = new DreadDirector([], [], hag, { glitchSeen: [], watcherSightings: 0 }, () => 0);
+    const d = new DreadDirector([], {}, hag, { glitchSeen: [], watcherSightings: 0 }, () => 0);
     d.update(ctx([0, 0]));                                  // baseline (not on the threshold)
     expect(d.update(ctx([8, 8])).map((a) => a.kind)).toEqual(['hag-glimpse']);
     expect(d.cooldownRemainingSec).toBeCloseTo(90);        // rule 1: it consumes the cooldown
     expect(d.beatsFired).toBe(0);                           // a threshold glimpse is not a beat
+  });
+
+  it('manifests the Watcher at the beat\'s OWN zone anchor, never another zone\'s (T5 review)', () => {
+    // One run-scoped director spans both exterior zones; each has its own anchor.
+    // A beat firing in zone A must never manifest at zone B's anchor.
+    const cross: ScareBeat[] = [
+      { id: 'WA', zone: 'gate-fields', trigger: { on: 'cellEnter', cells: [[0, 0]] }, gimmick: 'watcher', oneLine: 'a' },
+      { id: 'WB', zone: 'ashen-forest-n', trigger: { on: 'cellEnter', cells: [[0, 0]] }, gimmick: 'watcher', oneLine: 'b' },
+    ];
+    const anchorsByZone = {
+      'gate-fields': [[6, 16]] as [number, number][],
+      'ashen-forest-n': [[9, 9]] as [number, number][],
+    };
+    const d = new DreadDirector(cross, anchorsByZone, undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
+    d.update(ctx([5, 5])); // baseline in gate-fields (not the trigger cell)
+    const gf = d.update(ctx([0, 0]));
+    const gfW = gf.find((a) => a.kind === 'watcher') as { anchor: [number, number] } | undefined;
+    expect(gfW?.anchor).toEqual([6, 16]); // gate-fields anchor — NEVER [9,9]
+    cooldownOut(d);
+    d.update(ctx([5, 5], { zone: 'ashen-forest-n' })); // baseline in the forest
+    const af = d.update(ctx([0, 0], { zone: 'ashen-forest-n' }));
+    const afW = af.find((a) => a.kind === 'watcher') as { anchor: [number, number] } | undefined;
+    expect(afW?.anchor).toEqual([9, 9]); // ashen-forest-n anchor — NEVER [6,16]
   });
 
   it('only evaluates beats belonging to the current zone', () => {
@@ -176,7 +199,7 @@ describe('DreadDirector — scheduling rules', () => {
       id: 'X', zone: 'ashen-forest-n',
       trigger: { on: 'approach', at: [9, 3], withinM: 3 }, gimmick: 'desaturation', oneLine: 'q',
     }];
-    const d = new DreadDirector(cross, [], undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
+    const d = new DreadDirector(cross, {}, undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
     expect(d.update(ctx([9, 3]))).toEqual([]);            // wrong zone → inert
     expect(d.update(ctx([9, 3], { zone: 'ashen-forest-n' })).map((a) => a.kind)).toEqual(['desaturation']);
   });

@@ -121,8 +121,12 @@ describe('anomaly registry (Exit-8 grammar)', () => {
   it('every recontextualised base zone has at least one anomaly', () => {
     // The Queen's Garden is NG+-native — the reveal itself, not a haunted re-run
     // of a base zone — so it carries no anomaly by design (the withheld stillness).
+    // Greater Vael exterior zones (Task 9+) are NOT part of the castle Second
+    // Vigil: their unease is the live DreadDirector scare system, not static NG+
+    // anomalies, so they carry none either.
     for (const zone of builtZones) {
       if (zone === 'queens-garden') continue;
+      if (ZONES[zone]?.kind === 'exterior') continue;
       expect(anomaliesForZone(zone).length, `zone ${zone} has no anomaly`).toBeGreaterThanOrEqual(1);
     }
   });

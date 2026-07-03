@@ -3,7 +3,6 @@ import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js
 import { TUNING } from './content/tuning';
 import type { GameFlag, ZoneId } from './content/types';
 import { hasZone, zoneOrThrow, ZONES } from './content/zones';
-import { DEV_EXTERIOR_ZONE } from './world/devExterior';
 import { skyFogColor } from './world/exteriorSky';
 import { Game } from './engine/Game';
 import { DreadDirector } from './engine/DreadDirector';
@@ -134,23 +133,17 @@ const EYE_OPEN_SPEED = 0.22; // per second — a slow waking
  * old hardcoded TEST_ZONE (Task 11); the real zones ARE the test content
  * now, and manual QA reaches each one directly.
  */
-/** Dev builds may reach the Task-2 exterior scaffold via `?dev=1&zone=gate-fields`
- *  before Task 3 ships the real zone (see world/devExterior.ts). */
-const IS_DEV = new URLSearchParams(window.location.search).get('dev') === '1';
-
-/** Resolve a zone def, falling back to the dev exterior scaffold under `?dev=1`
- *  for its (still-unbuilt) id — the moment Task 3 registers it, `hasZone` wins. */
+/** Resolve a zone def. Every reachable zone is a registered ZoneDef now — the
+ *  Task-2 dev exterior scaffold is gone (Task 9 shipped the real Gate Fields). */
 function resolveZone(id: ZoneId): ZoneDef {
-  if (IS_DEV && !hasZone(id) && id === DEV_EXTERIOR_ZONE.id) return DEV_EXTERIOR_ZONE;
   return zoneOrThrow(id);
 }
 
 /**
- * Greater Vael Drop 1 exterior ambience registry (Task 6). The real gv ZoneDefs
- * land in later drops, so their two synth beds are authored here ahead of the
- * geometry — a zone whose def carries no `ambience` (the dev exterior, and every
- * unbuilt gv id) resolves to its pair of layers below. Castle zones keep their
- * own def-declared ambience untouched.
+ * Greater Vael Drop 1 exterior ambience registry (Task 6). The Drop-1 gv zones
+ * land task by task, so their two synth beds are authored here ahead of the
+ * geometry — an unbuilt gv id (no ZoneDef yet) resolves to its pair of layers
+ * below. Built zones keep their own def-declared ambience untouched.
  */
 const GV_AMBIENCE: Partial<Record<ZoneId, string[]>> = {
   'gate-fields': ['amb-field-wind', 'amb-tithe-toll'],
@@ -162,9 +155,9 @@ const GV_AMBIENCE: Partial<Record<ZoneId, string[]>> = {
 /** The two ambience layer ids for a zone: its def's own array when authored,
  *  else the Greater Vael registry. Never throws for an unbuilt gv zone — those
  *  have no ZoneDef yet, so `resolveZone` (which rejects unbuilt ids) is only
- *  consulted for a built zone or the dev exterior. */
+ *  consulted for a built zone. */
 function resolveAmbience(id: ZoneId): string[] {
-  if (hasZone(id) || (IS_DEV && id === DEV_EXTERIOR_ZONE.id)) {
+  if (hasZone(id)) {
     const def = resolveZone(id).ambience;
     if (def.length > 0) return def;
   }
@@ -174,7 +167,7 @@ function resolveAmbience(id: ZoneId): string[] {
 function startZoneId(): ZoneId {
   const params = new URLSearchParams(window.location.search);
   const zone = params.get('dev') === '1' ? params.get('zone') : null;
-  if (zone && (hasZone(zone as ZoneId) || zone === DEV_EXTERIOR_ZONE.id)) return zone as ZoneId;
+  if (zone && hasZone(zone as ZoneId)) return zone as ZoneId;
   return 'ashen-gate';
 }
 
@@ -216,21 +209,31 @@ function mulberry32(seed: number): () => number {
 /** Gather every EXTERIOR zone's scare authoring for one run-scoped DreadDirector
  *  (the per-drop caps — 10 beats, 2×/gimmick, 6 Watchers — must span the whole
  *  drop, so there is ONE director, not one per zone). Castle/interior zones
- *  contribute nothing, which is exactly why they never get scares. Empty today
- *  (no exterior zone authors beats yet); auto-populates as Tasks 9–12 land. */
-function exteriorScareData(): { scares: ScareBeat[]; anchors: GridPos[]; hag: HagThresholdDef | undefined } {
+ *  contribute nothing, which is exactly why they never get scares.
+ *
+ *  Watcher anchors are kept KEYED BY ZONE (T5 review fix): the single run-scoped
+ *  director spans every exterior zone, so a flat anchor list would let a beat in
+ *  zone A manifest the Watcher at zone B's anchor. `anchorsByZone` scopes the
+ *  pick to `beat.zone`; the WatcherPresence is re-scoped per entry (setAnchors)
+ *  so an off-screen reposition can never wander into another zone's anchor. */
+function exteriorScareData(): {
+  scares: ScareBeat[];
+  anchorsByZone: Partial<Record<ZoneId, GridPos[]>>;
+  hag: HagThresholdDef | undefined;
+} {
   const scares: ScareBeat[] = [];
-  const anchors: GridPos[] = [];
+  const anchorsByZone: Partial<Record<ZoneId, GridPos[]>> = {};
   let hag: HagThresholdDef | undefined;
   const defs: ZoneDef[] = Object.values(ZONES).filter((d): d is ZoneDef => d !== undefined);
-  if (IS_DEV && !hasZone(DEV_EXTERIOR_ZONE.id)) defs.push(DEV_EXTERIOR_ZONE);
   for (const def of defs) {
     if (def.kind !== 'exterior') continue;
     if (def.scares) scares.push(...def.scares);
-    if (def.watcherAnchors) anchors.push(...def.watcherAnchors);
+    if (def.watcherAnchors && def.watcherAnchors.length > 0) {
+      anchorsByZone[def.id] = [...(anchorsByZone[def.id] ?? []), ...def.watcherAnchors];
+    }
     if (!hag && def.hagThreshold) hag = def.hagThreshold;
   }
-  return { scares, anchors, hag };
+  return { scares, anchorsByZone, hag };
 }
 
 /** Everything the context prompt can target in a built zone. Already-taken
@@ -307,6 +310,15 @@ async function startScene(): Promise<void> {
   // a banner). Full save-restore (CONTINUE) lands with the menus (T18).
   const save = loadGame();
   const flags = new Set<GameFlag>(save?.flags ?? []);
+  // Greater Vael Drop 1 (Task 9): the Ashen Gate postern into the Fields opens
+  // once the castle is beaten. Derive `greater-vael-open` into the LIVE flag set
+  // from the v2 persisted mirror (`greaterVael.open`, Task 7), falling back to
+  // "any ending seen" for older saves — so a beaten-castle save opens the postern
+  // (`canPass`) even when the flag was never written into `flags`. A fresh,
+  // no-ending save leaves it sealed.
+  if (save?.greaterVael?.open ?? ((save?.endingsSeen?.length ?? 0) > 0)) {
+    flags.add('greater-vael-open');
+  }
   const ngPlus = save?.ngPlus ?? false;
   const vista = new VistaDirector(save?.visionsSeen ?? []);
   // Lore already read (seeded from the save); the inscription reader adds to
@@ -475,7 +487,7 @@ async function startScene(): Promise<void> {
   const dreadData = exteriorScareData();
   const dread = new DreadDirector(
     dreadData.scares,
-    dreadData.anchors,
+    dreadData.anchorsByZone,
     dreadData.hag,
     {
       glitchSeen: save?.greaterVael?.glitchSeen ?? [],
@@ -498,8 +510,10 @@ async function startScene(): Promise<void> {
   // never see either. The Watcher's sighting seed comes from the same save
   // slice the director uses, so both counters stay in step.
   const PRESENCE_CELL_M = 2; // the universal 2 m grid (zoneDef: "always 2")
+  // Constructed with no anchors — enterZone re-scopes it (setAnchors) to the
+  // active exterior zone, so a reposition can never wander to another zone's.
   const watcherPresence = new WatcherPresence(
-    dreadData.anchors,
+    [],
     PRESENCE_CELL_M,
     save?.greaterVael?.watcherSightings ?? 0,
   );
@@ -1143,6 +1157,10 @@ async function startScene(): Promise<void> {
 
   /** Merge the reached ending into the save's endingsSeen (T18 renders it). */
   function persistEnding(ending: EndingId): void {
+    // Beating the castle opens the Greater Vael postern (Task 9) — set it live so
+    // a same-session return to the Ashen Gate finds it unsealed, and persist it
+    // (it rides `flags` below, and load-time derivation catches it thereafter).
+    flags.add('greater-vael-open');
     const prev = loadGame();
     const base: SaveData = prev ?? {
       version: 1,
@@ -1244,6 +1262,7 @@ async function startScene(): Promise<void> {
     // scoped, so a stale presence would otherwise pop straight back in on the
     // next exterior entry, unpaid-for by any DreadDirector activation.
     watcherPresence.dismiss();
+    watcherPresence.setAnchors([]); // drop this zone's anchors until the next entry re-scopes
     hagPresence = null;
   }
 
@@ -1253,6 +1272,10 @@ async function startScene(): Promise<void> {
    *  silhouette, `atThreshold`, and the OFFER prompt always agree. */
   function spawnPresenceViews(): void {
     if (activeDef.kind !== 'exterior') return;
+    // Re-scope the run-scoped Watcher to THIS zone's anchors (T5 review): the
+    // director picks its manifest anchor by beat.zone, and the presence may only
+    // reposition among the active zone's anchors — never another zone's.
+    watcherPresence.setAnchors(activeDef.watcherAnchors ?? []);
     watcherView = new WatcherView(watcherPresence);
     scene.add(watcherView.root);
     if (activeDef.hagThreshold) {

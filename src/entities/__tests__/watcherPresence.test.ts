@@ -125,6 +125,20 @@ describe('WatcherPresence — the thing at the fog-line', () => {
     expect(partial.visibleSightings).toBe(4);
   });
 
+  it('setAnchors re-scopes reposition to the active zone (no cross-zone wander, T5 review)', () => {
+    // Enter zone A, then re-scope to zone B's anchors: a reposition can only land
+    // on a B anchor, never zone A's old backdrop cell.
+    const w = new WatcherPresence([[1, 40]], CELL, 0); // zone A anchor
+    const zoneB: GridPos[] = [[2, 2], [3, 3]];
+    w.setAnchors(zoneB); // enter zone B
+    w.manifest(zoneB[0]);
+    w.update(16, FAR, SEEN); // gaze lands
+    w.update(16, FAR, UNSEEN); // gaze leaves → one deliberate step
+    const onZoneB = zoneB.some(([r, c]) => r === w.cell[0] && c === w.cell[1]);
+    expect(onZoneB).toBe(true);
+    expect(w.cell).not.toEqual([1, 40]); // never zone A's anchor
+  });
+
   it('is not a combat entity — it has no takeHit / hp surface', () => {
     const w = new WatcherPresence(ANCHORS, CELL, 0);
     expect((w as unknown as { takeHit?: unknown }).takeHit).toBeUndefined();

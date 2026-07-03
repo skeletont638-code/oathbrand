@@ -102,7 +102,10 @@ export class DreadDirector {
 
   constructor(
     private readonly scares: ScareBeat[],
-    private readonly watcherAnchors: GridPos[],
+    /** Watcher anchors KEYED BY ZONE (T5 review): one run-scoped director spans
+     *  every exterior zone, so a beat's manifest anchor must come from the beat's
+     *  OWN zone — never another zone's flattened in. */
+    private readonly anchorsByZone: Partial<Record<ZoneId, GridPos[]>>,
     private readonly hag: HagThresholdDef | undefined,
     state: { glitchSeen: string[]; watcherSightings: number },
     private readonly rng: () => number,
@@ -284,11 +287,13 @@ export class DreadDirector {
     return before;
   }
 
-  /** Resolve the Watcher's manifest anchor for a beat. */
+  /** Resolve the Watcher's manifest anchor for a beat — from the beat's OWN
+   *  zone's anchors only (never another zone's; T5 review). */
   private pickAnchor(beat: ScareBeat): GridPos {
-    if (this.watcherAnchors.length > 0) {
-      // Cycle the authored anchors so successive sightings vary position.
-      return this.watcherAnchors[(this.sightings - 1 + this.watcherAnchors.length) % this.watcherAnchors.length];
+    const zoneAnchors = this.anchorsByZone[beat.zone] ?? [];
+    if (zoneAnchors.length > 0) {
+      // Cycle this zone's authored anchors so successive sightings vary position.
+      return zoneAnchors[(this.sightings - 1 + zoneAnchors.length) % zoneAnchors.length];
     }
     // Fall back to the beat's own location so an anchor is always defined.
     const t = beat.trigger;

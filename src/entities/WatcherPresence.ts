@@ -53,6 +53,10 @@ export class WatcherPresence {
   private st: WatcherState = 'absent';
   /** Index into `anchors` of the CURRENT stand — advanced on a reposition. */
   private idx = 0;
+  /** The ACTIVE zone's anchors — re-scoped per zone entry (setAnchors). The
+   *  run-scoped presence spans the drop, but a reposition must never wander to
+   *  another zone's anchor, so the set it cycles is always the live zone's. */
+  private anchors: GridPos[];
   private cur: GridPos;
   private visibleMs = 0;
   private observed = false;
@@ -65,12 +69,22 @@ export class WatcherPresence {
    *   respected and clamped to the per-drop budget.
    */
   constructor(
-    private readonly anchors: GridPos[],
+    anchors: GridPos[],
     private readonly cellM: number,
     seedSightings = 0,
   ) {
+    this.anchors = anchors;
     this.cur = anchors[0] ?? [0, 0];
     this.sightings = Math.min(D.watcherPerDropMax, Math.max(0, seedSightings));
+  }
+
+  /** Re-scope to a new zone's anchors on zone entry (T5 review): the presence
+   *  is run-scoped for its sighting budget, but the anchor set it may reposition
+   *  among is the ACTIVE zone's only — never a cross-zone flatten. Resets the
+   *  reposition index; a live manifest is left in place until it recedes. */
+  setAnchors(anchors: GridPos[]): void {
+    this.anchors = anchors;
+    this.idx = 0;
   }
 
   get state(): WatcherState {

@@ -64,7 +64,10 @@ export const ASH_PRIESTS: AshPriestPlacement[] = [
   // the ONE voice past the gate; he keeps the threshold of the Fields (welcome
   // + warning) and stands at the foot of the Pilgrim's Descent for his final
   // Drop-1 word. Cells are off-path defaults; the zone task pins them to real floor.
-  { id: 'ashpriest-gv-fields', zone: 'gate-fields', at: [3, 2], rotY: Math.PI * 0.5, dialogueId: 'ashpriest-gv-fields' },
+  // Task 9 pins him on real floor at the NW threshold, one cell west of the
+  // boundary-stone lore [2,3] he keeps (they must not share a cell, or one
+  // interactable would shadow the other); faces east, into the field.
+  { id: 'ashpriest-gv-fields', zone: 'gate-fields', at: [2, 2], rotY: Math.PI * 0.5, dialogueId: 'ashpriest-gv-fields' },
   { id: 'ashpriest-gv-descent', zone: 'pilgrims-descent', at: [2, 3], rotY: Math.PI * 0.5, dialogueId: 'ashpriest-gv-descent' },
 ];
 
