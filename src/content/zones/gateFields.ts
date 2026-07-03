@@ -106,11 +106,12 @@ export const GATE_FIELDS: ZoneDef = {
     { id: 'GF-2', zone: 'gate-fields', trigger: { on: 'seededClearing', cells: [[6, 6], [7, 6], [6, 9], [7, 9]] }, gimmick: 'false-pulse', oneLine: 'The radar throbs once in the empty field.' },
     // GF-3 (finding 2): the zone's QUIET Watcher sighting (no screen gimmick) —
     // a distant tall silhouette in the E tree-line gap, beyond the far-plane,
-    // gone when neared. Fires on the north-central descent from the postern
-    // (spec §3.1 "first look toward the E treeline gap"); every trigger cell is
-    // ≥16 m from the [6,16] anchor so the sighting manifests (DreadDirector rule
-    // 10). One of the drop's 4 Watcher sightings (spec §5).
-    { id: 'GF-3', zone: 'gate-fields', trigger: { on: 'cellEnter', cells: [[3, 6], [3, 7], [4, 7], [4, 8]] }, gimmick: null, showsWatcher: true, oneLine: 'A tall shape stands in the treeline gap, and is gone when you look again.' },
+    // gone when neared. Fires on the north-central arrival from the postern
+    // (spec §3.1 "first look toward the E treeline gap"). Trigger cells sit in the
+    // NW arrival band: ≥16 m from the [6,16] anchor so the sighting manifests
+    // (rule 10), AND clear of both field soldiers' 9 m aggro ([4,11], [10,4]) so
+    // `inCombat` never suppresses it. One of the drop's 4 Watcher sightings.
+    { id: 'GF-3', zone: 'gate-fields', trigger: { on: 'cellEnter', cells: [[1, 6], [1, 7], [2, 5], [2, 6]] }, gimmick: null, showsWatcher: true, oneLine: 'A tall shape stands in the treeline gap, and is gone when you look again.' },
   ],
   // Beyond the E tree-line gap: distant, static, half-occluded by the oak — GF-3
   // manifests the Watcher here. Off-grid backdrop coord, ≥16 m from every GF-3

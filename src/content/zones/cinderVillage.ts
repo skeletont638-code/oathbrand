@@ -129,9 +129,10 @@ export const CINDER_VILLAGE: ZoneDef = {
     // CV-4 (finding 2): the QUIET rooftop Watcher sighting (no screen gimmick) —
     // a tall silhouette on the roofline by the sealed east arch, gone when the
     // player reaches it (spec §3.3). Fires from the west end of the exposure
-    // street; every trigger cell is ≥16 m from the [2,12] roof anchor so the
-    // sighting manifests (DreadDirector rule 10). One of the drop's 4 sightings.
-    { id: 'CV-4', zone: 'cinder-village', trigger: { on: 'cellEnter', cells: [[4, 3], [4, 4]] }, gimmick: null, showsWatcher: true, oneLine: 'On the rooftops by the sealed arch, the tall watcher — gone when you reach it.' },
+    // street (right off the spawn): every trigger cell is ≥16 m from the [2,12]
+    // roof anchor so the sighting manifests (rule 10), and clear of the
+    // collector-house archer's 14 m aggro at [5,11]. One of the drop's 4 sightings.
+    { id: 'CV-4', zone: 'cinder-village', trigger: { on: 'cellEnter', cells: [[4, 2], [4, 3]] }, gimmick: null, showsWatcher: true, oneLine: 'On the rooftops by the sealed arch, the tall watcher — gone when you reach it.' },
   ],
   // On the roofline by the sealed east arch: the `H` house-block at [2,12], which
   // the player can never stand on (a wall cell) → unreachable. The 3rd tuple
