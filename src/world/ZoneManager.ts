@@ -10,7 +10,7 @@ import type { EventBus } from '../engine/events';
 import type { Subsystem } from '../engine/Game';
 import { loadKitPieces } from './assets';
 import type { AssetCache } from './assets';
-import { gridToPlacements, ZoneBuilder } from './ZoneBuilder';
+import { gridToPlacements, PROCEDURAL_PROPS, ZoneBuilder } from './ZoneBuilder';
 import type { BuiltZone, PlacedDoor } from './ZoneBuilder';
 import type { ZoneDef } from './zoneDef';
 import { applyNgPlus } from './ngplus';
@@ -29,7 +29,11 @@ export interface ZoneManagerOptions {
 function neededPieces(def: ZoneDef): Set<string> {
   const pieces = new Set<string>();
   for (const p of gridToPlacements(def)) pieces.add(p.piece); // also validates the grid early
-  for (const prop of def.props) pieces.add(prop.kind);
+  // Procedural props (gibbet) are generated geometry, not a GLB — never request them.
+  for (const prop of def.props) if (!(prop.kind in PROCEDURAL_PROPS)) pieces.add(prop.kind);
+  // `A` door-void house-blocks render as `wall-arch.glb` in the exterior build
+  // (gridToPlacements only knows the interior 'wall' path), so request it here.
+  if (def.grid.some((row) => row.includes('A'))) pieces.add('wall-arch');
   if (def.lights.length > 0) pieces.add('torch');
   if (def.banner) pieces.add('banner');
   return pieces;

@@ -52,6 +52,15 @@ gives the flat-shaded PS1 look directly — so no `downsample-textures` darkenin
 pass is needed (the palette is authored dark). Verified in-browser at 9 draw
 calls / ~16k triangles for a 105-tree test zone (`docs/shots/gv-task2-*.png`).
 
+The realism-pass props — the hanging **gibbet cage** (`gibbet`, ~96 tris, the
+Gate Fields folk-horror motif) and the charred **roof wedge** (`roof-wedge`,
+~12 tris, capping every Cinder Village house block) — are likewise **original
+CC0 geometry generated in code** (`src/world/exteriorProps.ts`), vertex-coloured
+in the OATHBRAND ash palette, no download and no texture. The gibbet is one
+standalone mesh (1 draw); the roof wedges are one InstancedMesh across all house
+cells (1 draw). The Cinder door-void houses reuse the existing `wall-arch.glb`
+(same KayKit atlas → same merge bucket, no new asset).
+
 ## Processing applied (all repeatable via `bash scripts/fetch-assets.sh`)
 
 - Texture atlases downsampled to 128 px, darkened toward the OATHBRAND palette

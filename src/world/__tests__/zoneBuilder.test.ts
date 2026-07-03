@@ -262,6 +262,21 @@ describe('ZoneBuilder.build (exterior)', () => {
     expect(mergedNames(built.group).length).toBeLessThanOrEqual(6);
     expect(mergedNames(built.group)).not.toContain('merged:floor');
   });
+
+  // --- Task 9: procedural props + roof-wedge cap -----------------------------
+
+  it('a gibbet prop builds as a standalone procedural mesh, not a kit piece', () => {
+    const built = new ZoneBuilder().build(
+      exteriorZone(['..', '..'], { props: [{ kind: 'gibbet', at: [0, 0] }] }), fakeAssets());
+    let found = false;
+    built.group.traverse((o) => { if ((o as Mesh).name === 'prop:gibbet') found = true; });
+    expect(found).toBe(true);
+  });
+
+  it('H/A house cells get a roof-wedge instanced cap (1 draw call)', () => {
+    const built = new ZoneBuilder().build(exteriorZone(['H.', 'A.']), fakeAssets());
+    expect(instancedNames(built.group)).toContain('roof-wedge');
+  });
 });
 
 describe('planarUV', () => {

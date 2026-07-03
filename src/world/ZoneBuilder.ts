@@ -34,6 +34,7 @@ import { GridCollider } from './collision';
 import type { AssetCache } from './assets';
 import type { DoorDef, EnemySpawn, GridPos, ItemSpot, LoreSpot, TileKind, ZoneDef } from './zoneDef';
 import { grassGeometry, pineGeometry, trunkGeometry } from './exteriorForest';
+import { gibbetGeometry, roofWedgeGeometry } from './exteriorProps';
 import { buildExteriorSky } from './exteriorSky';
 import { getTexture } from './textures';
 import type { Anomaly } from '../content/anomalies';
@@ -112,6 +113,17 @@ const TORCH_LIGHT_INTENSITY = 8;
 const TORCH_LIGHT_DISTANCE = 11;
 /** banner.glb extends to z≈0.69 behind its origin (KIT.md) — used to rest it on a wall face. */
 const BANNER_BACK_M = 0.69;
+/** Exterior checkpoint banners render larger so the kneel-point is findable
+ *  across an open field/gorge (spec §5, Pilgrim's readability). */
+const BANNER_EXT_SCALE = 0.65;
+
+/**
+ * Procedural props: kinds whose geometry is generated in `exteriorProps.ts`
+ * (not a kit GLB), placed as a standalone vertex-coloured mesh rather than
+ * merged into a material bucket. `ZoneManager.neededPieces` reads this so it
+ * never asks the GLB loader for a `gibbet.glb` (there is none).
+ */
+export const PROCEDURAL_PROPS: Record<string, () => BufferGeometry> = { gibbet: gibbetGeometry };
 /** Merge only these attributes; anything else (tangents…) is dropped. */
 const MERGE_ATTRS = ['position', 'normal', 'uv'] as const;
 
@@ -161,6 +173,8 @@ type CellKind = TileKind | 'door';
 function cellKind(ch: string, def: ZoneDef, row: number, col: number): CellKind {
   switch (ch) {
     case '#':
+      return 'wall';
+    case 'A': // door-void ruin house-block: solid like `H`, rendered as wall-arch (Task 9)
       return 'wall';
     case '.':
     case 'B': // banner anchor
@@ -570,10 +584,10 @@ export class ZoneBuilder {
     // flush-offset onto the shared boundary (the `H` ruin block, or an unknown
     // solid exterior letter). At the cell's terrain height.
     const flush = half - (WALL_THICKNESS_M * KIT_SCALE) / 2;
-    const addExteriorWall = (row: number, col: number, x: number, y: number, z: number): void => {
+    const addExteriorWall = (row: number, col: number, x: number, y: number, z: number, piece = 'wall'): void => {
       const d = ORTHO.find(([dr, dc]) => kindAt(def, row + dr, col + dc) !== 'wall');
-      if (d) addPiece('wall', x + d[1] * flush, y, z + d[0] * flush, Math.atan2(d[1], d[0]), KIT_SCALE);
-      else addPiece('wall', x, y, z, 0, KIT_SCALE);
+      if (d) addPiece(piece, x + d[1] * flush, y, z + d[0] * flush, Math.atan2(d[1], d[0]), KIT_SCALE);
+      else addPiece(piece, x, y, z, 0, KIT_SCALE);
     };
 
     // Architecture from the grid. Interiors place kit modules (4m module at
@@ -584,6 +598,10 @@ export class ZoneBuilder {
     const sparse: ForestSpot[] = [];
     const dense: ForestSpot[] = [];
     const ground: ForestSpot[] = [];
+    // House cells (`H` ruin block + `A` door-void arch) get an auto roof-wedge
+    // cap (1 InstancedMesh, Cinder Village only) — collected here, stamped after
+    // the ground mesh below (Task 9).
+    const houseCells: GridPos[] = [];
     if (def.kind === 'exterior') {
       for (let row = 0; row < def.grid.length; row++) {
         const line = def.grid[row];
@@ -613,6 +631,14 @@ export class ZoneBuilder {
           } else if (ch === 'H') {
             floorTile();
             addExteriorWall(row, col, x, y, z); // a built ruin (Cinder Village house)
+            houseCells.push([row, col]); // gets a charred roof-wedge cap
+          } else if (ch === 'A') {
+            // Door-void ruin house-block: a `wall-arch.glb` (SAME atlas → SAME
+            // merge bucket as `wall`) in place of the solid wall, so the house
+            // reads as a burnt home with a gaping doorway rather than castle wall.
+            floorTile();
+            addExteriorWall(row, col, x, y, z, 'wall-arch');
+            houseCells.push([row, col]); // capped by the same roof-wedge stamp
           } else {
             const kind = cellKind(ch, def, row, col);
             if (kind === 'void') continue;
@@ -631,9 +657,23 @@ export class ZoneBuilder {
     }
 
     // Props are life-sized (KIT.md): scale 1 at their cell center, on the terrain.
+    // Procedural props (gibbet) are original vertex-coloured geometry placed as a
+    // standalone mesh (NOT a kit GLB and NOT merged into a bucket — 1 draw each).
     for (const prop of def.props) {
       const [row, col] = prop.at;
-      addPiece(prop.kind, col * cell + half, cellHeightM(row, col), row * cell + half, prop.rotY ?? 0, 1);
+      const px = col * cell + half, pz = row * cell + half, py = cellHeightM(row, col);
+      const make = PROCEDURAL_PROPS[prop.kind];
+      if (make) {
+        const material = new MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, flatShading: true });
+        patchMaterial(material);
+        const mesh = new Mesh(make(), material);
+        mesh.position.set(px, py, pz);
+        mesh.rotation.y = prop.rotY ?? 0;
+        mesh.name = `prop:${prop.kind}`;
+        group.add(mesh);
+        continue;
+      }
+      addPiece(prop.kind, px, py, pz, prop.rotY ?? 0, 1);
     }
 
     // Torches: bracket mesh mounted on an adjacent wall face (model's +z arm
@@ -670,8 +710,11 @@ export class ZoneBuilder {
       const cx = col * cell + half;
       const cz = row * cell + half;
       const [dr, dc] = wallDirFrom(def, row, col) ?? [-1, 0];
-      const setback = half - BANNER_BACK_M * KIT_SCALE;
-      addPiece('banner', cx + dc * setback, cellHeightM(row, col), cz + dr * setback, Math.atan2(dc, dr), KIT_SCALE);
+      // Exterior checkpoint banners render larger (readability across the open
+      // field/gorge); interior banners stay at kit scale to fit the 2 m walls.
+      const bScale = def.kind === 'exterior' ? BANNER_EXT_SCALE : KIT_SCALE;
+      const setback = half - BANNER_BACK_M * bScale;
+      addPiece('banner', cx + dc * setback, cellHeightM(row, col), cz + dr * setback, Math.atan2(dc, dr), bScale);
       banner = { name: def.banner.name, position: new Vector3(cx, 0, cz) };
     }
 
@@ -707,6 +750,15 @@ export class ZoneBuilder {
 
       const groundMesh = buildExteriorGround(cell, ground);
       if (groundMesh) group.add(groundMesh);
+
+      // Charred roof-wedge cap over every house cell (H ruin + A door-void) — one
+      // InstancedMesh (1 draw call), Cinder Village only (no H/A ⇒ nothing stamped).
+      if (houseCells.length > 0) {
+        const spots: ForestSpot[] = houseCells.map(([r, c]) => ({
+          x: c * cell + half, y: cellHeightM(r, c), z: r * cell + half, row: r, col: c,
+        }));
+        stampForest(group, 'roof-wedge', roofWedgeGeometry(), spots);
+      }
 
       const skirt = buildTerrainSkirt(def, cellHeightM);
       if (skirt) group.add(skirt);

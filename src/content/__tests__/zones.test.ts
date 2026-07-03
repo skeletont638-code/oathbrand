@@ -15,6 +15,7 @@ import { buildHeightRamps, gridToPlacements } from '../../world/ZoneBuilder';
 import { doorEntry, doorSpan, pairedDoor } from '../../world/zoneGraph';
 import { FUTURE_ZONE_IDS, ZONES, hasZone, zoneOrThrow } from '../zones';
 import { UNDERCROFT } from '../zones/undercroft';
+import { GREAT_HALL } from '../zones/greatHall';
 import { LORE } from '../lore';
 import { TUNING } from '../tuning';
 import { isQuietSighting } from '../../engine/DreadDirector';
@@ -418,6 +419,13 @@ describe('Greater Vael Watcher sightings (finding 2)', () => {
 describe('Undercroft wraith-showcase guard (realism pass)', () => {
   it('the undercroft zeroes its realism-pass key light (wraith showcase guard)', () => {
     expect(UNDERCROFT.keyLightIntensity).toBe(0);
+  });
+});
+
+describe('Great Hall statue overlap fix (realism pass, Task 9)', () => {
+  it('the great-hall statue no longer overlaps the inner-chamber wall', () => {
+    const s = GREAT_HALL.props.find((p) => p.kind === 'statue-knight');
+    expect(s?.at).toEqual([1, 13]); // moved off [2,13] (abutting the [3,13] wall block)
   });
 });
 

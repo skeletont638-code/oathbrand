@@ -52,10 +52,11 @@ export const GATE_FIELDS: ZoneDef = {
   props: [
     // The oath-oak itself is the `TT` grid pair (rendered as a dense-tree pair
     // by the exterior builder), NOT a prop. The banner hangs flush on its trunk.
-    // The empty gibbet under the oak: the kit has no `gibbet` GLB, so a `pillar`
-    // stands in as the gibbet's post at [7,8] (the gibbet lore cell, under the
-    // oak) — a future art pass can drop a cage mesh behind this same placement.
-    { kind: 'pillar', at: [7, 8], rotY: 0.2 },
+    // The empty gibbet under the oak: an original procedural hanging iron cage
+    // (rusted open — the `gv-field-gibbet` lore card), placed at [7,8] (the
+    // gibbet lore cell, under the oak). Rendered as a standalone vertex-coloured
+    // mesh by the ZoneBuilder's PROCEDURAL_PROPS hook — no kit GLB.
+    { kind: 'gibbet', at: [7, 8], rotY: 0.2 },
     // The scarecrow-ward's two INERT kneeling figures (1 real `kneeler` : 2
     // props, the spec's 1:2–3 ratio; never the banner silhouette). statue-knight
     // is the kit's kneeling figure — knelt, cowled, hollow-still by the ward.

@@ -36,18 +36,21 @@ export const CINDER_VILLAGE: ZoneDef = {
     '###HHHHHHHHH###', // 0
     '#..H..H.wH.H..#', // 1  `w` = curdled well [1,8]
     '#.HHH.H.H.HHH.#', // 2
-    '#....H.H.H....#', // 3  tithe-ledger + salt-line + collector-house alleys
+    '#....A.H.A....#', // 3  door-void houses [3,5]/[3,9] frame the plaza · tithe-ledger + salt-line + collector-house alleys
     '3SpppppBppppppD', // 4  W door 3 [4,0]→gate-fields (pair gf-village)·S spawn [4,1]·B banner [4,7]·D sealed east arch [4,14]→salt-road
-    '#....H.H.H....#', // 5  archer on the collector-house floor [5,11]
+    '#....A.H.A....#', // 5  door-void houses [5,5]/[5,9] frame the plaza · archer on the collector-house floor [5,11]
     '#.HHH.H.H.HHH.#', // 6
     '#..H..H..H.H..#', // 7
     '###HHHHHHHHH###', // 8
   ],
   cell: 2,
   // `H` renders as a `wall.glb` ruin house-block (the exterior builder stamps it
-  // like a castle wall); `p` is the worn exposure street; `w` is the curdled
-  // well's floor tile. '#' border is the deep treeline that rings the village;
-  // '.' is the bare alley floor.
+  // like a castle wall); `A` is a `wall-arch.glb` door-void house-block (Task 9 —
+  // a burnt home with a gaping doorway; same atlas → same merge bucket, solid for
+  // collision like `H` via the fail-closed rule); `p` is the worn exposure street;
+  // `w` is the curdled well's floor tile. '#' border is the deep treeline that
+  // rings the village; '.' is the bare alley floor. Every H/A block gets a charred
+  // roof-wedge cap (one InstancedMesh).
   tiles: { H: 'wall', p: 'floor', w: 'floor' },
   kind: 'exterior',
   exteriorSky: 'field',
