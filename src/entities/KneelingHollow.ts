@@ -307,9 +307,14 @@ export class KneelerView implements EntityView {
     switch (k.state) {
       case 'idle': {
         kAmt = 1;
-        breath = 1 + (K.idle.breathScalePct / 100) * Math.sin(this.clock * 1.3);
+        // Sample the dormant micro-motion off `stepped` (12 fps), NOT raw
+        // `this.clock` — the same defect 1edcc2e fixed for the Hag. The breath
+        // and head-tilt must pop at the wrong tempo while the world renders
+        // smooth (the tall-entity stutter), or the "aliveness in stillness"
+        // reads as a butter-smooth idle that gives the kneeler away as ordinary.
+        breath = 1 + (K.idle.breathScalePct / 100) * Math.sin(stepped * 1.3);
         headTiltZ =
-          Math.sin((this.clock * 2 * Math.PI) / (K.idle.tiltPeriodMs / 1000)) *
+          Math.sin((stepped * 2 * Math.PI) / (K.idle.tiltPeriodMs / 1000)) *
           ((K.idle.headTiltMaxDeg * Math.PI) / 180);
         break;
       }
