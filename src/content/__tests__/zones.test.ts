@@ -73,8 +73,12 @@ describe('zone registry', () => {
 
   it('registers the second Greater Vael exterior — the Ashen Forest N (Task 10)', () => {
     expect(ZONES['ashen-forest-n']).toBeDefined();
-    // Seven castle zones + the Gate Fields hub + the Ashen Forest N.
-    expect(Object.keys(ZONES)).toHaveLength(9);
+  });
+
+  it('registers the third Greater Vael exterior — the Cinder Village (Task 11)', () => {
+    expect(ZONES['cinder-village']).toBeDefined();
+    // Seven castle zones + the Gate Fields hub + the Ashen Forest N + the Cinder Village.
+    expect(Object.keys(ZONES)).toHaveLength(10);
   });
 
   it('zoneOrThrow returns every registered zone (the campaign is complete)', () => {
@@ -94,9 +98,10 @@ describe('zone registry', () => {
     // opens roads into three zones that Tasks 10–12 build — cinder-village,
     // ashen-forest-n, pilgrims-descent — plus the Drop-2 salt-road forward ref.
     // Each is removed as its zone ships (the structural tests then demand a real
-    // pairing). Task 10 shipped ashen-forest-n, so it is gone from the list.
+    // pairing). Task 10 shipped ashen-forest-n and Task 11 shipped cinder-village,
+    // so both are gone from the list — only the Pilgrim's Descent (T12) and the
+    // Drop-2 salt-road remain.
     expect([...FUTURE_ZONE_IDS].sort()).toEqual([
-      'cinder-village',
       'pilgrims-descent',
       'salt-road',
     ]);
@@ -220,6 +225,21 @@ describe('zone registry', () => {
     // Walking the road lands the player at the OTHER zone's paired door.
     expect(pairedDoor('gate-fields', gfToForest!, forest)?.to).toBe('gate-fields');
     expect(pairedDoor('ashen-forest-n', afToFields!, fields)?.to).toBe('ashen-forest-n');
+  });
+
+  it('the Gate Fields W road pairs both ways with the Cinder Village (Task 11)', () => {
+    const fields = zoneOrThrow('gate-fields');
+    const village = zoneOrThrow('cinder-village');
+    const gfToVillage = fields.doors.find((d) => d.id === 'gf-to-village');
+    const cvToFields = village.doors.find((d) => d.id === 'cv-to-fields');
+    expect(gfToVillage, 'gate-fields is missing the gf-to-village road').toBeDefined();
+    expect(cvToFields, 'cinder-village is missing the cv-to-fields road').toBeDefined();
+    // Both ends share the single passage edge into the village.
+    expect(gfToVillage!.pair).toBe('gf-village');
+    expect(cvToFields!.pair).toBe('gf-village');
+    // Walking the road lands the player at the OTHER zone's paired door.
+    expect(pairedDoor('gate-fields', gfToVillage!, village)?.to).toBe('gate-fields');
+    expect(pairedDoor('cinder-village', cvToFields!, fields)?.to).toBe('cinder-village');
   });
 });
 

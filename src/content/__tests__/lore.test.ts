@@ -24,12 +24,13 @@ const base = loreEntries.filter(([, e]) => !e.ngOnly);
 const ng = loreEntries.filter(([, e]) => e.ngOnly);
 
 describe('LORE content', () => {
-  it('writes 35 placed base inscriptions + 8 NG+ inscriptions (43 total)', () => {
+  it('writes 40 placed base inscriptions + 8 NG+ inscriptions (48 total)', () => {
     // 25 castle-campaign base entries + the 5 Gate Fields inscriptions (Task 9)
-    // + the 5 Ashen Forest N inscriptions (Task 10).
-    expect(base.length).toBe(35);
+    // + the 5 Ashen Forest N inscriptions (Task 10) + the 5 Cinder Village
+    // inscriptions (Task 11).
+    expect(base.length).toBe(40);
     expect(ng.length).toBe(8);
-    expect(loreEntries.length).toBe(43);
+    expect(loreEntries.length).toBe(48);
   });
 
   it('every entry has a real title and body (no leftover placeholders)', () => {

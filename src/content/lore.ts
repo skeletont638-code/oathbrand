@@ -186,6 +186,18 @@ export const LORE: Record<string, LoreEntry> = {
     body: 'One line, cut at a running height by someone who did not stop to finish the letters: it does not come closer. it does not need to. Below it, in a steadier hand that had made its peace: so do not run. it likes the running.',
   },
 
+  // ─── GREATER VAEL DROP 1 — THE CINDER VILLAGE (Task 11) ────────────────
+  'gv-village-tithe-ledger': { title: 'The Tithe-Ledger',
+    body: 'Its spine cracks open to this page. A column of names down the left, a column of embers owed down the right, and the right column only ever grows. The last entry is a woman’s name, and the sum beside it is not a number — it is one word, pressed so hard the nib tore through: ALL.' },
+  'gv-village-salt-line': { title: 'The Salt Lines',
+    body: 'Salt laid across every doorstone, grey and clotted with age — the old ward against what walks the fog. Every line is unbroken but one. That threshold’s salt is scuffed through from the inside, by something that wanted out, not in.' },
+  'gv-village-collector-house': { title: 'The Collector’s Door',
+    body: 'The largest door in Cinder, and the only one with no ward at all. There were marks here once — you can see the scrape where they were taken off, corner to corner, deliberate. A house that fears no fog is a house the fog has already been paid to leave alone.' },
+  'gv-village-well': { title: 'The Curdled Well',
+    body: 'The water has gone still and wrong, a skin on it the colour of a bruise. Cut into the coping, in a hand that shook: SHE POISONED IT. And lower, later, smaller, as if the hand had thought again: or the flame died, and the water died with it, and we needed a name that could hear us.' },
+  'gv-village-procession': { title: 'The Kneeling Line',
+    body: 'A line worn into the street by knees that never rose. When the tithe could not be paid in embers, Cinder paid it in the hollowed — walked its own dead out and set them kneeling toward the fog, a penance-column. Count them as you pass. One of them is counting you.' },
+
   // ─── NG+ (T16): the recontextualisations. Defined now, placed later. ────
   'ng-queen-knew': {
     ngOnly: true,

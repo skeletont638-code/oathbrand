@@ -571,6 +571,13 @@ async function startScene(): Promise<void> {
         // Task 6 adds AudioManager.duckToSilence(ms); route it the moment it lands.
         const duck = (audio as { duckToSilence?: (ms: number) => void }).duckToSilence;
         duck?.call(audio, 1200);
+        // CV-1 (Task 11): the frozen procession's ONE live kneeler rises on the
+        // beat — the two statue-knight props never move. The zone spawns exactly
+        // one `kneeler` ([4,9]), so waking every dormant Hollow wakes only it.
+        // (GF-1's silence-spike leaves its ward inert — this is beat-id gated.)
+        if (a.beatId === 'CV-1') {
+          for (const { logic } of enemies) if (logic instanceof KneelingHollow) logic.wake();
+        }
         break;
       }
       case 'false-pulse':

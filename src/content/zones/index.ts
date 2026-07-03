@@ -17,10 +17,12 @@ import { SUMMIT } from './summit';
 import { QUEENS_GARDEN } from './queensGarden';
 import { GATE_FIELDS } from './gateFields';
 import { ASHEN_FOREST_N } from './ashenForestN';
+import { CINDER_VILLAGE } from './cinderVillage';
 
 /** Every built zone, by id. The seven-zone castle campaign (T11–T16) plus the
- *  first Greater Vael exteriors — the Gate Fields hub (Task 9) and the Ashen
- *  Forest N (Task 10, the Hound showcase + the Hag's threshold). */
+ *  first Greater Vael exteriors — the Gate Fields hub (Task 9), the Ashen
+ *  Forest N (Task 10, the Hound showcase + the Hag's threshold), and the Cinder
+ *  Village (Task 11, the frozen procession + the tithe-ledger). */
 export const ZONES: Partial<Record<ZoneId, ZoneDef>> = {
   'ashen-gate': ASHEN_GATE,
   'great-hall': GREAT_HALL,
@@ -31,6 +33,7 @@ export const ZONES: Partial<Record<ZoneId, ZoneDef>> = {
   'queens-garden': QUEENS_GARDEN,
   'gate-fields': GATE_FIELDS,
   'ashen-forest-n': ASHEN_FOREST_N,
+  'cinder-village': CINDER_VILLAGE,
 };
 
 /**
@@ -43,12 +46,12 @@ export const ZONES: Partial<Record<ZoneId, ZoneDef>> = {
  * three roads — `cinder-village`, `ashen-forest-n`, `pilgrims-descent` — whose
  * zones land in Tasks 10–12, so they live here until then (each is removed as
  * its zone ships, and the structural tests then demand a real pairing). Task 10
- * shipped the Ashen Forest N, so it is gone from the list — its `gf-forest` door
- * now pairs both ways.
- * `salt-road` is the Drop-2 target Pilgrim's Descent will door into a drop early.
+ * shipped the Ashen Forest N and Task 11 shipped the Cinder Village, so both are
+ * gone from the list — their `gf-forest` / `gf-village` doors now pair both ways.
+ * `salt-road` is the Drop-2 target the Cinder Village's sealed east arch (and
+ * the Pilgrim's Descent) will door into a drop early.
  */
 export const FUTURE_ZONE_IDS: ReadonlySet<ZoneId> = new Set<ZoneId>([
-  'cinder-village',
   'pilgrims-descent',
   'salt-road',
 ]);
