@@ -24,6 +24,13 @@ import { TUNING } from '../../content/tuning';
 
 const D = TUNING.greaterVael.dread;
 
+/** Cell→cell distance in metres on the universal 2 m grid — mirrors the
+ *  director's own `cellDistM` (not exported) so the min-sighting-range tests can
+ *  assert the boundary they exercise. */
+function cellDistM2(a: [number, number], b: [number, number]): number {
+  return Math.hypot(a[0] - b[0], a[1] - b[1]) * 2;
+}
+
 /** The brief's two hand-built beats: an approach silence-spike + a seeded false-pulse. */
 const beats: ScareBeat[] = [
   { id: 'A', zone: 'gate-fields', trigger: { on: 'approach', at: [9, 3], withinM: 3 }, gimmick: 'silence-spike', oneLine: 'x' },
@@ -128,7 +135,9 @@ describe('DreadDirector — scheduling rules', () => {
       trigger: { on: 'cellEnter', cells: [[i, 0]] as [number, number][] },
       gimmick: 'watcher', oneLine: 'w',
     }));
-    const d = new DreadDirector(watchers, { 'gate-fields': [[3, 3]] }, undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
+    // Anchor sits well beyond sightingRangeMinM (16 m) from every trigger cell
+    // [i,0] so rule 10 never voids a sighting here (this test is about the cap).
+    const d = new DreadDirector(watchers, { 'gate-fields': [[3, 20]] }, undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
     for (let i = 0; i < 7; i++) {
       cooldownOut(d);            // neutral cell + full cooldown between each
       d.update(ctx([i, 0]));     // crossing into Wi's cell
@@ -142,12 +151,53 @@ describe('DreadDirector — scheduling rules', () => {
       id: 'AF-2', zone: 'gate-fields',
       trigger: { on: 'cellEnter', cells: [[4, 4]] }, gimmick: 'snap-grid', showsWatcher: true, oneLine: 'z',
     }];
-    const d = new DreadDirector(beat, { 'gate-fields': [[2, 2]] }, undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
+    // Anchor [4,16] is 24 m from the trigger cell [4,4] — beyond the 16 m min
+    // sighting range (rule 10), so the Watcher rider manifests as expected.
+    const d = new DreadDirector(beat, { 'gate-fields': [[4, 16]] }, undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
     d.update(ctx([0, 0]));
     const out = d.update(ctx([4, 4]));
     expect(out.map((a) => a.kind).sort()).toEqual(['snap-grid', 'watcher']);
     expect(d.watcherSightings).toBe(1);
     expect(d.beatsFired).toBe(1); // one beat, even though two entries returned
+  });
+
+  it('rule 10: skips the Watcher rider when its anchor is nearer than the min sighting range', () => {
+    // A showsWatcher beat whose anchor sits < sightingRangeMinM (16 m) from the
+    // player: the OTHER payload (snap-grid) still fires, but the Watcher rider is
+    // dropped and NO sighting is charged (the beat only manifests beyond the fog).
+    const beat: ScareBeat[] = [{
+      id: 'PD-1-like', zone: 'gate-fields',
+      trigger: { on: 'cellEnter', cells: [[4, 4]] }, gimmick: 'snap-grid', showsWatcher: true, oneLine: 'z',
+    }];
+    // Anchor [4,5] is only 2 m from the trigger cell [4,4] — well inside 16 m.
+    const near = cellDistM2([4, 4], [4, 5]);
+    expect(near).toBeLessThan(TUNING.greaterVael.watcher.sightingRangeMinM);
+    const d = new DreadDirector(beat, { 'gate-fields': [[4, 5]] }, undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
+    d.update(ctx([0, 0]));
+    const out = d.update(ctx([4, 4]));
+    expect(out.map((a) => a.kind)).toEqual(['snap-grid']); // gimmick fires, no watcher
+    expect(out.some((a) => a.kind === 'watcher')).toBe(false);
+    expect(d.watcherSightings).toBe(0); // budget untouched — the sighting was void
+    expect(d.beatsFired).toBe(1);       // the beat itself still counts (its gimmick fired)
+  });
+
+  it('rule 10: manifests the Watcher when its anchor sits AT/beyond the min sighting range', () => {
+    // The same beat, but the anchor is exactly at the 16 m boundary (the mirror
+    // of PD-1 after its anchor was pushed across the chasm): the rider fires and
+    // the sighting increments — the pre-existing behaviour for far anchors.
+    const beat: ScareBeat[] = [{
+      id: 'PD-1-like', zone: 'gate-fields',
+      trigger: { on: 'cellEnter', cells: [[4, 4]] }, gimmick: 'snap-grid', showsWatcher: true, oneLine: 'z',
+    }];
+    // Anchor [4,12] is exactly 16 m (8 cells × 2 m) from [4,4] — on the boundary.
+    const atMin = cellDistM2([4, 4], [4, 12]);
+    expect(atMin).toBe(TUNING.greaterVael.watcher.sightingRangeMinM);
+    const d = new DreadDirector(beat, { 'gate-fields': [[4, 12]] }, undefined, { glitchSeen: [], watcherSightings: 0 }, () => 0);
+    d.update(ctx([0, 0]));
+    const out = d.update(ctx([4, 4]));
+    expect(out.map((a) => a.kind).sort()).toEqual(['snap-grid', 'watcher']);
+    expect(d.watcherSightings).toBe(1); // sighting charged (>= the min range)
+    expect(d.beatsFired).toBe(1);
   });
 
   it('fires a timer beat only after minSec of dwell near its spot', () => {

@@ -121,7 +121,10 @@ export const PILGRIMS_DESCENT: ZoneDef = {
     { id: 'PD-2', zone: 'pilgrims-descent', trigger: { on: 'approach', at: [7, 10], withinM: 3 }, gimmick: 'desaturation', oneLine: 'A banner burns where you can’t reach; yours is safe.' },
   ],
   // Far cliff across the chasm: far, elevated, unreachable — off-grid backdrop
-  // (col -3), PD-1's manifest anchor. Kept KEYED BY ZONE by the run-scoped
-  // DreadDirector.
-  watcherAnchors: [[1, -3]],
+  // (col -8, worldPos x=-15 → ≥18 m from every vista trigger cell [1,1]..[1,4]),
+  // PD-1's manifest anchor. Must sit beyond watcher.sightingRangeMinM (16 m) or
+  // the DreadDirector voids the sighting (rule 10) — [1,-3] was only 8 m, so the
+  // Watcher manifested-and-receded before a single visible frame. Kept KEYED BY
+  // ZONE by the run-scoped DreadDirector.
+  watcherAnchors: [[1, -8]],
 };

@@ -15,6 +15,7 @@ import { buildHeightRamps, gridToPlacements } from '../../world/ZoneBuilder';
 import { doorEntry, doorSpan, pairedDoor } from '../../world/zoneGraph';
 import { FUTURE_ZONE_IDS, ZONES, hasZone, zoneOrThrow } from '../zones';
 import { LORE } from '../lore';
+import { TUNING } from '../tuning';
 
 const entries = Object.entries(ZONES) as [ZoneId, ZoneDef][];
 
@@ -300,6 +301,26 @@ describe('Pilgrim\'s Descent height layer (Task 12)', () => {
   it('renders the gorge as cliff faces (path vs void Δ≥2)', () => {
     const cliffs = buildHeightRamps(def).filter((s) => s.kind === 'cliff');
     expect(cliffs.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('the PD-1 Watcher anchor sits beyond the min sighting range from EVERY vista trigger cell', () => {
+    // Regression (rule 10): PD-1's `showsWatcher` fires on the vista, whose trigger
+    // cells span the top ledge. The manifest anchor must sit ≥ sightingRangeMinM
+    // (16 m) from every one of them, or the DreadDirector voids the sighting and
+    // the hero beat "across it, the watcher, waiting" shows nothing. The old
+    // anchor [1,-3] was only 8 m from [1,1] — it manifested-and-receded unseen.
+    const minM = TUNING.greaterVael.watcher.sightingRangeMinM;
+    expect(def.watcherAnchors?.length ?? 0).toBeGreaterThan(0);
+    expect(def.vista?.cells.length ?? 0).toBeGreaterThan(0);
+    for (const anchor of def.watcherAnchors!) {
+      for (const cell of def.vista!.cells) {
+        const distM = Math.hypot(anchor[0] - cell[0], anchor[1] - cell[1]) * def.cell;
+        expect(
+          distM,
+          `Watcher anchor ${String(anchor)} is ${distM} m from vista cell ${String(cell)} — must be ≥ ${minM} m`,
+        ).toBeGreaterThanOrEqual(minM);
+      }
+    }
   });
 });
 

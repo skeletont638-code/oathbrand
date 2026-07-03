@@ -26,12 +26,18 @@
  *     `glitchSeen`; a later fire is still allowed (up to the cap) but flagged
  *     `everSeen` so the kit can render it shorter/weaker.
  *  9. Watcher budget — `watcherSightings` caps at watcherPerDropMax (6).
+ * 10. Watcher min sighting range — the Watcher may only manifest BEYOND the fog
+ *     plane: at fire time, if the picked anchor sits nearer than the player than
+ *     `watcher.sightingRangeMinM` (16 m) the Watcher rider is SKIPPED and NO
+ *     sighting is charged — the beat's other payload (e.g. a snap-grid) still
+ *     fires. The check and the budget increment are atomic (both in `fire`).
  */
 import { TUNING } from '../content/tuning';
 import type { ZoneId } from '../content/types';
 import type { GridPos, HagThresholdDef, ScareBeat } from '../world/zoneDef';
 
 const D = TUNING.greaterVael.dread;
+const W = TUNING.greaterVael.watcher;
 
 /** The universal 2 m grid (zoneDef: "Cell size in meters — always 2"). */
 const CELL_M = 2;
@@ -189,7 +195,7 @@ export class DreadDirector {
         if (beat.zone !== ctx.zone) continue;
         if (!this.triggerMatches(beat, ctx, crossedInto)) continue;
         if (!this.passesCaps(beat, ctx.zone)) continue;
-        return this.fire(beat, ctx.zone);
+        return this.fire(beat, ctx.zone, ctx.cell);
       }
     }
     if (this.hag && crossedInto(this.hag.glimpseCells)) {
@@ -250,7 +256,7 @@ export class DreadDirector {
     return true;
   }
 
-  private fire(beat: ScareBeat, zone: ZoneId): ScareActivation[] {
+  private fire(beat: ScareBeat, zone: ZoneId, playerCell: GridPos): ScareActivation[] {
     // Rule 1: the fire (re)starts the full shared cooldown.
     this.cooldownMs = D.minScareGapSec * 1000;
     this.firedBeats += 1;
@@ -265,8 +271,8 @@ export class DreadDirector {
       if (g === 'false-pulse') this.falsePulseByZone.set(zone, (this.falsePulseByZone.get(zone) ?? 0) + 1);
       out.push({ kind: g as ScreenGimmick, beatId: beat.id, oneLine: beat.oneLine, everSeen });
     } else if (g === 'watcher') {
-      this.sightings += 1;
-      out.push({ kind: 'watcher', anchor: this.pickAnchor(beat), beatId: beat.id });
+      const w = this.manifestWatcher(beat, playerCell);
+      if (w) out.push(w);
     } else if (g === 'hag-glimpse') {
       out.push({ kind: 'hag-glimpse', beatId: beat.id });
     }
@@ -274,10 +280,29 @@ export class DreadDirector {
     // A showsWatcher rider on a non-watcher beat manifests the Watcher in the
     // SAME activation frame (rule 9). Two entries for one beat is allowed.
     if (beat.showsWatcher && g !== 'watcher') {
-      this.sightings += 1;
-      out.push({ kind: 'watcher', anchor: this.pickAnchor(beat), beatId: beat.id });
+      const w = this.manifestWatcher(beat, playerCell);
+      if (w) out.push(w);
     }
     return out;
+  }
+
+  /**
+   * Rule 10: manifest the Watcher for `beat` IFF its picked anchor lies at/beyond
+   * `watcher.sightingRangeMinM` (16 m) from the player — the presence exists only
+   * beyond the fog plane. If the anchor is nearer, the sighting is VOID: no rider
+   * is emitted AND the budget is not consumed (the increment/rider are atomic).
+   * The player→anchor distance is measured in cells (×2 m), so it stays headless.
+   */
+  private manifestWatcher(beat: ScareBeat, playerCell: GridPos): ScareActivation | null {
+    // Increment first so `pickAnchor` sees the same sighting index it always has
+    // (its cycle reads `sightings - 1`); roll it back if the anchor is too close.
+    this.sightings += 1;
+    const anchor = this.pickAnchor(beat);
+    if (cellDistM(playerCell, anchor) < W.sightingRangeMinM) {
+      this.sightings -= 1; // void sighting — never charged, never advances the cycle
+      return null;
+    }
+    return { kind: 'watcher', anchor, beatId: beat.id };
   }
 
   /** True if `id` was already banked (this run or a prior save); banks it now. */
