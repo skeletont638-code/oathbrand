@@ -31,6 +31,7 @@ import type { EnemyCtx, EnemyDeps } from './Enemy';
 import { steppedTime } from './animator';
 import type { EntityView } from './animator';
 import { HOUND_TINT } from './palette';
+import { getTexture } from '../world/textures';
 
 const H = TUNING.greaterVael.hound;
 const C = H.circle;
@@ -235,15 +236,23 @@ export class AshHound extends Enemy {
 // proportions here, so the flat-black silhouette at 13 m fog reads as a WRONG
 // four-legged thing with a stride that's too long for anything that should
 // exist. The lope + pounce are sampled off `steppedTime` (12 fps) so the hound
-// stutters against the smooth world. No texture, no new light — matte dark-ash
-// parts run through the same PS1 material patch the zones use.
+// stutters against the smooth world. The parts sample ONE shared crunched
+// hound-hide map (ash-crusted hide/bone) MULTIPLIED by HOUND_TINT — the tint
+// stays the multiply base so the frame reads dark-but-formed (brighter than the
+// Watcher's pure black, darker than the terrain). Faceless is preserved: the
+// head box samples the SAME skin, no face texture. No new light.
 // ---------------------------------------------------------------------------
 
-/** A dark-ash matte part material, PS1-patched and tracked for disposal. */
+/** A dark-ash hound-hide part material, PS1-patched and tracked for disposal.
+ *  The tint is the multiply base; the crunched hide map (a high-key detail map,
+ *  so map×tint stays in the readable band — Task 7 lesson) supplies the crunch.
+ *  getTexture undefined (headless / pre-preload) → no map → flat tint fallback. */
 function houndMat(sink: MeshStandardMaterial[]): MeshStandardMaterial {
+  const map = getTexture('hound-hide');
   const mat = new MeshStandardMaterial({ color: HOUND_TINT, roughness: 1, metalness: 0 });
+  if (map) mat.map = map; // set BEFORE patchMaterial so the affine warp binds; absent → flat fallback
   mat.emissive = new Color(0x000000);
-  patchMaterial(mat);
+  patchMaterial(mat); // affine applies when map present; tint multiplies the crunched hide
   sink.push(mat);
   return mat;
 }

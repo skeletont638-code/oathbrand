@@ -47,15 +47,21 @@ PHOTO_SOURCES = {
     'kneeler-cloth': os.path.join(CACHE, 'ambientcg', 'kneeler-cloth.jpg'),
 }
 
-# MULTIPLY / detail maps (Task 7). These are NOT standalone albedos: the material
-# keeps `vertexColors` ON and the map is a multiply over a baked vertex tint, so
-# the tint supplies the HUE and the map supplies only high-frequency luminance
-# "crunch". Palette-darkening them (process_atlas) double-darkens — map(≈0.27) ×
-# already-dark tint(≈0.35) crushes the render below the sky (verified: forest
-# trees went pure black). So a detail map is instead DESATURATED to grey and
-# lifted HIGH-KEY (95th-percentile → white) so the multiply modulates ~×0.9
-# rather than darkening, keeping the baked readable band while adding the crunch.
-DETAIL_MAPS = {'bark'}  # bark multiplies the BARK/NEEDLE forest vertex tints
+# MULTIPLY / detail maps (Task 7, extended Task 8). These are NOT standalone
+# albedos: the map is a multiply over a baked tint (the forest's `vertexColors`
+# for bark; the entity material's `color` = HOUND_TINT/KNEELER_TINT for the
+# hound/kneeler skins), so the tint supplies the HUE and the map supplies only
+# high-frequency luminance "crunch". Palette-darkening them (process_atlas)
+# double-darkens — map(≈0.27) × already-dark tint crushes the render below the
+# sky (verified: forest trees went pure black; the entity tints 0x2a2521/0x232026
+# are DARKER still). So a detail map is instead DESATURATED to grey and lifted
+# HIGH-KEY (95th-percentile → white) so the multiply modulates ~×0.9 rather than
+# darkening, keeping the tint's readable band while adding the crunch.
+DETAIL_MAPS = {
+    'bark',           # multiplies the BARK/NEEDLE forest vertex tints
+    'hound-hide',     # multiplies HOUND_TINT (ash-hound hide/bone crunch)
+    'kneeler-cloth',  # multiplies KNEELER_TINT (kneeling-hollow rotted robe)
+}
 
 
 def process_atlas(src_path):

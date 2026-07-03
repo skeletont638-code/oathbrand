@@ -31,6 +31,7 @@ import type { EnemyCtx, EnemyDeps } from './Enemy';
 import { steppedTime } from './animator';
 import type { EntityView } from './animator';
 import { KNEELER_TINT } from './palette';
+import { getTexture } from '../world/textures';
 
 const K = TUNING.greaterVael.kneeler;
 const RISE = K.rise;
@@ -223,7 +224,13 @@ export class KneelerView implements EntityView {
   private deadT = -1;
 
   constructor(private readonly hollow: KneelingHollow) {
+    // ONE shared rotted-cloth material: the crunched kneeler-cloth map (a high-key
+    // detail map, so map×tint stays in the readable band — Task 7 lesson) MULTIPLIED
+    // by KNEELER_TINT (the multiply base). Faceless preserved — the head box samples
+    // the SAME cloth. getTexture undefined (headless) → no map → flat tint fallback.
+    const map = getTexture('kneeler-cloth');
     this.mat = new MeshStandardMaterial({ color: KNEELER_TINT, roughness: 1, metalness: 0 });
+    if (map) this.mat.map = map; // set BEFORE patchMaterial so the affine warp binds; absent → flat fallback
     this.mat.emissive = new Color(0x000000);
     patchMaterial(this.mat);
     const m = this.mat;
