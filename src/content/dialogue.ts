@@ -26,8 +26,18 @@ export interface DialogueLine {
   text: string;
 }
 
-/** The Ash-Priest encounters. Summit (3) is assembled by `dialogueSequence`. */
-export type DialogueId = 'ashpriest-1' | 'ashpriest-2' | 'ashpriest-3';
+/** The Ash-Priest encounters. Summit (3) is assembled by `dialogueSequence`;
+ *  the two `-gv-*` ids are his Greater Vael Drop-1 lines (Task 8) — static
+ *  sequences like 1 and 2, placed by the Fields / Descent zones (Tasks 9–12). */
+export type DialogueId =
+  | 'ashpriest-1'
+  | 'ashpriest-2'
+  | 'ashpriest-3'
+  | 'ashpriest-gv-fields'
+  | 'ashpriest-gv-descent';
+
+/** The static (non-summit) encounter ids — everything but the ending-varying 3. */
+type StaticDialogueId = Exclude<DialogueId, 'ashpriest-3'>;
 
 /** The only speaker in Task 13 — kept as a constant so the box, the tests, and
  *  every line agree on the exact string. */
@@ -35,8 +45,9 @@ export const SPEAKER_ASH_PRIEST = 'THE ASH-PRIEST';
 
 const line = (text: string): DialogueLine => ({ speaker: SPEAKER_ASH_PRIEST, text });
 
-/** Encounters 1 and 2 are fixed sequences. Encounter 3 is built per-run. */
-export const DIALOGUE: Record<'ashpriest-1' | 'ashpriest-2', DialogueLine[]> = {
+/** The static encounters (1, 2, and the two Drop-1 gv lines) are fixed
+ *  sequences. Encounter 3 (summit) is built per-run in `dialogueSequence`. */
+export const DIALOGUE: Record<StaticDialogueId, DialogueLine[]> = {
   'ashpriest-1': [
     line('So. The last brand comes walking out of the ash — a hundred years too late to be early.'),
     line('Do not kneel to me, knight. I am no banner, and I have no fire to give you back.'),
@@ -52,6 +63,21 @@ export const DIALOGUE: Record<'ashpriest-1' | 'ashpriest-2', DialogueLine[]> = {
     line('I buried Edda, knight. With these hands, at the gate, three days before she is said to have spoken to you. I know my own graves.'),
     line('So ask it of yourself, gently, on the walk up: whose words are you carrying? And whose errand do they serve?'),
     line('No — do not answer here. Some questions you must carry all the way to the top before you set them down.'),
+  ],
+  // --- Greater Vael Drop 1 (Task 8) — the only voice past the gate ----------
+  // Gate Fields threshold: welcome + warning as the player crosses out of the
+  // kingdom they knew and into what it owed.
+  'ashpriest-gv-fields': [
+    line('You crossed the gate. Few do, now — the kingdom you knew is behind you, and this is only what it owed.'),
+    line('Walk softly. The dead here did not fall in battle; they were spent, like coin, and they remember being spent.'),
+    line('There is a woman at the tree-line who deals in debts. Bring her nothing you are not ready to give away.'),
+  ],
+  // Pilgrim's Descent — his Drop-1 final line: the tithe truth, and a hint that
+  // he knows more than he will say (he heralded the first ember himself, once).
+  'ashpriest-gv-descent': [
+    line('You have read the ledger by now. A kingdom lent its fire, then learned to sell the warmth and keep the ash.'),
+    line('The Flame did not take Vael. Vael sold Vael, ember by ember, for three hundred quiet years.'),
+    line("I carried the first ember up a road much like this one, once. I never asked what it would cost. That is the herald's mercy — we are spared the sums."),
   ],
 };
 

@@ -40,11 +40,13 @@ export interface AshPriestPlacement {
 }
 
 /**
- * The three placements. Encounters 1 and 2 sit in built zones and wire up now;
- * encounter 3's summit is unbuilt until T15/T16, so its placement is REGISTERED
- * here (and its dialogue is written in dialogue.ts) but nothing spawns it until
- * the zone exists — `ashPriestsIn` simply returns nothing for an unbuilt zone
- * because main.ts only spawns for the zone it has loaded.
+ * The placements. Encounters 1 and 2 sit in built castle zones and wire up now;
+ * encounter 3's summit, and the two Greater Vael Drop-1 stops (`gate-fields`
+ * threshold + `pilgrims-descent` final word), are REGISTERED here — their
+ * dialogue is authored in dialogue.ts (Task 8) — but nothing spawns them until
+ * the zone exists. `ashPriestsIn` returns nothing for an unbuilt zone because
+ * main.ts only spawns for the zone it has loaded; the exact cell + facing of
+ * the two gv stops are the zone tasks' (9–12) to finalise against real floor.
  */
 export const ASH_PRIESTS: AshPriestPlacement[] = [
   // Ashen Gate: tucked against the west wall just south of the player's waking
@@ -58,6 +60,12 @@ export const ASH_PRIESTS: AshPriestPlacement[] = [
   // the sleeping dragon at your back as he speaks — his last word varies by the
   // ending the run is bound for (dialogue.ts ASHPRIEST_3_FINAL).
   { id: 'ashpriest-summit', zone: 'summit', at: [6, 7], rotY: Math.PI * 1.5, dialogueId: 'ashpriest-3' },
+  // Greater Vael Drop 1 (Task 8), zones built in Tasks 9–12. The Ash-Priest is
+  // the ONE voice past the gate; he keeps the threshold of the Fields (welcome
+  // + warning) and stands at the foot of the Pilgrim's Descent for his final
+  // Drop-1 word. Cells are off-path defaults; the zone task pins them to real floor.
+  { id: 'ashpriest-gv-fields', zone: 'gate-fields', at: [3, 2], rotY: Math.PI * 0.5, dialogueId: 'ashpriest-gv-fields' },
+  { id: 'ashpriest-gv-descent', zone: 'pilgrims-descent', at: [2, 3], rotY: Math.PI * 0.5, dialogueId: 'ashpriest-gv-descent' },
 ];
 
 /** Placements standing in `zone`. */

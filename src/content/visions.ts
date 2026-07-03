@@ -28,7 +28,20 @@ const MEMORY_FOG = 9;
 const ASH = 0.82;
 
 export const VISIONS: Record<
-  Extract<ZoneId, 'ashen-gate' | 'great-hall' | 'undercroft' | 'ramparts' | 'throne' | 'queens-garden'>,
+  Extract<
+    ZoneId,
+    | 'ashen-gate'
+    | 'great-hall'
+    | 'undercroft'
+    | 'ramparts'
+    | 'throne'
+    | 'queens-garden'
+    // --- Greater Vael Drop 1 (Task 8) banner memories — append only ---
+    | 'gate-fields'
+    | 'ashen-forest-n'
+    | 'cinder-village'
+    | 'pilgrims-descent'
+  >,
   VisionDef
 > = {
   // ─── 1. THE ASHEN GATE — the flame guttered ──────────────────────────────
@@ -145,6 +158,108 @@ export const VISIONS: Record<
       { desatTo: ASH, waitMs: 500 },
     ],
   },
+
+  // ─── GREATER VAEL DROP 1 (Task 8) ─────────────────────────────────────────
+  // The tithe tragedy, told banner by banner in zone order: the tithe begins →
+  // a brand traded at the tree-line → the ledger's last page → pilgrims
+  // descending to repay. Same Second-Vigil grammar as the castle six.
+
+  // ─── GV.1 GATE FIELDS — the tithe begins ──────────────────────────────────
+  'gate-fields': {
+    id: 'vision-gate-fields',
+    steps: [
+      { desatTo: ASH, fogFar: MEMORY_FOG, waitMs: 700 },
+      {
+        desatTo: 0.5,
+        caption: 'Once the fields were given fire freely, and the harvest came up gold under the brand.',
+        spawnGhosts: [
+          { piece: 'skeleton-warrior', at: [2, 6], rotY: 0 },
+          { piece: 'skeleton-warrior', at: [3, 7], rotY: 0 },
+        ],
+        waitMs: 1500,
+      },
+      { desatTo: 0.15, caption: 'Then a clerk set a price on the warmth, and called the price a kindness — fire, on loan.', waitMs: 1600 },
+      { desatTo: 0, caption: 'The first ember sold was the first the fields never got back. They have been owing ever since.', waitMs: 1700 },
+      { desatTo: ASH, waitMs: 500 },
+    ],
+  },
+
+  // ─── GV.2 ASHEN FOREST N — a brand traded away at the tree-line ────────────
+  'ashen-forest-n': {
+    id: 'vision-ashen-forest',
+    steps: [
+      { desatTo: ASH, fogFar: MEMORY_FOG, waitMs: 700 },
+      {
+        desatTo: 0.5,
+        caption: 'At the fog-line a woman knelt, and let them strike the fire from her brand.',
+        spawnGhosts: [{ piece: 'statue-knight', at: [5, 6], rotY: 0 }],
+        waitMs: 1500,
+      },
+      { desatTo: 0.15, caption: 'It was carried off to warm a hall she would never enter, and counted as a debt half-paid.', waitMs: 1600 },
+      { desatTo: 0, caption: 'The other half is still owed. Something in the trees took it up, so she would not have to die of it.', waitMs: 1700 },
+      { desatTo: ASH, waitMs: 500 },
+    ],
+  },
+
+  // ─── GV.3 CINDER VILLAGE — the ledger's last page ─────────────────────────
+  'cinder-village': {
+    id: 'vision-cinder-village',
+    steps: [
+      { desatTo: ASH, fogFar: MEMORY_FOG, waitMs: 700 },
+      {
+        desatTo: 0.5,
+        caption: "The collector's hand moved down the column, name by name, ember by ember.",
+        spawnGhosts: [{ piece: 'statue-knight', at: [4, 9], rotY: 0 }],
+        waitMs: 1500,
+      },
+      { desatTo: 0.15, caption: 'The last name had nothing left to give but itself, so beside it he wrote a single word.', waitMs: 1600 },
+      { desatTo: 0, caption: 'ALL. Then the flame guttered, and there was no one left to collect, and no one left to pay.', waitMs: 1700 },
+      { desatTo: ASH, waitMs: 500 },
+    ],
+  },
+
+  // ─── GV.4 PILGRIM'S DESCENT — pilgrims descending to repay ─────────────────
+  'pilgrims-descent': {
+    id: 'vision-pilgrims-descent',
+    steps: [
+      { desatTo: ASH, fogFar: MEMORY_FOG, waitMs: 700 },
+      {
+        desatTo: 0.5,
+        caption: 'They went down in a long line to give their embers back to the water, and be clean of the debt.',
+        spawnGhosts: [
+          { piece: 'skeleton-warrior', at: [4, 3], rotY: 0 },
+          { piece: 'skeleton-warrior', at: [7, 4], rotY: 0 },
+        ],
+        waitMs: 1500,
+      },
+      { desatTo: 0.15, caption: 'The water took the embers. It did not give back the pilgrims.', waitMs: 1600 },
+      { desatTo: 0, caption: 'The path down is deep-worn. No one has counted the ones who came up, because none did.', waitMs: 1700 },
+      { desatTo: ASH, waitMs: 500 },
+    ],
+  },
+};
+
+/**
+ * The Hag vision (Task 8) — NOT a banner memory. It plays only when the ledger
+ * is surrendered at the cairn (the `ledger` bargain, hagBargain.ts → boon
+ * `play-vision` → main.ts applyHagBoon → `visionPlayer.play(GV_VISION_HAG)`).
+ * Its id is the exact string the bargain boon carries: `gv-vision-hag`. Same
+ * colour-bleed grammar as the banners — the ledger's own tithe, shown back.
+ */
+export const GV_VISION_HAG: VisionDef = {
+  id: 'gv-vision-hag',
+  steps: [
+    { desatTo: ASH, fogFar: MEMORY_FOG, waitMs: 700 },
+    {
+      desatTo: 0.5,
+      caption: 'Here is what your ledger bought: a woman, kneeling, while strangers took her fire to sell.',
+      spawnGhosts: [{ piece: 'statue-knight', at: [8, 9], rotY: 0 }],
+      waitMs: 1500,
+    },
+    { desatTo: 0.15, caption: 'She did not curse them. She only asked who would carry the rest of what she owed.', waitMs: 1600 },
+    { desatTo: 0, caption: 'The fog answered. It has been answering for her ever since — and now it knows your name too.', waitMs: 1700 },
+    { desatTo: ASH, waitMs: 500 },
+  ],
 };
 
 /** The memory for a banner in `zone`, or undefined for a zone with no banner. */

@@ -39,7 +39,7 @@ import { clearSave, loadGame, saveGame, secondVigilSave } from './save/save';
 import type { SaveData } from './save/save';
 import { VisionPlayer } from './engine/VisionPlayer';
 import type { GhostSprite } from './engine/VisionPlayer';
-import { visionForZone } from './content/visions';
+import { visionForZone, GV_VISION_HAG } from './content/visions';
 import { kitPieceUrl, loadKitPieces } from './world/assets';
 import { createBrandHud } from './ui/brandHud';
 import { createDevHud } from './ui/devHud';
@@ -1273,6 +1273,12 @@ async function startScene(): Promise<void> {
     saveGame({
       ...prev,
       flags: [...flags],
+      // Bank any vista/vision one-shots fired this drop (Task 8: the Hag ledger
+      // vision banks HERE, not at a kneel — the bargain has no checkpoint), so a
+      // reload never replays them. `vista-*`/`vision-*` namespacing avoids clash.
+      visionsSeen: [
+        ...new Set([...(prev.visionsSeen ?? []), ...vista.seenIds, ...visionPlayer.seenIds]),
+      ],
       greaterVael: { ...dread.snapshot(), maxEmberCap: emberCap, bargains: [...hagBargains] },
     });
   }
@@ -1290,9 +1296,12 @@ async function startScene(): Promise<void> {
         showCard('The fog-line parts. North, the ash thins — and a sealed cache gives up its word.');
         break;
       case 'play-vision':
-        // gv-vision-hag is Task 8's content; the moment it registers this routes
-        // to visionPlayer.play. Until then the gesture is the carved line.
-        showCard('She takes the ledger. For a breath the world remembers its colour.');
+        // Task 8: surrendering the ledger replays its tithe as a banner-style
+        // memory — colour bleeds back, then snaps to ash (GV_VISION_HAG). It is
+        // a one-shot (visionsSeen); if already seen, fall back to the carved line.
+        if (!visionPlayer.play(GV_VISION_HAG)) {
+          showCard('She takes the ledger. For a breath the world remembers its colour.');
+        }
         break;
       case 'answer-watcher':
         watcherAnswered = true; // the next glimpse is "answered" (Drop-3 seed)
@@ -2296,6 +2305,10 @@ async function startScene(): Promise<void> {
       // (the sim block above is skipped), so the Brand does not tick and the
       // VisionPlayer owns desaturation + fog. Ghosts billboard to the camera.
       kneel.update(dt);
+      // A vision played OUTSIDE the kneel ritual — the Hag ledger bargain
+      // (Task 8) — is ticked here directly; kneel.update is a no-op while its
+      // ritual is idle, so the memory would otherwise freeze on its first beat.
+      if (!kneel.active && visionPlayer.active) visionPlayer.update(dt);
       faceGhostsToCamera();
     } else if (game.state === 'ending' && !transitioning) {
       // A summit ending is playing (Task 15). The director drives desaturation,

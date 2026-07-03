@@ -285,7 +285,22 @@ describe('KneelRitual', () => {
 });
 
 describe('visions content (src/content/visions.ts)', () => {
-  const BANNER_ZONES = ['ashen-gate', 'great-hall', 'undercroft', 'ramparts', 'throne', 'queens-garden'] as const;
+  // The six castle banners + the four Greater Vael Drop-1 banners (Task 8). The
+  // VISIONS↔banner-zone bijection below asserts these are EXACTLY the keys of
+  // VISIONS; the standalone `GV_VISION_HAG` is deliberately NOT here (it is the
+  // ledger-bargain vision, not a banner) and is covered in content/visions.test.ts.
+  const BANNER_ZONES = [
+    'ashen-gate',
+    'great-hall',
+    'undercroft',
+    'ramparts',
+    'throne',
+    'queens-garden',
+    'gate-fields',
+    'ashen-forest-n',
+    'cinder-village',
+    'pilgrims-descent',
+  ] as const;
 
   it('authors exactly one vision per banner zone', () => {
     for (const zone of BANNER_ZONES) {
