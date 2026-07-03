@@ -21,6 +21,7 @@ import { Forsworn } from './entities/Forsworn';
 import { AshHound, HoundView } from './entities/AshHound';
 import { KneelingHollow, KneelerView } from './entities/KneelingHollow';
 import { WatcherPresence, WatcherView } from './entities/WatcherPresence';
+import { CrossingSilhouette } from './entities/CrossingSilhouette';
 import type { ViewTest } from './entities/WatcherPresence';
 import { HagPresence, HagView } from './entities/HagPresence';
 import { FOGLINE_PART_M, MIN_EMBER_CAP, bootEmberCap, offerToHag, restoreEmberCap, zoneVisitFogFarM } from './content/hagBargain';
@@ -585,9 +586,11 @@ async function startScene(): Promise<void> {
     dreadEvent = { kind: 'kneel' };
   });
 
-  /** Route one DreadDirector activation to the systems that render it. Screen
-   *  gimmicks + the false-pulse land now; the silence-spike, Watcher, Hag and
-   *  pure-visual routes are seams for Tasks 5/6/9–12 (safe no-ops until then). */
+  /** Route one DreadDirector activation to the systems that render it: the four
+   *  screen gimmicks drive the ScreenScareKit; the false-pulse throbs the HUD +
+   *  audio (finding 4b); the silence-spike ducks audio (and wakes CV-1); the
+   *  Watcher/Hag manifest their presences; a pure-visual arms its authored
+   *  one-shot (AF-1's crossing silhouette, finding 4a). None touch the banner. */
   function routeScare(a: ScareActivation): void {
     switch (a.kind) {
       case 'snap-grid':
@@ -613,8 +616,12 @@ async function startScene(): Promise<void> {
         break;
       }
       case 'false-pulse':
-        // A spoofed brand pulse: ONE HUD/threat frame (the HUD's own reduced-
-        // flicker flash cap gates the visual). It never touches the banner.
+        // "The radar you trust, lying once" (spec §5): the HUD sigil visibly
+        // throbs with nothing there. `spoofPulse` arms the one-shot swell main
+        // max()-composites into brandHud.setPulse below (finding 4b — it was
+        // audio-only before); the threat/heartbeat sell the lie in sound. The
+        // spoof honours the reduced-flicker flash cap; the banner is untouched.
+        scareKit.spoofPulse();
         game.bus.emit({ type: 'brand-pulse', intensity: 1 });
         audio.setThreat(1);
         break;
@@ -628,9 +635,25 @@ async function startScene(): Promise<void> {
         // The Hag appears at the fog-line, receding if approached.
         hagPresence?.glimpse();
         break;
-      case 'pure-visual':
-        // Tasks 9–12: the authored per-zone one-shot this beat shows.
+      case 'pure-visual': {
+        // AF-1 (finding 4a): a tall dark silhouette crosses between two dense-tree
+        // cells downrange, then is gone. The two cells are authored on the beat
+        // (`crossing`); convert to world centres (y on the terrain layer, 0 in the
+        // flat forest) and arm the crossing. Other pure-visual beats (CV-3 the
+        // curdled well) carry no `crossing` — the well's dread is environmental —
+        // so they no-op here, exactly as before.
+        const beat = activeDef.scares?.find((s) => s.id === a.beatId);
+        const cross = beat?.crossing;
+        if (cross && crossingSilhouette) {
+          const world = ([r, c]: [number, number]): { x: number; y: number; z: number } => ({
+            x: (c + 0.5) * built.cellM,
+            y: built.cellHeightM(r, c),
+            z: (r + 0.5) * built.cellM,
+          });
+          crossingSilhouette.arm(world(cross[0]), world(cross[1]));
+        }
         break;
+      }
     }
   }
   /** Latch so the per-frame vertex-snap override restores exactly once. */
@@ -903,6 +926,9 @@ async function startScene(): Promise<void> {
    *  (interior) zones, so those zones never render either presence (Task 5). */
   let watcherView: WatcherView | null = null;
   let hagView: HagView | null = null;
+  /** AF-1's pure-visual crossing silhouette (finding 4a), or null off an
+   *  exterior zone. Zone-scoped like the presence views. */
+  let crossingSilhouette: CrossingSilhouette | null = null;
   /** True while the carved bargain is armed at the cairn (digit keys select). */
   let bargainArmed = false;
 
@@ -1321,6 +1347,11 @@ async function startScene(): Promise<void> {
       hagView.dispose();
       hagView = null;
     }
+    if (crossingSilhouette) {
+      scene.remove(crossingSilhouette.root);
+      crossingSilhouette.dispose();
+      crossingSilhouette = null;
+    }
     // A zone change ends any manifest/glimpse in progress: the views are zone-
     // scoped, so a stale presence would otherwise pop straight back in on the
     // next exterior entry, unpaid-for by any DreadDirector activation.
@@ -1341,6 +1372,11 @@ async function startScene(): Promise<void> {
     watcherPresence.setAnchors(activeDef.watcherAnchors ?? []);
     watcherView = new WatcherView(watcherPresence);
     scene.add(watcherView.root);
+    // AF-1's crossing silhouette (finding 4a) — one per exterior zone, armed by
+    // routeScare when a pure-visual beat carries a `crossing`. Idle + invisible
+    // until then; a zone with no such beat simply never arms it.
+    crossingSilhouette = new CrossingSilhouette();
+    scene.add(crossingSilhouette.root);
     if (activeDef.hagThreshold) {
       hagPresence = new HagPresence(activeDef.hagThreshold, built.cellM);
       hagView = new HagView(hagPresence);
@@ -2216,6 +2252,9 @@ async function startScene(): Promise<void> {
         hagPresence?.update(controller.pos, [dRow, dCol]);
         watcherView?.update(dt);
         hagView?.update(dt);
+        // AF-1's crossing silhouette (finding 4a): lerp + despawn (end of
+        // traverse, or the player closing within its despawn range).
+        crossingSilhouette?.update(dt, controller.pos);
       }
 
       // Combat: guard mirrors the held button; latched presses start actions.
@@ -2373,7 +2412,10 @@ async function startScene(): Promise<void> {
       }
       if (fallDip > 0) fallDip = Math.max(0, fallDip - (FALL_DIP_RECOVER * dt) / 1000);
 
-      brandHud.setPulse(brand.pulse, brand.blueFlicker);
+      // Composite the false-pulse spoof (finding 4b) over the real pulse via
+      // max(), mirroring the desat-stab compositing — a GF-2 crossing throbs the
+      // sigil once even with no threat in range, then eases back to the real read.
+      brandHud.setPulse(Math.max(brand.pulse, scareKit.pulseBoost()), brand.blueFlicker);
       const target = interactor.nearest(interactables);
       // Walking off the summit stair cancels a pending KEEP confirm.
       if (keepConfirmPending && target?.id !== 'summit-to-throne') keepConfirmPending = false;

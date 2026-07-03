@@ -220,6 +220,10 @@ export interface ScareBeat {
   gimmick: ScareGimmick;
   /** AF-2, PD-1 manifest the Watcher when they fire. */
   showsWatcher?: boolean;
+  /** A pure-visual crossing (AF-1): the two grid cells a tall dark silhouette
+   *  traverses between (downrange, at the fog's edge) before it despawns. Only
+   *  meaningful on a `gimmick: null` beat; main reads it to arm the crossing. */
+  crossing?: [GridPos, GridPos];
   oneLine: string;
 }
 

@@ -77,7 +77,13 @@ export const ASHEN_FOREST_N: ZoneDef = {
     // AF-1: pure-visual (no screen gimmick) — a tall shape crosses between two
     // dense-tree cells at the fog's edge, gone if looked at / approached. Teaches
     // that a silhouette is a genuine warning: a real Hound begins circling ~4 s later.
-    { id: 'AF-1', zone: 'ashen-forest-n', trigger: { on: 'cellEnter', cells: [[4, 5]] }, gimmick: null, oneLine: 'Something crosses between the trees, downrange.' },
+    // `crossing` = the two endpoints the silhouette lerps between, downrange at
+    // the fog's edge (col 8, the density transition just east of the [4,5]
+    // trigger): it emerges from the dense [3,8] clump, crosses the road corridor
+    // N→S in the player's sightline, and vanishes past [7,8], then despawns
+    // (finding 4a). Sited at the transition (not deep in the col-10 stand) so it
+    // reads across the open road rather than being buried behind dense trunks.
+    { id: 'AF-1', zone: 'ashen-forest-n', trigger: { on: 'cellEnter', cells: [[4, 5]] }, gimmick: null, crossing: [[3, 8], [7, 8]], oneLine: 'Something crosses between the trees, downrange.' },
     // AF-2: the drop's hero Watcher beat — the world stutters (snap-grid) while
     // the tall watcher holds beyond the far-plane, gone when neared.
     { id: 'AF-2', zone: 'ashen-forest-n', trigger: { on: 'cellEnter', cells: [[6, 7]] }, gimmick: 'snap-grid', showsWatcher: true, oneLine: 'The tall watcher, and the world stutters around it.' },

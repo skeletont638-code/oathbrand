@@ -39,12 +39,22 @@ export const DESAT_EASE_MS = 1400;
 /** Fidelity scarcity (rule 8): a glitch already seen this run renders ~30%
  *  shorter — main passes `everSeen` so a repeat reads weaker than the first. */
 export const EVER_SEEN_HOLD_MUL = 0.7;
+/** False brand-pulse (GF-2, finding 4b): the total HUD-swell window, ms. "The
+ *  radar you trust, lying once" — the sigil throbs with nothing there. */
+export const SPOOF_PULSE_MS = 650;
+/** Time the false pulse climbs to its peak (the throb), ms. */
+export const SPOOF_RISE_MS = 90;
+/** Reduced-flicker flash cap: the false pulse peaks at this gentler amplitude
+ *  when reduced-flicker is engaged (spec §11 — GF-2 respects the flash cap). */
+export const SPOOF_SAFE_PEAK = 0.5;
 
 export class ScreenScareKit implements Subsystem {
   /** Elapsed since the last snap()/resDrop()/desatStab(); Infinity ⇒ inactive. */
   private snapT = Infinity;
   private resT = Infinity;
   private desatT = Infinity;
+  /** Elapsed since the false brand-pulse spoof was armed; Infinity ⇒ inactive. */
+  private spoofT = Infinity;
   /** Per-arm hold windows (shortened when the glitch was already seen). */
   private snapHold = SNAP_MS;
   private resHold = RESDROP_MS;
@@ -68,6 +78,17 @@ export class ScreenScareKit implements Subsystem {
   desatStab(everSeen = false): void {
     this.desatT = 0;
     this.desatEase = DESAT_EASE_MS * (everSeen ? EVER_SEEN_HOLD_MUL : 1);
+  }
+
+  /**
+   * Arm the false brand-pulse (GF-2, finding 4b): a one-shot HUD swell with
+   * nothing there. Main composites `pulseBoost()` with the real `brand.pulse`
+   * via max() — so the sigil visibly throbs once, "the radar you trust, lying
+   * once". A pure held envelope (no per-frame random), flash-capped when
+   * reduced-flicker is on. The false-pulse fires once per drop, so no everSeen.
+   */
+  spoofPulse(): void {
+    this.spoofT = 0;
   }
 
   /**
@@ -98,6 +119,10 @@ export class ScreenScareKit implements Subsystem {
       this.desatT += dtMs;
       if (this.desatT >= DESAT_STAB_MS + this.desatEase) this.desatT = Infinity;
     }
+    if (this.spoofT !== Infinity) {
+      this.spoofT += dtMs;
+      if (this.spoofT >= SPOOF_PULSE_MS) this.spoofT = Infinity;
+    }
   }
 
   /** The coarse snap grid while a spike holds, else null. */
@@ -117,5 +142,18 @@ export class ScreenScareKit implements Subsystem {
     if (t <= DESAT_STAB_MS) return DESAT_PEAK * (t / DESAT_STAB_MS);
     const eased = 1 - (t - DESAT_STAB_MS) / this.desatEase;
     return DESAT_PEAK * Math.max(0, eased);
+  }
+
+  /** The 0..1 false brand-pulse envelope: a quick throb (rise to peak within
+   *  SPOOF_RISE_MS) then an ease back to 0 over the rest of SPOOF_PULSE_MS. The
+   *  peak is flash-capped to SPOOF_SAFE_PEAK when reduced-flicker is engaged.
+   *  Main max()-composites it with the real brand pulse to drive the HUD sigil. */
+  pulseBoost(): number {
+    const t = this.spoofT;
+    if (t === Infinity) return 0;
+    const peak = this.flickerSafe ? SPOOF_SAFE_PEAK : 1;
+    if (t <= SPOOF_RISE_MS) return peak * (t / SPOOF_RISE_MS);
+    const eased = 1 - (t - SPOOF_RISE_MS) / (SPOOF_PULSE_MS - SPOOF_RISE_MS);
+    return peak * Math.max(0, eased);
   }
 }

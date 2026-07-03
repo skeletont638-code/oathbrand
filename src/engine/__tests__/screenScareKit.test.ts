@@ -17,6 +17,7 @@ import { describe, it, expect } from 'vitest';
 import {
   ScreenScareKit,
   SNAP_COARSE, SNAP_MS, RESDROP_MS, DESAT_PEAK, DESAT_STAB_MS, DESAT_EASE_MS, EVER_SEEN_HOLD_MUL,
+  SPOOF_PULSE_MS, SPOOF_RISE_MS, SPOOF_SAFE_PEAK,
 } from '../ScreenScareKit';
 
 describe('ScreenScareKit — vertex-snap spike', () => {
@@ -73,6 +74,44 @@ describe('ScreenScareKit — desaturation stab', () => {
     }
     kit.update(400); // well past the ease window
     expect(kit.desatBoost()).toBe(0);
+  });
+});
+
+describe('ScreenScareKit — false-pulse HUD spoof (finding 4b)', () => {
+  it('pulseBoost() rises then eases to 0 over SPOOF_PULSE_MS (a one-shot swell)', () => {
+    const kit = new ScreenScareKit();
+    expect(kit.pulseBoost()).toBe(0); // idle
+    kit.spoofPulse();
+    kit.update(SPOOF_RISE_MS);
+    expect(kit.pulseBoost()).toBeCloseTo(1, 5); // peaks at the rise
+    // Eases monotonically down toward 0.
+    let prev = kit.pulseBoost();
+    for (let t = SPOOF_RISE_MS; t < SPOOF_PULSE_MS; t += 100) {
+      kit.update(100);
+      const now = kit.pulseBoost();
+      expect(now).toBeLessThan(prev);
+      prev = now;
+    }
+    kit.update(200); // past the window
+    expect(kit.pulseBoost()).toBe(0);
+  });
+
+  it('honours the reduced-flicker flash cap: the swell peaks lower when flicker-safe', () => {
+    const kit = new ScreenScareKit();
+    kit.setFlickerSafe(true);
+    kit.spoofPulse();
+    kit.update(SPOOF_RISE_MS);
+    expect(kit.pulseBoost()).toBeCloseTo(SPOOF_SAFE_PEAK, 5);
+    expect(SPOOF_SAFE_PEAK).toBeLessThan(1);
+  });
+
+  it('never fights the real brand pulse — it is a separate additive envelope', () => {
+    // The kit only reports the spoof amplitude; main composites it with the real
+    // brand.pulse via max(). Idle it contributes nothing.
+    const kit = new ScreenScareKit();
+    kit.snap(); // an unrelated gimmick running does not leak into pulseBoost
+    kit.update(60);
+    expect(kit.pulseBoost()).toBe(0);
   });
 });
 
