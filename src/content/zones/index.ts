@@ -18,11 +18,13 @@ import { QUEENS_GARDEN } from './queensGarden';
 import { GATE_FIELDS } from './gateFields';
 import { ASHEN_FOREST_N } from './ashenForestN';
 import { CINDER_VILLAGE } from './cinderVillage';
+import { PILGRIMS_DESCENT } from './pilgrimsDescent';
 
 /** Every built zone, by id. The seven-zone castle campaign (T11–T16) plus the
  *  first Greater Vael exteriors — the Gate Fields hub (Task 9), the Ashen
- *  Forest N (Task 10, the Hound showcase + the Hag's threshold), and the Cinder
- *  Village (Task 11, the frozen procession + the tithe-ledger). */
+ *  Forest N (Task 10, the Hound showcase + the Hag's threshold), the Cinder
+ *  Village (Task 11, the frozen procession + the tithe-ledger), and the
+ *  Pilgrim's Descent (Task 12, the height-layer showcase + the vista terminus). */
 export const ZONES: Partial<Record<ZoneId, ZoneDef>> = {
   'ashen-gate': ASHEN_GATE,
   'great-hall': GREAT_HALL,
@@ -34,6 +36,7 @@ export const ZONES: Partial<Record<ZoneId, ZoneDef>> = {
   'gate-fields': GATE_FIELDS,
   'ashen-forest-n': ASHEN_FOREST_N,
   'cinder-village': CINDER_VILLAGE,
+  'pilgrims-descent': PILGRIMS_DESCENT,
 };
 
 /**
@@ -45,14 +48,14 @@ export const ZONES: Partial<Record<ZoneId, ZoneDef>> = {
  * Greater Vael Drop 1 re-arms the allowlist: the Gate Fields hub (Task 9) opens
  * three roads — `cinder-village`, `ashen-forest-n`, `pilgrims-descent` — whose
  * zones land in Tasks 10–12, so they live here until then (each is removed as
- * its zone ships, and the structural tests then demand a real pairing). Task 10
- * shipped the Ashen Forest N and Task 11 shipped the Cinder Village, so both are
- * gone from the list — their `gf-forest` / `gf-village` doors now pair both ways.
- * `salt-road` is the Drop-2 target the Cinder Village's sealed east arch (and
- * the Pilgrim's Descent) will door into a drop early.
+ * its zone ships, and the structural tests then demand a real pairing). Tasks
+ * 10–12 shipped the Ashen Forest N, the Cinder Village and the Pilgrim's Descent,
+ * so all three are gone from the list — their `gf-forest` / `gf-village` /
+ * `gf-descent` doors now pair both ways. `salt-road` alone remains: the Drop-2
+ * target the Cinder Village's sealed east arch and the Pilgrim's Descent's sealed
+ * bottom gate door into a drop early.
  */
 export const FUTURE_ZONE_IDS: ReadonlySet<ZoneId> = new Set<ZoneId>([
-  'pilgrims-descent',
   'salt-road',
 ]);
 

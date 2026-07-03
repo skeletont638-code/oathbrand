@@ -68,7 +68,13 @@ export const ASH_PRIESTS: AshPriestPlacement[] = [
   // boundary-stone lore [2,3] he keeps (they must not share a cell, or one
   // interactable would shadow the other); faces east, into the field.
   { id: 'ashpriest-gv-fields', zone: 'gate-fields', at: [2, 2], rotY: Math.PI * 0.5, dialogueId: 'ashpriest-gv-fields' },
-  { id: 'ashpriest-gv-descent', zone: 'pilgrims-descent', at: [2, 3], rotY: Math.PI * 0.5, dialogueId: 'ashpriest-gv-descent' },
+  // Task 12 pins him on real band-1 floor at [7,2], one cell WEST of the
+  // `gv-descent-ash-priest` lore [7,3] whose final line he speaks (they must not
+  // share a cell, or the READ plate would shadow his SPEAK — the gate-fields
+  // precedent). He stands mid-descent by his lore, back to the sealed gate below;
+  // faces east into the switchback the player descends. Grounded on the terrace
+  // by main.ts (his root y follows cellHeightM, like the enemies + camera).
+  { id: 'ashpriest-gv-descent', zone: 'pilgrims-descent', at: [7, 2], rotY: Math.PI * 0.5, dialogueId: 'ashpriest-gv-descent' },
 ];
 
 /** Placements standing in `zone`. */

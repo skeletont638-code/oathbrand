@@ -198,6 +198,16 @@ export const LORE: Record<string, LoreEntry> = {
   'gv-village-procession': { title: 'The Kneeling Line',
     body: 'A line worn into the street by knees that never rose. When the tithe could not be paid in embers, Cinder paid it in the hollowed — walked its own dead out and set them kneeling toward the fog, a penance-column. Count them as you pass. One of them is counting you.' },
 
+  // ─── GREATER VAEL DROP 1 — THE PILGRIM'S DESCENT (Task 12) ─────────────
+  'gv-descent-shrine': { title: 'The Wayside Shrine',
+    body: 'A shrine to Vhaelis, the Flame That Lends, its little niche still black with old smoke. Beneath the fresh carving, an older one is scratched to ruin — an earlier name, an earlier keeper of this crossing, unmade to make room for the fire. Every faith here is built on the scraped-out face of the one before.' },
+  'gv-descent-pilgrim-marker': { title: 'The Pilgrim-Marker',
+    body: 'A marker at the head of the switchbacks, hung with the cold brands of those who passed it. They went down to the drowned lands to give their embers back to the water, and so be free of the debt. The path down is deep-worn. The path up has not been walked in a long time.' },
+  'gv-descent-sealed-gate': { title: 'The Sealed Way',
+    body: 'The gate at the bottom is barred and swollen shut, and beyond it the sound of water where no water should be. The Salt Road ran on from here once, down to the sea-marches. It runs under them now. Something still tolls, far below the surface, keeping a count no one is left to owe.' },
+  'gv-descent-ash-priest': { title: 'The Ash-Priest, at the Gate',
+    body: 'He has come down ahead of you, as he always has, and set his back to the sealed gate. "A kingdom given fire," he says, not turning, "and it learned to sell the warmth and keep the ash. I carried the first ember up a road much like this one. I never asked what it would cost." He will not say who he heralded, or when.' },
+
   // ─── NG+ (T16): the recontextualisations. Defined now, placed later. ────
   'ng-queen-knew': {
     ngOnly: true,

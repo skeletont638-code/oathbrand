@@ -404,7 +404,12 @@ async function startScene(): Promise<void> {
   // Enemy roster — declared before the Brand so its nearest-enemy poll can
   // close over the array; REBUILT in place on every zone transition
   // (spawnEnemies), so every closure over `enemies` stays live.
-  const enemies: { logic: Enemy; view: EntityView }[] = [];
+  // `groundY` is the enemy VIEW's eased terrain height (Task 12 exterior height
+  // layer): the enemy-side twin of the camera's `groundY`, so a spawn/patrol on a
+  // raised terrace renders with its feet ON the terrace, not buried or floating.
+  // Visual only — the flat 2D collider stays authoritative (logic.pos.y is 0).
+  // Interior/flat zones report height 0 everywhere, so it stays 0 (no-op, v1-exact).
+  const enemies: { logic: Enemy; view: EntityView; groundY: number }[] = [];
 
   // The Oath-Brand: embers-as-health, threat pulse, hollowing desaturation,
   // and the rekindle→save checkpoint loop. The pulse tracks the nearest
@@ -1251,6 +1256,10 @@ async function startScene(): Promise<void> {
   function spawnAshPriests(): void {
     for (const placement of ashPriestsIn(zones.current)) {
       const priest = new AshPriest(priestTemplate, placement, built.cellM);
+      // Exterior height layer (Task 12): ground the static priest on his terrace
+      // — the Pilgrim's Descent stands him on band-1 floor. He never moves, so a
+      // one-time set holds; flat/interior zones read 0 (v1-exact).
+      priest.root.position.y = built.cellHeightM(placement.at[0], placement.at[1]);
       scene.add(priest.root);
       ashPriests.push(priest);
     }
@@ -1525,11 +1534,14 @@ async function startScene(): Promise<void> {
         );
         logic = soldier;
       }
-      // Spawn placement uses the BUILT zone's cell size (T9 review).
+      // Spawn placement uses the BUILT zone's cell size (T9 review). The 2D
+      // collider is authoritative for movement (pos.y stays 0); the VIEW's y is
+      // grounded on the terrain — seed `groundY` at the spawn cell so a raised
+      // spawn starts grounded (no pop-up on the first frame), then it eases.
       const [row, col] = spawn.at;
       logic.pos.set((col + 0.5) * built.cellM, 0, (row + 0.5) * built.cellM);
       scene.add(view.root);
-      enemies.push({ logic, view });
+      enemies.push({ logic, view, groundY: built.cellHeightM(row, col) });
     });
   }
 
@@ -2077,6 +2089,21 @@ async function startScene(): Promise<void> {
       game.update(dt);
       controller.update(dt, built.collider);
 
+      // Vista one-shot (clip #1 ashen-gate / PD-1 descent terminus): fire it
+      // BEFORE the DreadDirector so an on:'vista' beat — and its Watcher rider —
+      // ride the SAME frame the world opens (Task 12 wires PD-1). enterCell is
+      // one-shot per save; interiors fire it too (the ashen-gate courtyard vista),
+      // exteriors additionally feed the fired id to dread below.
+      let vistaFiredId: string | undefined;
+      {
+        const vRow = Math.floor(controller.pos.z / built.cellM);
+        const vCol = Math.floor(controller.pos.x / built.cellM);
+        if (activeDef.vista && vista.enterCell(activeDef.vista, vRow, vCol)) {
+          vistaFiredId = activeDef.vista.id;
+          game.bus.emit({ type: 'vision-played', visionId: activeDef.vista.id });
+        }
+      }
+
       // --- Task 3: the DreadDirector ------------------------------------
       // Only exterior (Greater Vael) zones ever get scares — castle zones are
       // never handed to the director. It fires at most one beat/frame; main
@@ -2092,7 +2119,9 @@ async function startScene(): Promise<void> {
           inCombat,
           brandPulse: brand.pulse,
           events: dreadEvent,
-          // vistaFiredId: wired when an exterior VistaDef beat lands (Tasks 9–12).
+          // PD-1 (Task 12): the id set THIS frame when a VistaDef fires (above),
+          // so the on:'vista' beat + its snap-grid + Watcher ride the same swell.
+          vistaFiredId,
         })) {
           routeScare(activation);
         }
@@ -2143,7 +2172,17 @@ async function startScene(): Promise<void> {
       bolts.update(dt, enemyCtx);
       syncBolts(bolts);
 
-      for (const { view } of enemies) view.update(dt); // incl. death anims
+      for (const e of enemies) {
+        e.view.update(dt); // syncs root ← logic.pos (y=0); incl. death anims
+        // Exterior height layer (Task 12): ease the enemy VIEW onto its current
+        // cell's terrain height — the enemy-side twin of the camera's groundY, so
+        // feet sit on the terrace (not buried/floating). Purely visual: the flat
+        // 2D collider still owns movement. Flat/interior zones read 0 → no-op.
+        const er = Math.floor(e.logic.pos.z / built.cellM);
+        const ec = Math.floor(e.logic.pos.x / built.cellM);
+        e.groundY += (built.cellHeightM(er, ec) - e.groundY) * Math.min(1, dt / GROUND_EASE_MS);
+        e.view.root.position.y += e.groundY;
+      }
 
       // Wisps drift up and gutter out.
       for (let i = wisps.length - 1; i >= 0; i--) {
@@ -2243,11 +2282,9 @@ async function startScene(): Promise<void> {
         goThrough(doorHere);
       }
 
-      // Vista (clip #1): one-shot; the director eases fog + camera, the
-      // event is the audio swell's cue (T17).
-      if (activeDef.vista && vista.enterCell(activeDef.vista, pRow, pCol)) {
-        game.bus.emit({ type: 'vision-played', visionId: activeDef.vista.id });
-      }
+      // Vista (clip #1 / PD-1): the enterCell fire moved to the top of the frame
+      // (before the DreadDirector) so an on:'vista' beat rides the same swell;
+      // here we only advance the eased fog+camera envelope.
       vista.update(dt);
 
       // Shortcut gate swing (after a kick) + landing-dip recovery.

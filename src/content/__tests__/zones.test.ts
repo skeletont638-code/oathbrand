@@ -11,7 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import type { ZoneId } from '../types';
 import type { GridPos, ZoneDef } from '../../world/zoneDef';
-import { gridToPlacements } from '../../world/ZoneBuilder';
+import { buildHeightRamps, gridToPlacements } from '../../world/ZoneBuilder';
 import { doorEntry, doorSpan, pairedDoor } from '../../world/zoneGraph';
 import { FUTURE_ZONE_IDS, ZONES, hasZone, zoneOrThrow } from '../zones';
 import { LORE } from '../lore';
@@ -77,8 +77,13 @@ describe('zone registry', () => {
 
   it('registers the third Greater Vael exterior — the Cinder Village (Task 11)', () => {
     expect(ZONES['cinder-village']).toBeDefined();
-    // Seven castle zones + the Gate Fields hub + the Ashen Forest N + the Cinder Village.
-    expect(Object.keys(ZONES)).toHaveLength(10);
+  });
+
+  it('registers the fourth Greater Vael exterior — the Pilgrim\'s Descent (Task 12)', () => {
+    expect(ZONES['pilgrims-descent']).toBeDefined();
+    // Seven castle zones + the Gate Fields hub + the Ashen Forest N + the Cinder
+    // Village + the Pilgrim's Descent (the drop's terminus, the height showcase).
+    expect(Object.keys(ZONES)).toHaveLength(11);
   });
 
   it('zoneOrThrow returns every registered zone (the campaign is complete)', () => {
@@ -98,11 +103,10 @@ describe('zone registry', () => {
     // opens roads into three zones that Tasks 10–12 build — cinder-village,
     // ashen-forest-n, pilgrims-descent — plus the Drop-2 salt-road forward ref.
     // Each is removed as its zone ships (the structural tests then demand a real
-    // pairing). Task 10 shipped ashen-forest-n and Task 11 shipped cinder-village,
-    // so both are gone from the list — only the Pilgrim's Descent (T12) and the
-    // Drop-2 salt-road remain.
+    // pairing). Tasks 10–12 shipped ashen-forest-n, cinder-village and pilgrims-
+    // descent, so all three are gone from the list — only the Drop-2 salt-road
+    // (the Cinder Village + Pilgrim's Descent sealed arches point at it) remains.
     expect([...FUTURE_ZONE_IDS].sort()).toEqual([
-      'pilgrims-descent',
       'salt-road',
     ]);
     // No registered/built zone may ever sit in the allowlist…
@@ -240,6 +244,62 @@ describe('zone registry', () => {
     // Walking the road lands the player at the OTHER zone's paired door.
     expect(pairedDoor('gate-fields', gfToVillage!, village)?.to).toBe('gate-fields');
     expect(pairedDoor('cinder-village', cvToFields!, fields)?.to).toBe('cinder-village');
+  });
+
+  it('the Gate Fields S road pairs both ways with the Pilgrim\'s Descent (Task 12)', () => {
+    const fields = zoneOrThrow('gate-fields');
+    const descent = zoneOrThrow('pilgrims-descent');
+    const gfToDescent = fields.doors.find((d) => d.id === 'gf-to-descent');
+    const pdToFields = descent.doors.find((d) => d.id === 'pd-to-fields');
+    expect(gfToDescent, 'gate-fields is missing the gf-to-descent road').toBeDefined();
+    expect(pdToFields, 'pilgrims-descent is missing the pd-to-fields road').toBeDefined();
+    // Both ends share the single passage edge down the gorge.
+    expect(gfToDescent!.pair).toBe('gf-descent');
+    expect(pdToFields!.pair).toBe('gf-descent');
+    // Walking the road lands the player at the OTHER zone's paired door.
+    expect(pairedDoor('gate-fields', gfToDescent!, descent)?.to).toBe('gate-fields');
+    expect(pairedDoor('pilgrims-descent', pdToFields!, fields)?.to).toBe('pilgrims-descent');
+  });
+
+  it('the Pilgrim\'s Descent sealed way targets the Drop-2 salt-road (Task 12)', () => {
+    const descent = zoneOrThrow('pilgrims-descent');
+    const sealed = descent.doors.find((d) => d.id === 'pd-to-saltroad');
+    expect(sealed, 'pilgrims-descent is missing the pd-to-saltroad sealed way').toBeDefined();
+    expect(sealed!.to).toBe('salt-road');
+    expect(sealed!.lock).toBe('greatervael');
+    // The target is authored-but-unbuilt: a sealed arch this drop, never a live edge.
+    expect(hasZone('salt-road')).toBe(false);
+    expect(FUTURE_ZONE_IDS.has('salt-road')).toBe(true);
+  });
+});
+
+describe('Pilgrim\'s Descent height layer (Task 12)', () => {
+  const def = zoneOrThrow('pilgrims-descent');
+
+  it('carries a heightGrid the exact dims of its grid (12 rows × 13 chars)', () => {
+    expect(def.heightGrid, 'pilgrims-descent has no heightGrid').toBeDefined();
+    expect(def.heightGrid!.length).toBe(def.grid.length);
+    expect(def.heightGrid!.length).toBe(12);
+    for (let r = 0; r < def.heightGrid!.length; r++) {
+      expect(def.heightGrid![r].length, `heightGrid row ${r}`).toBe(def.grid[r].length);
+      expect(def.heightGrid![r].length, `heightGrid row ${r} width`).toBe(13);
+    }
+  });
+
+  it('the terraced descent yields exactly three ramps on the Δ1 seams', () => {
+    const seams = buildHeightRamps(def);
+    const ramps = seams.filter((s) => s.kind === 'ramp');
+    expect(ramps).toHaveLength(3);
+    // The single serpentine's three steps down: col10 [2→3] (band 3→2),
+    // col1 [5→6] (band 2→1), col10 [8→9] (band 1→0).
+    expect(ramps).toContainEqual({ a: [2, 10], b: [3, 10], kind: 'ramp' });
+    expect(ramps).toContainEqual({ a: [5, 1], b: [6, 1], kind: 'ramp' });
+    expect(ramps).toContainEqual({ a: [8, 10], b: [9, 10], kind: 'ramp' });
+  });
+
+  it('renders the gorge as cliff faces (path vs void Δ≥2)', () => {
+    const cliffs = buildHeightRamps(def).filter((s) => s.kind === 'cliff');
+    expect(cliffs.length).toBeGreaterThanOrEqual(1);
   });
 });
 
