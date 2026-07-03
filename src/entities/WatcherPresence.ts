@@ -16,13 +16,13 @@
  *
  * Its IDENTITY is held for Drop 3: reference the mystery, never the answer.
  */
-import { BoxGeometry, Color, Group, Mesh, MeshStandardMaterial } from 'three';
-import type { Material } from 'three';
+import { Color, Group, Mesh, MeshStandardMaterial } from 'three';
 import { TUNING } from '../content/tuning';
 import { patchMaterial } from '../ps1/patchMaterial';
 import type { WatcherAnchor } from '../world/zoneDef';
 import type { EntityView } from './animator';
 import { WATCHER_TINT } from './palette';
+import { blobHead, latheShape } from './organic';
 
 const W = TUNING.greaterVael.watcher;
 const D = TUNING.greaterVael.dread;
@@ -193,32 +193,24 @@ function darkMat(sink: MeshStandardMaterial[]): MeshStandardMaterial {
   return mat;
 }
 
-function box(w: number, h: number, d: number, mat: Material): Mesh {
-  return new Mesh(new BoxGeometry(w, h, d), mat);
-}
-
-/** Build the ~3.0 m column-humanoid. y=0 is the ground; it rises to heightM. */
-function buildWatcher(mats: MeshStandardMaterial[]): Group {
+/** Build the ~3.0 m column-humanoid. y=0 is the ground; it rises to heightM.
+ *  One continuous shrouded lathe column — curves, but STILL a clean vertical
+ *  (never the Hag's stoop): a narrow hem, an attenuated waist, a barely-wider
+ *  shoulder, a thin neck, a crunched blob head capping it at exactly heightM. */
+export function buildWatcher(mats: MeshStandardMaterial[]): Group {
   const g = new Group();
   const H = W.heightM; // 3.0
-  // A single unnaturally long, thin trunk (legs fused) — most of the height.
-  const legLen = H * 0.58;
-  const legs = box(0.34, legLen, 0.26, darkMat(mats));
-  legs.position.set(0, legLen / 2, 0);
-  g.add(legs);
-  // A narrow torso, barely wider than the trunk — the frame stays a column.
-  const torsoH = H * 0.26;
-  const torso = box(0.5, torsoH, 0.3, darkMat(mats));
-  torso.position.set(0, legLen + torsoH / 2, 0);
-  g.add(torso);
-  // A long thin neck.
-  const neckH = H * 0.1;
-  const neck = box(0.14, neckH, 0.14, darkMat(mats));
-  neck.position.set(0, legLen + torsoH + neckH / 2, 0);
-  g.add(neck);
-  // A small crunched head capping the column — no readable face at distance.
-  const head = box(0.28, H * 0.06, 0.26, darkMat(mats));
-  head.position.set(0, legLen + torsoH + neckH + H * 0.03, 0);
+  const column = new Mesh(
+    latheShape([
+      [0.2, 0], [0.24, H * 0.06], [0.15, H * 0.42], [0.19, H * 0.62],
+      [0.21, H * 0.8], [0.12, H * 0.86], [0.055, H * 0.9], [0.05, H * 0.94],
+    ]),
+    darkMat(mats),
+  );
+  g.add(column);
+  const headR = 0.11;
+  const head = new Mesh(blobHead(headR, 0x3aa), darkMat(mats));
+  head.position.set(0, H - headR, 0); // head top = H exactly (±18% blob crunch)
   g.add(head);
   return g;
 }

@@ -21,7 +21,7 @@
  * stirs only if a real brand pulse crosses it. Zero new asset cost; no code
  * branch. All numbers from `TUNING.greaterVael.kneeler`.
  */
-import { BoxGeometry, Color, Group, Mesh, MeshStandardMaterial } from 'three';
+import { Color, Group, Mesh, MeshStandardMaterial } from 'three';
 import type { Material } from 'three';
 import { TUNING } from '../content/tuning';
 import { patchMaterial } from '../ps1/patchMaterial';
@@ -32,6 +32,7 @@ import { steppedTime } from './animator';
 import type { EntityView } from './animator';
 import { KNEELER_TINT } from './palette';
 import { getTexture } from '../world/textures';
+import { bentLimb, blobHead, centredCapsule, taperedCapsule } from './organic';
 
 const K = TUNING.greaterVael.kneeler;
 const RISE = K.rise;
@@ -193,16 +194,11 @@ const K_WALK_RATE = 5;
 
 const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 
-function box(w: number, h: number, d: number, mat: Material): Mesh {
-  return new Mesh(new BoxGeometry(w, h, d), mat);
-}
-
-/** A pivot Group with a box hanging DOWN from its joint (limb segments). */
+/** A pivot Group with a BENT tapered limb hanging DOWN from its joint —
+ *  the same contract the box version had (geometry below the origin). */
 function segment(len: number, w: number, mat: Material): Group {
   const g = new Group();
-  const m = box(w, len, w, mat);
-  m.position.set(0, -len / 2, 0);
-  g.add(m);
+  g.add(new Mesh(bentLimb(len, w * 0.55, w * 0.35, len * 0.07), mat));
   return g;
 }
 
@@ -241,23 +237,24 @@ export class KneelerView implements EntityView {
     this.frame.add(this.hipG);
 
     // Pelvis + spine stack.
-    const pelvis = box(0.3, 0.22, 0.22, m);
+    const pelvis = new Mesh(centredCapsule(0.11, 0.11, 0.3).rotateZ(Math.PI / 2), m);
     pelvis.position.set(0, 0, 0);
     this.hipG.add(pelvis);
     this.spine.position.set(0, 0.08, 0);
     this.hipG.add(this.spine);
 
-    this.torso = box(0.32, K_TORSO_H, 0.22, m);
+    // Underfed torso: hips 0.19 tapering to 0.13 at the shoulders. Centred,
+    // full height = K_TORSO_H — the old box's exact vertical footprint, so the
+    // breath-scale and every stacked offset are unchanged.
+    this.torso = new Mesh(centredCapsule(0.19, 0.13, K_TORSO_H), m);
     this.torso.position.set(0, K_TORSO_H / 2, 0);
     this.spine.add(this.torso);
 
-    // Long neck + a small crunched, faceless head.
+    // Long thin neck (authored 0..0.34 up from the pivot) + crunched blob head.
     this.neck.position.set(0, K_TORSO_H, 0);
     this.spine.add(this.neck);
-    const neckMesh = box(0.15, 0.34, 0.15, m);
-    neckMesh.position.set(0, 0.17, 0);
-    this.neck.add(neckMesh);
-    const head = box(0.3, 0.26, 0.34, m);
+    this.neck.add(new Mesh(taperedCapsule(0.07, 0.055, 0.34), m));
+    const head = new Mesh(blobHead(0.16, 0x17e), m);
     head.position.set(0, 0.34 + 0.12, 0.03);
     this.neck.add(head);
 

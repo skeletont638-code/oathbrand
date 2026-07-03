@@ -21,8 +21,7 @@
  * moves — it is deliberately NOT scaled by the brand pulse (spec §9): the hound
  * you HEAR is not the brand you feel.
  */
-import { BoxGeometry, Color, Group, Mesh, MeshStandardMaterial } from 'three';
-import type { Material } from 'three';
+import { Color, Group, Mesh, MeshStandardMaterial } from 'three';
 import { TUNING } from '../content/tuning';
 import { patchMaterial } from '../ps1/patchMaterial';
 import type { Vec2 } from '../world/collision';
@@ -32,6 +31,7 @@ import { steppedTime } from './animator';
 import type { EntityView } from './animator';
 import { HOUND_TINT } from './palette';
 import { getTexture } from '../world/textures';
+import { bentLimb, blobHead, centredCapsule, taperedCapsule } from './organic';
 
 const H = TUNING.greaterVael.hound;
 const C = H.circle;
@@ -257,10 +257,6 @@ function houndMat(sink: MeshStandardMaterial[]): MeshStandardMaterial {
   return mat;
 }
 
-function box(w: number, h: number, d: number, mat: Material): Mesh {
-  return new Mesh(new BoxGeometry(w, h, d), mat);
-}
-
 /** The body stack that rises ABOVE the hip line: the torso offset (0.05) + the
  *  gaunt ridge's offset (0.3) + its half-height (0.11). The silhouette's TOP is
  *  the ridge, so the leg length is back-solved from the tuned `heightM` (2.3 m,
@@ -286,16 +282,21 @@ export class HoundView implements EntityView {
     this.root.name = `hound:${hound.id}`;
     this.root.add(this.body);
 
-    // Elongated, underfed torso — narrow and far too long.
-    this.torso = box(0.42, 0.46, 2.6, houndMat(this.mats));
+    // Elongated, underfed torso — a narrow tapered capsule lying along z
+    // (haunch thicker than the chest), centred like the box it replaces.
+    // Radius 0.23 = the old box's half-height, so HOUND_TORSO_Y stacking and
+    // the heightM back-solve are unchanged.
+    this.torso = new Mesh(centredCapsule(0.23, 0.17, 2.6).rotateX(Math.PI / 2), houndMat(this.mats));
     this.torso.position.set(0, HOUND_TORSO_Y, 0);
     this.body.add(this.torso);
-    // A gaunt shoulder ridge so the back reads bony, not blocky.
-    const ridge = box(0.24, 0.22, 1.9, houndMat(this.mats));
+    // The gaunt ridge — a thin spindle along the spine; its thick end tops out
+    // at +0.11 (the old box half-height): ridge-top = heightM back-solve HELD.
+    const ridge = new Mesh(centredCapsule(0.11, 0.08, 1.9).rotateX(Math.PI / 2), houndMat(this.mats));
     ridge.position.set(0, HOUND_TORSO_Y + 0.3, -0.1);
     this.body.add(ridge);
 
-    // Four over-long thin legs; the stride amplitude is what sells "too long".
+    // Four over-long BENT thin legs (bowed at the wrong place — mid-shaft).
+    // bentLimb hangs from the pivot origin, so no half-length offset mesh.
     const legX = 0.2;
     const legZ = 1.05;
     for (const [sx, sz] of [
@@ -306,23 +307,18 @@ export class HoundView implements EntityView {
     ] as const) {
       const hip = new Group();
       hip.position.set(sx, HOUND_HIP_Y, sz);
-      const leg = box(0.15, HOUND_LEG_LEN, 0.15, houndMat(this.mats));
-      leg.position.set(0, -HOUND_LEG_LEN / 2, 0);
-      hip.add(leg);
+      hip.add(new Mesh(bentLimb(HOUND_LEG_LEN, 0.075, 0.045, 0.09), houndMat(this.mats)));
       this.body.add(hip);
       this.hips.push(hip);
     }
 
-    // A long, low neck that droops forward, ending in a small crunched head —
-    // no face reads at distance, only a wrong wedge hanging off the front.
+    // The long drooping neck — a tapered spindle authored 0..1.15 along +z
+    // from the pivot (the old box spanned −0.08..1.08); same pivot, same pitch.
     this.neck.position.set(0, HOUND_TORSO_Y + 0.22, 1.25);
-    this.neck.rotation.x = 0.9; // pitched down toward the ground
-    const neckMesh = box(0.26, 0.26, 1.15, houndMat(this.mats));
-    neckMesh.position.set(0, 0, 0.5);
-    this.neck.add(neckMesh);
-    const head = box(0.34, 0.3, 0.5, houndMat(this.mats));
+    this.neck.rotation.x = 0.9;
+    this.neck.add(new Mesh(taperedCapsule(0.13, 0.09, 1.15).rotateX(Math.PI / 2), houndMat(this.mats)));
+    const head = new Mesh(blobHead(0.19, 0xa5b), houndMat(this.mats));
     head.position.set(0, -0.14, 1.05);
-    head.rotation.x = -0.5; // crunched, snout-down
     this.neck.add(head);
     this.body.add(this.neck);
   }

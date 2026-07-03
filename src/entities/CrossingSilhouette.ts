@@ -13,11 +13,12 @@
  * biped run through the same PS1 material patch the zones use, `fog:true` so it
  * dissolves into the fog gradient rather than reading as a lit body.
  */
-import { BoxGeometry, Color, Group, Mesh, MeshStandardMaterial, Vector3 } from 'three';
+import { Color, Group, Mesh, MeshStandardMaterial, Vector3 } from 'three';
 import type { Material } from 'three';
 import { patchMaterial } from '../ps1/patchMaterial';
 import { steppedTime } from './animator';
 import type { Vec2Like, Vec3Like } from './WatcherPresence';
+import { bentLimb, blobHead, centredCapsule, taperedCapsule } from './organic';
 
 /** Traverse duration, ms (spec §3.2: ~1.5–2 s). */
 export const CROSS_MS = 1800;
@@ -38,16 +39,10 @@ function darkMat(sink: MeshStandardMaterial[]): MeshStandardMaterial {
   return mat;
 }
 
-function box(w: number, h: number, d: number, mat: Material): Mesh {
-  return new Mesh(new BoxGeometry(w, h, d), mat);
-}
-
-/** A pivot Group with a box hanging DOWN from its joint (a leg segment). */
+/** A pivot Group with a BENT thin leg hanging DOWN from its joint. */
 function leg(len: number, mat: Material): Group {
   const g = new Group();
-  const m = box(0.16, len, 0.16, mat);
-  m.position.set(0, -len / 2, 0);
-  g.add(m);
+  g.add(new Mesh(bentLimb(len, 0.09, 0.055, len * 0.06), mat));
   return g;
 }
 
@@ -69,22 +64,21 @@ export class CrossingSilhouette {
     this.root.add(this.figure);
 
     const legLen = FIG_H * 0.5;
-    // Two over-long thin legs on a hip line (the stride is what sells "moving").
+    // Two over-long bent thin legs on a hip line (the stride sells "moving").
     this.legL = leg(legLen, darkMat(this.mats));
     this.legL.position.set(0.13, legLen, 0);
     this.legR = leg(legLen, darkMat(this.mats));
     this.legR.position.set(-0.13, legLen, 0);
     this.figure.add(this.legL, this.legR);
-    // A narrow torso, a long neck, a small crunched head — a thin column that
-    // leans slightly forward, so it reads as a striding shape, not a post.
+    // A narrow tapered torso, a thin neck spindle, a small crunched blob head.
     const torsoH = FIG_H * 0.3;
-    const torso = box(0.42, torsoH, 0.26, darkMat(this.mats));
+    const torso = new Mesh(centredCapsule(0.19, 0.13, torsoH), darkMat(this.mats));
     torso.position.set(0, legLen + torsoH / 2, 0);
     this.figure.add(torso);
-    const neck = box(0.13, FIG_H * 0.1, 0.13, darkMat(this.mats));
-    neck.position.set(0, legLen + torsoH + FIG_H * 0.05, 0);
+    const neck = new Mesh(taperedCapsule(0.065, 0.05, FIG_H * 0.1), darkMat(this.mats));
+    neck.position.set(0, legLen + torsoH, 0);
     this.figure.add(neck);
-    const head = box(0.26, FIG_H * 0.07, 0.24, darkMat(this.mats));
+    const head = new Mesh(blobHead(0.12, 0x77c), darkMat(this.mats));
     head.position.set(0, legLen + torsoH + FIG_H * 0.13, 0.02);
     this.figure.add(head);
     this.figure.rotation.x = 0.12; // a slight forward lean along the travel

@@ -15,8 +15,7 @@
  * Her silhouette is a STOOPED WOMAN (2.5 m, bent) — visually distinct from the
  * Watcher's tall vertical column.
  */
-import { BoxGeometry, Color, Group, Mesh, MeshStandardMaterial } from 'three';
-import type { Material } from 'three';
+import { Color, CylinderGeometry, Group, Mesh, MeshStandardMaterial } from 'three';
 import { TUNING } from '../content/tuning';
 import { patchMaterial } from '../ps1/patchMaterial';
 import type { GridPos, HagThresholdDef } from '../world/zoneDef';
@@ -24,6 +23,7 @@ import { steppedTime } from './animator';
 import type { EntityView } from './animator';
 import type { Vec2Like, Vec3Like } from './WatcherPresence';
 import { HAG_TINT } from './palette';
+import { blobHead, centredCapsule, latheShape } from './organic';
 
 const HG = TUNING.greaterVael.hag;
 
@@ -119,42 +119,38 @@ function darkMat(sink: MeshStandardMaterial[]): MeshStandardMaterial {
   return mat;
 }
 
-function box(w: number, h: number, d: number, mat: Material): Mesh {
-  return new Mesh(new BoxGeometry(w, h, d), mat);
-}
-
-/** Build the stooped crone. y=0 is the ground. */
-function buildHag(mats: MeshStandardMaterial[]): { root: Group; hunch: Group } {
+/** Build the stooped crone. y=0 is the ground. Exported for the C1 tests. */
+export function buildHag(mats: MeshStandardMaterial[]): { root: Group; hunch: Group } {
   const root = new Group();
-  // A long A-line robe: wide at the hem (a woman's skirted silhouette), tapering.
-  const hem = box(0.92, 0.6, 0.64, darkMat(mats));
-  hem.position.set(0, 0.3, 0);
-  root.add(hem);
-  const waist = box(0.6, 0.55, 0.44, darkMat(mats));
-  waist.position.set(0, 0.85, 0);
-  root.add(waist);
+  // The A-line robe as ONE lathe — a wide hem sweeping to a narrow waist
+  // (a woman's skirted silhouette, unmistakably not the Watcher's column).
+  const robe = new Mesh(
+    latheShape([[0.5, 0], [0.44, 0.35], [0.3, 0.72], [0.24, 0.95], [0.26, 1.12]]),
+    darkMat(mats),
+  );
+  root.add(robe);
 
-  // The hunch: the whole upper body pitched hard forward off the waist, so the
-  // back humps over and the head bows low — the crone's stoop.
+  // The hunch: SAME pivot, SAME base pitch — HagView sways this group.
   const hunch = new Group();
   hunch.position.set(0, 1.08, 0);
   hunch.rotation.x = 0.95;
   root.add(hunch);
 
-  const backT = box(0.5, 0.72, 0.36, darkMat(mats));
+  // The humped upper back — a bent-read capsule, thick at the shoulders.
+  const backT = new Mesh(centredCapsule(0.24, 0.18, 0.72), darkMat(mats));
   backT.position.set(0, 0.36, 0);
   hunch.add(backT);
-  // A shawl bulk over the shoulders — the top of the hump.
-  const shawl = box(0.68, 0.28, 0.5, darkMat(mats));
+  // The shawl bulk — a squashed seeded blob, the top of the hump.
+  const shawl = new Mesh(blobHead(0.3, 0x9c1).scale(1.15, 0.55, 0.9), darkMat(mats));
   shawl.position.set(0, 0.64, 0.02);
   hunch.add(shawl);
   // Bowed, hooded head — low and pushed forward past the shoulders.
-  const head = box(0.3, 0.3, 0.34, darkMat(mats));
+  const head = new Mesh(blobHead(0.17, 0x44d), darkMat(mats));
   head.position.set(0, 0.82, 0.16);
   hunch.add(head);
 
-  // A long staff planted at her side, hand to the ground — reinforces the crone.
-  const staff = box(0.06, 1.7, 0.06, darkMat(mats));
+  // The long staff — a thin ROUNDED rod planted at her side.
+  const staff = new Mesh(new CylinderGeometry(0.025, 0.035, 1.7, 6, 1), darkMat(mats));
   staff.position.set(0.46, 0.85, 0.16);
   staff.rotation.x = 0.12;
   root.add(staff);
