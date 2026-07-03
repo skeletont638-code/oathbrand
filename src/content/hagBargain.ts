@@ -136,3 +136,24 @@ export function offerToHag(
 export function restoreEmberCap(state: HagState): HagState {
   return { maxEmberCap: FULL_CAP, bargains: [...state.bargains] };
 }
+
+/**
+ * The ember cap to BOOT / resume with (spec §6.4). A Hag tithe lowers the cap
+ * only WITHIN Greater Vael, so a save whose RESUME zone is not an exterior GV
+ * zone must boot at the full brand — otherwise a tithe → quit-in-castle → reload
+ * leaves the castle capped forever (the persistGreaterVael write banks the tithed
+ * cap onto a save whose `zone` may still point at a castle banner, and boot read
+ * it back unconditionally). Pure; main persists the restored value so the next
+ * reload can't resurrect the tithed cap. `savedCap` absent ⇒ the full brand.
+ *
+ * GV BOUNDARY (Drop 1): "inside Greater Vael" ≡ `resumeZoneKind === 'exterior'`
+ * (the four Drop-1 exteriors). Drop 2's interior GV sub-zones (Drowned Chapel,
+ * Root-Crypt) will need an explicit GV zone-set instead of leaning on `kind`.
+ */
+export function bootEmberCap(args: {
+  savedCap: number | undefined;
+  resumeZoneKind: 'interior' | 'exterior' | undefined;
+}): number {
+  const cap = args.savedCap ?? FULL_CAP;
+  return args.resumeZoneKind === 'exterior' ? cap : FULL_CAP;
+}

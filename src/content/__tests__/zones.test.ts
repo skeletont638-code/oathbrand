@@ -351,6 +351,54 @@ describe('Pilgrim\'s Descent height layer (Task 12)', () => {
   });
 });
 
+describe('Greater Vael Watcher sightings (finding 2)', () => {
+  const minM = TUNING.greaterVael.watcher.sightingRangeMinM;
+  const exterior = entries.filter(([, d]) => d.kind === 'exterior');
+
+  it('both quiet sightings are authored as watcher beats (Gate Fields quiet + Cinder rooftop)', () => {
+    // A "quiet" sighting = a showsWatcher beat with NO screen gimmick. The review
+    // found these two were anchor-only (no beat carried them) so they never fired.
+    const gf = (zoneOrThrow('gate-fields').scares ?? []).filter((s) => s.showsWatcher && s.gimmick === null);
+    const cv = (zoneOrThrow('cinder-village').scares ?? []).filter((s) => s.showsWatcher && s.gimmick === null);
+    expect(gf.length, 'Gate Fields is missing its quiet Watcher beat').toBe(1);
+    expect(cv.length, 'Cinder Village is missing its rooftop Watcher beat').toBe(1);
+  });
+
+  it('the drop authors exactly 4 Watcher sightings (2 gimmick-beat riders + 2 quiet), within the 6 budget', () => {
+    const ids = exterior.flatMap(([, d]) => d.scares ?? []).filter((s) => s.showsWatcher).map((s) => s.id);
+    expect(ids.sort()).toEqual(['AF-2', 'CV-4', 'GF-3', 'PD-1']);
+    expect(ids.length).toBeLessThanOrEqual(TUNING.greaterVael.watcher.sightingsPerDrop.max);
+  });
+
+  it('every showsWatcher beat manifests only BEYOND the min sighting range from each of its trigger cells', () => {
+    // DreadDirector rule 10 voids a sighting fired from within sightingRangeMinM
+    // (16 m) of the anchor — so a quiet sighting authored too close manifests and
+    // recedes UNSEEN. Assert every cellEnter/approach trigger cell of every
+    // showsWatcher beat is ≥16 m from every anchor in its zone. (PD-1 fires on a
+    // `vista` trigger, covered by the Pilgrim's Descent anchor test above.)
+    let checked = 0;
+    for (const [, def] of exterior) {
+      const anchors = def.watcherAnchors ?? [];
+      for (const beat of def.scares ?? []) {
+        if (!beat.showsWatcher) continue;
+        const t = beat.trigger;
+        const cells: GridPos[] = t.on === 'cellEnter' ? t.cells : t.on === 'approach' ? [t.at] : [];
+        for (const cell of cells) {
+          for (const anchor of anchors) {
+            const distM = Math.hypot(anchor[0] - cell[0], anchor[1] - cell[1]) * def.cell;
+            expect(
+              distM,
+              `${def.id} beat ${beat.id}: anchor ${String(anchor)} is ${distM} m from trigger ${String(cell)} — must be ≥ ${minM} m`,
+            ).toBeGreaterThanOrEqual(minM);
+            checked += 1;
+          }
+        }
+      }
+    }
+    expect(checked, 'no showsWatcher trigger cells were checked').toBeGreaterThan(0);
+  });
+});
+
 describe.each(entries)('zone %s', (id, def) => {
   it('registry key matches def.id', () => {
     expect(def.id).toBe(id);

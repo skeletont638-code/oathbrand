@@ -126,8 +126,19 @@ export const CINDER_VILLAGE: ZoneDef = {
     // CV-3: a pure-visual beat (no combat) — the curdled well reads subtly wrong,
     // a name scratched shaking into the coping, blaming "her", never confirmed.
     { id: 'CV-3', zone: 'cinder-village', trigger: { on: 'approach', at: [1, 8], withinM: 3 }, gimmick: null, oneLine: 'The well-water has gone wrong; a name, scratched shaking.' },
+    // CV-4 (finding 2): the QUIET rooftop Watcher sighting (no screen gimmick) —
+    // a tall silhouette on the roofline by the sealed east arch, gone when the
+    // player reaches it (spec §3.3). Fires from the west end of the exposure
+    // street; every trigger cell is ≥16 m from the [2,12] roof anchor so the
+    // sighting manifests (DreadDirector rule 10). One of the drop's 4 sightings.
+    { id: 'CV-4', zone: 'cinder-village', trigger: { on: 'cellEnter', cells: [[4, 3], [4, 4]] }, gimmick: null, showsWatcher: true, oneLine: 'On the rooftops by the sealed arch, the tall watcher — gone when you reach it.' },
   ],
-  // Rooftop by the sealed east arch (off-grid backdrop, row -1) — elevated,
-  // brief, a quiet sighting. Kept KEYED BY ZONE by the run-scoped DreadDirector.
-  watcherAnchors: [[-1, 13]],
+  // On the roofline by the sealed east arch: the `H` house-block at [2,12], which
+  // the player can never stand on (a wall cell) → unreachable. The 3rd tuple
+  // element is the anchor's ELEVATION (2.0 m ≈ the ruin roofline), so the 3 m
+  // silhouette breaks the roofs against the sky rather than sitting on the y=0
+  // street occluded by the solid north wall (round 1's off-grid [-1,13] sat
+  // BEHIND that wall → never seen). ≥16 m from CV-4's west-street trigger cells
+  // (rule 10). Kept KEYED BY ZONE by the run-scoped DreadDirector.
+  watcherAnchors: [[2, 12, 2.0]],
 };

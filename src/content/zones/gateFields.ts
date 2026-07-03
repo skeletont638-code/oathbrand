@@ -104,9 +104,16 @@ export const GATE_FIELDS: ZoneDef = {
     // GF-2: one hard brand-pulse + heartbeat over the empty clearing cross, on
     // the per-run-seeded crossing — the radar throbs once with nothing there.
     { id: 'GF-2', zone: 'gate-fields', trigger: { on: 'seededClearing', cells: [[6, 6], [7, 6], [6, 9], [7, 9]] }, gimmick: 'false-pulse', oneLine: 'The radar throbs once in the empty field.' },
+    // GF-3 (finding 2): the zone's QUIET Watcher sighting (no screen gimmick) —
+    // a distant tall silhouette in the E tree-line gap, beyond the far-plane,
+    // gone when neared. Fires on the north-central descent from the postern
+    // (spec §3.1 "first look toward the E treeline gap"); every trigger cell is
+    // ≥16 m from the [6,16] anchor so the sighting manifests (DreadDirector rule
+    // 10). One of the drop's 4 Watcher sightings (spec §5).
+    { id: 'GF-3', zone: 'gate-fields', trigger: { on: 'cellEnter', cells: [[3, 6], [3, 7], [4, 7], [4, 8]] }, gimmick: null, showsWatcher: true, oneLine: 'A tall shape stands in the treeline gap, and is gone when you look again.' },
   ],
-  // Beyond the E tree-line gap: distant, static, half-occluded by the oak. A
-  // quiet sighting (no gimmick beat authored here — GF registers the anchor;
-  // the Watcher's own beats fire in later zones). Off-grid backdrop coord.
+  // Beyond the E tree-line gap: distant, static, half-occluded by the oak — GF-3
+  // manifests the Watcher here. Off-grid backdrop coord, ≥16 m from every GF-3
+  // trigger cell. Kept KEYED BY ZONE by the run-scoped DreadDirector.
   watcherAnchors: [[6, 16]],
 };

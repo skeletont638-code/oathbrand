@@ -6,8 +6,9 @@
  */
 import { describe, it, expect } from 'vitest';
 import { TUNING } from '../tuning';
-import { offerToHag, restoreEmberCap, zoneVisitFogFarM, FOGLINE_PART_M } from '../hagBargain';
+import { offerToHag, restoreEmberCap, bootEmberCap, zoneVisitFogFarM, FOGLINE_PART_M } from '../hagBargain';
 import type { HagState } from '../hagBargain';
+import { ZONES } from '../zones';
 
 const base: HagState = { maxEmberCap: TUNING.brand.maxEmbers, bargains: [] };
 
@@ -111,5 +112,32 @@ describe('restoreEmberCap — leaving Greater Vael / the next Vigil', () => {
     expect(restored.bargains).toEqual(['hag-tithed', 'hag-kneeled']);
     expect(spent.maxEmberCap).toBe(2); // input untouched
     expect(restored).not.toBe(spent);
+  });
+});
+
+describe('bootEmberCap — the tithed cap must not leak into the castle (finding 3)', () => {
+  const FULL = TUNING.brand.maxEmbers; // 5
+
+  it('a v2 save capped at 4 whose resume zone is the castle (ashen-gate) boots at the full brand', () => {
+    // Ashen Gate is a v1 castle zone (kind interior/undefined) — outside Greater
+    // Vael, so a tithed cap that leaked onto its checkpoint is lifted back to 5.
+    const kind = ZONES['ashen-gate']?.kind;
+    expect(kind).not.toBe('exterior');
+    expect(bootEmberCap({ savedCap: 4, resumeZoneKind: kind })).toBe(FULL);
+  });
+
+  it('a v2 save capped at 4 whose resume zone is inside Greater Vael (gate-fields) keeps the tithed cap', () => {
+    const kind = ZONES['gate-fields']?.kind;
+    expect(kind).toBe('exterior');
+    expect(bootEmberCap({ savedCap: 4, resumeZoneKind: kind })).toBe(4);
+  });
+
+  it('an absent saved cap (no ledger) always boots at the full brand', () => {
+    expect(bootEmberCap({ savedCap: undefined, resumeZoneKind: 'exterior' })).toBe(FULL);
+    expect(bootEmberCap({ savedCap: undefined, resumeZoneKind: undefined })).toBe(FULL);
+  });
+
+  it('an unknown/undefined resume-zone kind restores the full brand (fail safe)', () => {
+    expect(bootEmberCap({ savedCap: 2, resumeZoneKind: undefined })).toBe(FULL);
   });
 });

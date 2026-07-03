@@ -23,7 +23,7 @@ import { KneelingHollow, KneelerView } from './entities/KneelingHollow';
 import { WatcherPresence, WatcherView } from './entities/WatcherPresence';
 import type { ViewTest } from './entities/WatcherPresence';
 import { HagPresence, HagView } from './entities/HagPresence';
-import { FOGLINE_PART_M, MIN_EMBER_CAP, offerToHag, restoreEmberCap, zoneVisitFogFarM } from './content/hagBargain';
+import { FOGLINE_PART_M, MIN_EMBER_CAP, bootEmberCap, offerToHag, restoreEmberCap, zoneVisitFogFarM } from './content/hagBargain';
 import type { HagState, Offering, Boon } from './content/hagBargain';
 import { BossArena, arenaWantsDark } from './entities/bossArena';
 import { Brand } from './player/Brand';
@@ -330,7 +330,22 @@ async function startScene(): Promise<void> {
   // The brand's rekindle CEILING reads `emberCap`; a tithe lowers it, persisting
   // across Drop 1 until the door out of Greater Vael / the next Vigil restores
   // it. `hagBargains` mirrors HagState.bargains (banked with the dread ledger).
-  let emberCap = save?.greaterVael?.maxEmberCap ?? TUNING.brand.maxEmbers;
+  // Finding 3 (spec §6.4): the Hag-tithed cap persists ONLY within Greater Vael.
+  // Boot/resume outside it — the resume zone (`save.zone`) is not an exterior GV
+  // zone — restores the full brand, or a tithe → quit-in-castle → reload leaves
+  // the castle capped forever. The GV boundary is `kind === 'exterior'` (pinned
+  // in bootEmberCap). Unknown/absent zone ⇒ undefined kind ⇒ restore (fail safe).
+  let emberCap = bootEmberCap({
+    savedCap: save?.greaterVael?.maxEmberCap,
+    resumeZoneKind: save && hasZone(save.zone) ? resolveZone(save.zone).kind : undefined,
+  });
+  // Persist the restore at once (finding 3 "+ persist"), so a second reload can't
+  // resurrect the tithed cap: rewrite only maxEmberCap on the existing ledger,
+  // leaving every other field byte-identical (additive/lossless). No-op unless a
+  // lowered cap was actually lifted.
+  if (save?.greaterVael && (save.greaterVael.maxEmberCap ?? emberCap) !== emberCap) {
+    saveGame({ ...save, greaterVael: { ...save.greaterVael, maxEmberCap: emberCap } });
+  }
   let hagBargains: string[] = [...(save?.greaterVael?.bargains ?? [])];
   /** Ashen-Forest-N fog-line boon (fogFar +6) armed by an ember tithe, applied
    *  for the visit; 0 when unarmed / after leaving Greater Vael. */
