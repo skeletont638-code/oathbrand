@@ -277,6 +277,15 @@ describe('ZoneBuilder.build (exterior)', () => {
     const built = new ZoneBuilder().build(exteriorZone(['H.', 'A.']), fakeAssets());
     expect(instancedNames(built.group)).toContain('roof-wedge');
   });
+
+  it("a prop kind inherited from Object.prototype (e.g. 'toString') stays a kit piece", () => {
+    // Object.hasOwn guard: a plain index/`in` lookup on PROCEDURAL_PROPS reaches
+    // the prototype chain, so a kit prop named 'toString' would false-positive
+    // as procedural (its "geometry factory" being Object.prototype.toString).
+    const built = new ZoneBuilder().build(
+      exteriorZone(['..', '..'], { props: [{ kind: 'toString', at: [0, 0] }] }), fakeAssets());
+    expect(mergedNames(built.group)).toContain('merged:toString');
+  });
 });
 
 describe('planarUV', () => {

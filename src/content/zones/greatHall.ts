@@ -36,7 +36,8 @@ export const GREAT_HALL: ZoneDef = {
     { kind: 'pillar', at: [4, 8] },
     // Moved off [2,13] (which abutted the inner-chamber NE wall block at [3,11-14]
     // — the statue clipped it) back to the north wall at [1,13], clear of the
-    // chamber (realism pass, Task 9 — position-only; collision/lore unchanged).
+    // chamber (realism pass, Task 9). NOTE: the NG+ `hall-statue-turned` anomaly
+    // DERIVES its cell from this prop (anomalies.ts) — the pair can't desync.
     { kind: 'statue-knight', at: [1, 13], rotY: Math.PI }, // composite: eyeball in-game (T5 note)
     { kind: 'crate', at: [2, 1], rotY: 0.55 },
     { kind: 'crate', at: [8, 16], rotY: -0.4 },

@@ -662,7 +662,9 @@ export class ZoneBuilder {
     for (const prop of def.props) {
       const [row, col] = prop.at;
       const px = col * cell + half, pz = row * cell + half, py = cellHeightM(row, col);
-      const make = PROCEDURAL_PROPS[prop.kind];
+      // Own-key guard: a bare index reaches Object.prototype, so a kit prop
+      // named e.g. 'toString' would false-positive as procedural.
+      const make = Object.hasOwn(PROCEDURAL_PROPS, prop.kind) ? PROCEDURAL_PROPS[prop.kind] : undefined;
       if (make) {
         const material = new MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, flatShading: true });
         patchMaterial(material);

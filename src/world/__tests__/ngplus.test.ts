@@ -9,14 +9,18 @@
  *     chain (ng-plus → garden-found → queens-brand → give → 4).
  *   - the Second-Vigil save semantics (what resets vs. what persists).
  *
- * All headless: no three.js, no DOM.
+ * All headless: no WebGL, no DOM (pure three.js object construction only —
+ * the anomaly-overlay test builds a bare `Group` to exercise `apply`).
  */
 import { describe, it, expect } from 'vitest';
+import { Group } from 'three';
 import type { ZoneId } from '../../content/types';
 import type { EnemySpawn, LoreSpot, ZoneDef } from '../zoneDef';
+import type { BuiltZone } from '../ZoneBuilder';
 import { applyNgPlus } from '../ngplus';
 import { ANOMALIES, anomaliesForZone } from '../../content/anomalies';
 import { ZONES, hasZone, zoneOrThrow } from '../../content/zones';
+import { GREAT_HALL } from '../../content/zones/greatHall';
 import { QUEENS_GARDEN } from '../../content/zones/queensGarden';
 import { canPass } from '../zoneGraph';
 import { selectEnding } from '../../engine/endings';
@@ -135,6 +139,23 @@ describe('anomaly registry (Exit-8 grammar)', () => {
     for (const zone of builtZones) {
       for (const a of anomaliesForZone(zone)) expect(a.zone).toBe(zone);
     }
+  });
+
+  it('hall-statue-turned overlays the REAL statue prop cell (can never desync from a prop move)', () => {
+    // Realism-pass regression (Task 9 fix): the base statue prop moved
+    // [2,13]→[1,13] while the anomaly still spawned its "turned" figure at the
+    // OLD cell — on a Second Vigil the illusion became TWO statues a cell apart
+    // (and re-occupied the wall-clip cell the move was escaping). The anomaly
+    // now DERIVES its cell from the GREAT_HALL prop; this pins them together.
+    const statue = GREAT_HALL.props.find((p) => p.kind === 'statue-knight');
+    expect(statue, 'great-hall has no statue-knight prop for the anomaly to turn').toBeDefined();
+    const group = new Group();
+    const built = { group, cellM: GREAT_HALL.cell, lore: [], lights: [] } as unknown as BuiltZone;
+    ANOMALIES.find((a) => a.id === 'hall-statue-turned')!.apply(built);
+    expect(group.children, 'apply added no turned-statue figure').toHaveLength(1);
+    const [row, col] = statue!.at;
+    expect(group.children[0].position.x).toBeCloseTo((col + 0.5) * GREAT_HALL.cell);
+    expect(group.children[0].position.z).toBeCloseTo((row + 0.5) * GREAT_HALL.cell);
   });
 });
 

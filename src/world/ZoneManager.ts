@@ -29,8 +29,10 @@ export interface ZoneManagerOptions {
 function neededPieces(def: ZoneDef): Set<string> {
   const pieces = new Set<string>();
   for (const p of gridToPlacements(def)) pieces.add(p.piece); // also validates the grid early
-  // Procedural props (gibbet) are generated geometry, not a GLB — never request them.
-  for (const prop of def.props) if (!(prop.kind in PROCEDURAL_PROPS)) pieces.add(prop.kind);
+  // Procedural props (gibbet) are generated geometry, not a GLB — never request
+  // them. Object.hasOwn, not `in`: a bare `in` reaches Object.prototype, so a
+  // kit prop named e.g. 'toString' would be silently dropped from the load set.
+  for (const prop of def.props) if (!Object.hasOwn(PROCEDURAL_PROPS, prop.kind)) pieces.add(prop.kind);
   // `A` door-void house-blocks render as `wall-arch.glb` in the exterior build
   // (gridToPlacements only knows the interior 'wall' path), so request it here.
   if (def.grid.some((row) => row.includes('A'))) pieces.add('wall-arch');

@@ -30,5 +30,19 @@ describe('exterior props', () => {
       expect(minY(g)).toBeGreaterThanOrEqual(-0.001);
       g.dispose();
     });
+
+    it(`${name}: every vertex is UV'd so an affine map can sample it (merge-drop guard)`, () => {
+      // Lesson (exteriorForest.test.ts): a UV claim gets a REAL count assertion,
+      // not just "defined" — the roof-wedge samples the shared bark map through
+      // stampForest (UVs load-bearing) and the gibbet goes through
+      // mergeGeometries, which silently drops any attribute the parts don't all
+      // share. uv.count === position.count proves nothing was dropped.
+      const g = build();
+      const uv = g.getAttribute('uv');
+      expect(uv).toBeDefined();
+      expect(uv.itemSize).toBe(2);
+      expect(uv.count).toBe(g.getAttribute('position').count);
+      g.dispose();
+    });
   }
 });

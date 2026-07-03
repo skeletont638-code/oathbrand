@@ -32,6 +32,7 @@ import {
 } from 'three';
 import type { ZoneId } from './types';
 import type { BuiltZone } from '../world/ZoneBuilder';
+import { GREAT_HALL } from './zones/greatHall';
 
 export type AnomalyId =
   | 'gate-banner-burning'
@@ -164,10 +165,16 @@ export const ANOMALIES: Anomaly[] = [
   // ── THE GREAT HALL ──────────────────────────────────────────────────────
   {
     // The hall statue has turned from the wall to face the door you came in by.
+    // Its cell is DERIVED from the base statue prop (greatHall.ts) so the
+    // illusion always overlays the real statue — a prop move can never desync
+    // them into two statues a cell apart (Task 9 moved it [2,13]→[1,13] and the
+    // old hardcoded cell here did exactly that; ngplus.test.ts pins the pair).
     id: 'hall-statue-turned',
     zone: 'great-hall',
     apply(built) {
-      const [x, z] = cell(built, 2, 13);
+      const statue = GREAT_HALL.props.find((p) => p.kind === 'statue-knight');
+      if (!statue) return; // no base statue to have "turned" (the ngplus test guards its existence)
+      const [x, z] = cell(built, statue.at[0], statue.at[1]);
       const stone = figure(0x6d6a63, 1.7);
       const plinth = new Mesh(
         new BoxGeometry(0.7, 0.4, 0.7),
