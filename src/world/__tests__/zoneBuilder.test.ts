@@ -294,6 +294,7 @@ describe('ZoneBuilder.build (exterior)', () => {
     const built = new ZoneBuilder().build(exteriorZone(['..', '..']), fakeAssets());
     const g = meshNamed(built.group, 'exterior-ground')!;
     const pos = g.geometry.getAttribute('position');
+    expect(g.geometry.getAttribute('uv').count).toBe(pos.count); // subdivision kept one UV per vertex
     let deviated = false;
     const atKey = new Map<string, number>();
     for (let i = 0; i < pos.count; i++) {
@@ -317,6 +318,38 @@ describe('ZoneBuilder.build (exterior)', () => {
     expect(ext.groundYAt(1, 1)).toBeCloseTo(undulation(1, 1), 6);
     const int = new ZoneBuilder().build(zone(['###', '#.#', '###']), fakeAssets());
     expect(int.groundYAt(3, 3)).toBe(0);
+  });
+  it('skirt lips weld to the displaced ground across terraced seams (cross-buffer)', () => {
+    // Terraced fixture: heightGrid '01'/'00' yields one Δ1 E/W seam ([0,0]↔[0,1])
+    // AND one Δ1 N/S seam ([0,1]↔[1,1]) — both pushQuad branches. All cells are
+    // walkable floor, so every seam is a RAMP: both lips of every riser have
+    // ground on their side (a cliff's void side has no ground by design).
+    const built = new ZoneBuilder().build(
+      exteriorZone(['..', '..'], { heightGrid: ['01', '00'] }), fakeAssets());
+    const groundPos = meshNamed(built.group, 'exterior-ground')!.geometry.getAttribute('position');
+    const skirt = meshNamed(built.group, 'exterior-terrain');
+    expect(skirt).toBeDefined(); // the terraced fixture MUST produce a skirt
+    const skirtPos = skirt!.geometry.getAttribute('position');
+    expect(skirtPos.count).toBeGreaterThan(0);
+    // Index ground verts: (x,z) → the ground heights there. A seam column carries
+    // one height per adjacent terrace (the low AND the high cell both own the edge).
+    const groundYs = new Map<string, number[]>();
+    for (let i = 0; i < groundPos.count; i++) {
+      const key = `${groundPos.getX(i).toFixed(3)},${groundPos.getZ(i).toFixed(3)}`;
+      const ys = groundYs.get(key) ?? [];
+      ys.push(groundPos.getY(i));
+      groundYs.set(key, ys);
+    }
+    // EVERY skirt vertex (both lips, ends + midpoints) must coincide with a
+    // ground vertex at the same (x,z) and the same displaced height — the
+    // empirical ground↔skirt watertight-seam guarantee.
+    for (let i = 0; i < skirtPos.count; i++) {
+      const key = `${skirtPos.getX(i).toFixed(3)},${skirtPos.getZ(i).toFixed(3)}`;
+      const ys = groundYs.get(key);
+      expect(ys, `no ground vertex under skirt lip at (${key})`).toBeDefined();
+      const gap = Math.min(...ys!.map((gy) => Math.abs(gy - skirtPos.getY(i))));
+      expect(gap, `skirt lip at (${key}) is ${gap} m off the ground sheet`).toBeLessThanOrEqual(1e-6);
+    }
   });
 });
 
