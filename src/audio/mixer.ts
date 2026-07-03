@@ -73,3 +73,22 @@ export function crossfadeCurves(steps: number): { out: Float32Array; in: Float32
   }
   return { out, in: inC };
 }
+
+/**
+ * Duck-to-silence-and-hold curve for the silence-spike (Task 6): a monotone
+ * ramp from unity (the current ambience level) down to ~0, ready for
+ * `AudioParam.setValueCurveAtTime` on a SEPARATE gain node that multiplies the
+ * threat-ducked ambience bus (the `ambienceTrim` pattern — the spike never
+ * fights the continuous threat-duck; the two nodes multiply). It is the same
+ * cos law as the crossfade's OUT curve, so the collapse stays perceptually even
+ * (equal-power-consistent), and it is a single held slope — no strobing gain.
+ * The AudioManager holds the tail at ~0 for the spike's duration, then eases
+ * the node back to unity, restoring the live threat-driven ambience target.
+ */
+export function silenceCurve(steps: number): Float32Array {
+  const out = new Float32Array(steps);
+  for (let i = 0; i < steps; i++) {
+    out[i] = crossfadeGains(steps === 1 ? 0 : i / (steps - 1)).out;
+  }
+  return out;
+}

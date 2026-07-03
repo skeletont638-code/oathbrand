@@ -145,6 +145,32 @@ function resolveZone(id: ZoneId): ZoneDef {
   return zoneOrThrow(id);
 }
 
+/**
+ * Greater Vael Drop 1 exterior ambience registry (Task 6). The real gv ZoneDefs
+ * land in later drops, so their two synth beds are authored here ahead of the
+ * geometry — a zone whose def carries no `ambience` (the dev exterior, and every
+ * unbuilt gv id) resolves to its pair of layers below. Castle zones keep their
+ * own def-declared ambience untouched.
+ */
+const GV_AMBIENCE: Partial<Record<ZoneId, string[]>> = {
+  'gate-fields': ['amb-field-wind', 'amb-tithe-toll'],
+  'ashen-forest-n': ['amb-forest-hush', 'amb-forest-wrong'],
+  'cinder-village': ['amb-cinder-wind', 'amb-cinder-knock'],
+  'pilgrims-descent': ['amb-descent-drone', 'amb-descent-wind'],
+};
+
+/** The two ambience layer ids for a zone: its def's own array when authored,
+ *  else the Greater Vael registry. Never throws for an unbuilt gv zone — those
+ *  have no ZoneDef yet, so `resolveZone` (which rejects unbuilt ids) is only
+ *  consulted for a built zone or the dev exterior. */
+function resolveAmbience(id: ZoneId): string[] {
+  if (hasZone(id) || (IS_DEV && id === DEV_EXTERIOR_ZONE.id)) {
+    const def = resolveZone(id).ambience;
+    if (def.length > 0) return def;
+  }
+  return GV_AMBIENCE[id] ?? [];
+}
+
 function startZoneId(): ZoneId {
   const params = new URLSearchParams(window.location.search);
   const zone = params.get('dev') === '1' ? params.get('zone') : null;
@@ -564,7 +590,7 @@ async function startScene(): Promise<void> {
   // is rebound per zone so the closure always sees the live collider.
   const audio = new AudioManager({
     bus: game.bus,
-    ambienceFor: (zone) => resolveZone(zone as ZoneId).ambience,
+    ambienceFor: (zone) => resolveAmbience(zone as ZoneId),
     occluded: (sx, sz) => built.collider.raycastWall(controller.pos, { x: sx, z: sz }),
   });
   game.register(audio);
@@ -572,7 +598,7 @@ async function startScene(): Promise<void> {
   // policy). Seed the opening zone's beds now — setZoneLayers buffers them until
   // the context is live — then wake the audio on the first pointer/key press
   // (the click-to-play / pointer-lock gesture).
-  audio.setZoneLayers(activeDef.ambience);
+  audio.setZoneLayers(resolveAmbience(zones.current));
   const wakeAudio = (): void => audio.init(true);
   window.addEventListener('pointerdown', wakeAudio, { once: true });
   window.addEventListener('keydown', wakeAudio, { once: true });
@@ -1411,27 +1437,30 @@ async function startScene(): Promise<void> {
         activeForsworn = forsworn;
       } else if (spawn.kind === 'hound') {
         // Ash-Hound (Greater Vael): the circler. `pantCue` is a footfall/pant
-        // one-shot that does NOT scale with the brand pulse (spec §9); the
-        // exterior positional voice is a later audio task, so wire a stub now.
+        // one-shot that does NOT scale with the brand pulse (spec §9). Task 6
+        // wires the exterior positional voice: it plays at the hound's mesh,
+        // panned + wall-muffled as the thing orbits the fog edge — the hound you
+        // HEAR circling, distinct from the brand you feel.
         const hound = new AshHound({
           id,
           bus: game.bus,
           defense: combat,
           rng: houndRng,
-          pantCue: () => {},
+          pantCue: () => audio.positional(houndView.root, 'pant'),
         });
-        view = new HoundView(hound);
+        const houndView = new HoundView(hound);
+        view = houndView;
         logic = hound;
       } else if (spawn.kind === 'kneeler') {
         // Kneeling Hollow (Greater Vael): dormant until the brand pulses. The
-        // scare beat (Tasks 5–12) will call `wake()`; `creakCue` is the low
-        // bone-creak on the rise (reuses the kneel motif voice).
+        // scare beat (Tasks 5–12) will call `wake()`; `creakCue` fires the low
+        // bone-creak voice (Task 6) on the rise.
         const kneeler = new KneelingHollow({
           id,
           bus: game.bus,
           defense: combat,
           pulse: () => brand.pulse,
-          creakCue: () => game.bus.emit({ type: 'cue', id: 'motif-kneel' }),
+          creakCue: () => game.bus.emit({ type: 'cue', id: 'bone-creak' }),
         });
         view = new KneelerView(kneeler);
         logic = kneeler;

@@ -41,6 +41,7 @@ import {
   crossfadeCurves,
   heartGain,
   heartRateBpm,
+  silenceCurve,
 } from './mixer';
 
 const AUDIO = TUNING.audio;
@@ -67,7 +68,7 @@ interface Layer {
  *  synthesizes instead: winds/breath/whisper/cloth/drip ride filtered noise;
  *  pads/hums use live oscillators (seam-free). */
 interface BedSpec {
-  kind: 'wind' | 'pad' | 'hum' | 'drip' | 'whisper' | 'cloth' | 'breath';
+  kind: 'wind' | 'pad' | 'hum' | 'drip' | 'whisper' | 'cloth' | 'breath' | 'knock';
   /** Recorded CC0 loop backing this bed (primary). Absent ⇒ always synth. */
   file?: string;
   /** Playback rate of the recorded loop — pitch/pace variety from one file. */
@@ -95,6 +96,20 @@ const BEDS: Record<string, BedSpec> = {
   'amb-summit-wind': { kind: 'wind', file: 'amb-wind', rate: 1.15, cut: 1100, q: 0.5, lfo: 0.22, gain: 1.0 },
   'amb-dragon-breath': { kind: 'breath', cut: 220, lfo: 0.11, gain: 0.8 },
   'amb-garden-hush': { kind: 'wind', file: 'amb-wind', rate: 0.75, cut: 1600, q: 0.5, lfo: 0.09, gain: 0.5 },
+
+  // --- Greater Vael Drop 1 exterior beds (Task 6) — ALL SYNTHESIZED (no `file`,
+  // no sample payload): open night wind, low gorge drone, and the signature
+  // `knock` (a single struck clapper at long, IRREGULAR intervals — never a
+  // readable rhythm, never a full toll). Two layers per zone; the knock beds are
+  // the "bells with irregular single knocks" of spec §9, silence as the loudest cue.
+  'amb-field-wind': { kind: 'wind', cut: 1000, q: 0.6, lfo: 0.1, gain: 0.7 }, // brighter than the castle
+  'amb-tithe-toll': { kind: 'knock', gain: 0.5 }, // a tithe-bell clapper, no toll
+  'amb-forest-hush': { kind: 'wind', cut: 360, q: 0.9, lfo: 0.06, gain: 0.5 }, // close, muffled, restricted
+  'amb-forest-wrong': { kind: 'knock', gain: 0.34 }, // a livestock bell with no herd — heard once, wrong
+  'amb-cinder-wind': { kind: 'wind', cut: 620, q: 1.2, lfo: 0.14, gain: 0.68 }, // through empty structures
+  'amb-cinder-knock': { kind: 'knock', gain: 0.44 }, // irregular single bell-knock
+  'amb-descent-drone': { kind: 'pad', tone: [43.65, 65.41], lfo: 0.04, gain: 0.7 }, // low gorge drone
+  'amb-descent-wind': { kind: 'wind', cut: 1300, q: 0.5, lfo: 0.25, gain: 0.85 }, // the updraft
 };
 
 /** Deterministic PRNG so a bed's noise (and thus its seamless loop) is stable. */
@@ -136,6 +151,10 @@ export class AudioManager implements Subsystem {
   /** User ambience trim, downstream of the threat-ducked ambienceBus so the
    *  volume dial and the duck automation don't fight over one gain. */
   private ambienceTrim!: GainNode;
+  /** Silence-spike gain (Task 6), downstream again: normally 1, the silence
+   *  gimmick drops it to ~0 and holds. A SEPARATE node so the spike multiplies
+   *  the threat-duck + user trim instead of fighting either (the trim pattern). */
+  private silenceGain!: GainNode;
   private heartBus!: GainNode;
   private sfxBus!: GainNode;
 
@@ -295,8 +314,11 @@ export class AudioManager implements Subsystem {
     this.ambienceBus.gain.value = ambienceGain(0);
     this.ambienceTrim = ctx.createGain();
     this.ambienceTrim.gain.value = this.userAmbience;
+    this.silenceGain = ctx.createGain();
+    this.silenceGain.gain.value = 1; // the silence-spike rides here (1 ⇒ pass-through)
     this.ambienceBus.connect(this.ambienceTrim);
-    this.ambienceTrim.connect(this.dry);
+    this.ambienceTrim.connect(this.silenceGain);
+    this.silenceGain.connect(this.dry);
 
     this.heartBus = ctx.createGain();
     this.heartBus.gain.value = 0;
@@ -327,6 +349,37 @@ export class AudioManager implements Subsystem {
   setSfxVolume(v: number): void {
     this.userSfx = clamp01(v);
     if (this.ctx) this.sfxBus.gain.setTargetAtTime(this.userSfx, this.ctx.currentTime, 0.02);
+  }
+
+  /**
+   * The silence-spike (Task 6, routed from the DreadDirector's `silence-spike`
+   * beat): collapse the ambience to ~0 over ~120 ms, HOLD the floor for
+   * `holdMs`, then ease back to unity. It rides the SEPARATE `silenceGain`
+   * node, so it MULTIPLIES the continuous threat-duck (on `ambienceBus`) and the
+   * user dial (on `ambienceTrim`) rather than fighting either — a steeper,
+   * deeper drop ON TOP of the duck. One held slope, no strobing gain
+   * (flicker-safe). Returning the node to unity restores exactly the live
+   * threat-driven ambience target. A no-op before the context is live.
+   */
+  duckToSilence(holdMs: number): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const g = this.silenceGain.gain;
+    const drop = AUDIO.silence.dropMs / 1000;
+    const recover = AUDIO.silence.recoverMs / 1000;
+    // Re-arm cleanly if a spike is already in flight (no stacking automation).
+    try {
+      g.cancelScheduledValues(now);
+    } catch {
+      /* nothing scheduled */
+    }
+    // Steep, equal-power-consistent drop 1 → ~0 (silenceCurve), then hold silent.
+    rampCurve(g, silenceCurve(AUDIO.silence.steps), now, drop);
+    const holdEnd = now + drop + Math.max(0, holdMs) / 1000;
+    g.setValueAtTime(0, holdEnd);
+    // Smooth swell back to unity — the ambience returns to its threat target.
+    g.setTargetAtTime(1, holdEnd, recover);
   }
 
   /** A 1.8 s stereo exponential-decay noise impulse — the cold-stone tail. */
@@ -472,6 +525,39 @@ export class AudioManager implements Subsystem {
         g.gain.exponentialRampToValueAtTime(spec.gain, t + 0.008);
         g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
         t += 1.1 + rnd() * 1.3;
+      }
+    } else if (spec.kind === 'knock') {
+      // A single struck clapper at long, IRREGULAR, unpredictable intervals —
+      // never a readable rhythm, never a full toll (spec §9: "bells with
+      // irregular single knocks"). Additive low partials (~180/360/540 Hz)
+      // through a gate struck soft (12 ms attack) with a long bell decay,
+      // re-triggered every 4–11 s from a mulberry32 stream so the gaps never
+      // settle into a meter. Like the `drip` scheduler, but one bell, far apart.
+      const strike = ctx.createGain();
+      strike.gain.value = 0;
+      strike.connect(gain);
+      for (const [f, level] of [
+        [180, 1],
+        [360, 0.5],
+        [540, 0.28],
+      ] as const) {
+        const o = ctx.createOscillator();
+        o.type = 'sine';
+        o.frequency.value = f;
+        const pg = ctx.createGain();
+        pg.gain.value = level;
+        o.connect(pg).connect(strike);
+        o.start(t0);
+        sources.push(o);
+      }
+      const rnd = mulberry32(hashSeed(id) ^ 0x4b);
+      let t = t0 + 1.5 + rnd() * 4; // never strike on entry
+      const until = t0 + 300; // schedule far ahead; beds re-spawn per zone entry
+      while (t < until) {
+        strike.gain.setValueAtTime(0.0001, t);
+        strike.gain.exponentialRampToValueAtTime(spec.gain, t + 0.012); // soft strike
+        strike.gain.exponentialRampToValueAtTime(0.0001, t + 1.8); // long bell decay
+        t += 4 + rnd() * 7; // 4–11 s, irregular — never a repeating meter
       }
     } else {
       // wind / whisper / cloth / breath: filtered noise + a tremolo LFO.
@@ -642,6 +728,14 @@ export class AudioManager implements Subsystem {
         return this.tone([880, 1320], AUDIO.sfx.ember, 'sine', 0.004, 0.12, sink);
       case 'motif-kneel':
         return this.tone([196, 293.66, 392], AUDIO.sfx.motifKneel, 'sine', 0.09, 1.5, sink);
+      case 'pant':
+        // The Ash-Hound's circling pant/footfall. A NON-heartbeat threat voice
+        // (spec §2 #8) — main plays it POSITIONALLY as the hound orbits, so it
+        // deliberately does NOT scale with the brand pulse you feel.
+        return this.pantVoice(sink);
+      case 'bone-creak':
+        // The Kneeling Hollow's rise — old bone groaning under its own weight.
+        return this.boneCreak(sink);
       case 'rekindle':
         return this.rise([261.63, 392, 523.25], AUDIO.sfx.rekindle, sink);
       case 'hollow':
@@ -693,6 +787,9 @@ export class AudioManager implements Subsystem {
     // sample when decoded, else the synth fallback.
     if (id === 'bow') {
       if (!this.playSample('bow', AUDIO.sfx.bow, 1, lp)) this.twang(AUDIO.sfx.bow, lp);
+    } else if (id === 'pant') {
+      // The hound's pant/footfall, panned + wall-muffled as it circles the fog.
+      this.pantVoice(lp);
     } else if (!this.playSample('hit', AUDIO.sfx.hit, 1, lp)) {
       this.thud(AUDIO.sfx.hit, 150, 60, 0.16, lp);
     }
@@ -953,6 +1050,79 @@ export class AudioManager implements Subsystem {
         o.stop(t0 + dur + 0.05);
       }
     }
+  }
+
+  /** The Ash-Hound's pant/footfall (Task 6): a short breathy noise exhale under
+   *  a soft padded footfall thump. Random-seed noise (cache opt-out) so each
+   *  breath differs; played positionally by main as the hound circles. */
+  private pantVoice(sink: AudioNode): void {
+    const ctx = this.ctx!;
+    const t0 = ctx.currentTime;
+    // The exhale — band-passed noise sliding down as the breath empties.
+    const n = this.noiseSource(0.4, (Math.random() * 1e9) | 0, false);
+    n.loop = false;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(640, t0);
+    bp.frequency.linearRampToValueAtTime(410, t0 + 0.18);
+    bp.Q.value = 0.8;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(AUDIO.sfx.pant, t0 + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.2);
+    n.connect(bp).connect(g).connect(sink);
+    n.start(t0);
+    n.stop(t0 + 0.25);
+    // A soft padded footfall under it — a low pitch-dropping sine.
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(92, t0);
+    o.frequency.exponentialRampToValueAtTime(54, t0 + 0.09);
+    const fg = ctx.createGain();
+    fg.gain.setValueAtTime(0.0001, t0);
+    fg.gain.exponentialRampToValueAtTime(AUDIO.sfx.pant * 0.6, t0 + 0.006);
+    fg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.12);
+    o.connect(fg).connect(sink);
+    o.start(t0);
+    o.stop(t0 + 0.14);
+  }
+
+  /** The Kneeling Hollow's bone-creak (Task 6): a groaning resonant tone that
+   *  bends UP under load, with a dry noise crackle riding it — old bone rising. */
+  private boneCreak(sink: AudioNode): void {
+    const ctx = this.ctx!;
+    const t0 = ctx.currentTime;
+    const dur = 0.9;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(AUDIO.sfx.boneCreak, t0 + 0.12);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 320;
+    bp.Q.value = 6;
+    bp.connect(g).connect(sink);
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(70, t0);
+    o.frequency.linearRampToValueAtTime(122, t0 + dur * 0.8); // the strained rise
+    o.connect(bp);
+    o.start(t0);
+    o.stop(t0 + dur + 0.05);
+    // A dry crackle over the groan — splintering fibre.
+    const n = this.noiseSource(0.6, (Math.random() * 1e9) | 0, false);
+    n.loop = false;
+    const nbp = ctx.createBiquadFilter();
+    nbp.type = 'bandpass';
+    nbp.frequency.value = 1400;
+    nbp.Q.value = 2;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.0001, t0);
+    ng.gain.linearRampToValueAtTime(AUDIO.sfx.boneCreak * 0.4, t0 + 0.2);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t0 + dur * 0.7);
+    n.connect(nbp).connect(ng).connect(sink);
+    n.start(t0);
+    n.stop(t0 + dur);
   }
 }
 

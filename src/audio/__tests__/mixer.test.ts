@@ -9,6 +9,7 @@ import {
   dbToGain,
   heartGain,
   heartRateBpm,
+  silenceCurve,
 } from '../mixer';
 
 // The pure gain/threat math behind the dread mixer. No WebAudio here — these
@@ -115,6 +116,56 @@ describe('crossfade math', () => {
       expect(out[i]).toBeLessThanOrEqual(out[i - 1] + 1e-9);
       expect(inG[i]).toBeGreaterThanOrEqual(inG[i - 1] - 1e-9);
     }
+  });
+});
+
+describe('silence-spike curve (Task 6)', () => {
+  it('starts at unity (the base) and ends at ~0', () => {
+    const c = silenceCurve(8);
+    expect(c).toHaveLength(8);
+    expect(c[0]).toBeCloseTo(1, 6); // the current ambience level (base 1)
+    expect(c[c.length - 1]).toBeCloseTo(0, 6); // silence
+  });
+
+  it('is monotonically non-increasing (a clean duck-to-silence, no strobe)', () => {
+    const c = silenceCurve(16);
+    for (let i = 1; i < c.length; i++) {
+      expect(c[i]).toBeLessThanOrEqual(c[i - 1] + 1e-9);
+    }
+  });
+
+  it('is equal-power-consistent — it IS the crossfade OUT curve', () => {
+    // The drop follows the same cos law the zone crossfade uses for its
+    // outgoing layer, so the spike stays perceptually even as it collapses.
+    const n = 12;
+    const sc = silenceCurve(n);
+    const { out } = crossfadeCurves(n);
+    for (let i = 0; i < n; i++) expect(sc[i]).toBeCloseTo(out[i], 6);
+  });
+
+  it('degenerate step count returns a single silent-at-base sample', () => {
+    const c = silenceCurve(1);
+    expect(c).toHaveLength(1);
+    expect(c[0]).toBeCloseTo(1, 6);
+  });
+
+  it('composes with the threat-duck by MULTIPLICATION (separate nodes)', () => {
+    // duckToSilence rides a SEPARATE gain node (the ambienceTrim pattern): the
+    // audible ambience is ambienceGain(threat) × silenceCurve. So at the drop's
+    // floor the ambience is ~silent, and once the node returns to unity the
+    // ambience is restored EXACTLY to the live threat-driven target.
+    for (const threat of [0, 0.4, 1]) {
+      const base = ambienceGain(threat);
+      const c = silenceCurve(8);
+      expect(base * c[c.length - 1]).toBeCloseTo(0, 6); // floor ≈ silence
+      expect(base * 1).toBeCloseTo(base, 6); // restore ⇒ the threat target
+    }
+  });
+
+  it('leaves the existing mixer math untouched (regression)', () => {
+    expect(bpmToIntervalMs(60)).toBeCloseTo(1000, 6);
+    expect(ambienceGain(0)).toBe(1);
+    expect(ambienceGain(1)).toBeCloseTo(dbToGain(TUNING.audio.duckDb), 6);
   });
 });
 

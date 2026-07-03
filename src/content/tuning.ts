@@ -63,7 +63,16 @@ export const TUNING = {
       hit: 0.5, bow: 0.4, door: 0.55,
       motifKneel: 0.5, swellVista: 0.45, cardBoss: 0.6,
       ember: 0.18, rekindle: 0.5, hollow: 0.6, ending: 0.6, eyeOpen: 0.5,
+      // Greater Vael Drop 1 (Task 6): the Ash-Hound's positional pant/footfall
+      // and the Kneeling Hollow's bone-creak on its rise.
+      pant: 0.32, boneCreak: 0.5,
     },
+    /** Silence-spike (Task 6): the DreadDirector's held drop-to-silence. Rides a
+     *  SEPARATE gain node over the threat-duck (the ambienceTrim pattern), so it
+     *  never fights the continuous duck — the nodes multiply. A steep held slope,
+     *  no strobing. `dropMs` collapses to silence, the caller HOLDS, `recoverMs`
+     *  eases back to unity (restoring the live threat-driven target). */
+    silence: { dropMs: 120, recoverMs: 420, steps: 24 },
   },
   // --- Greater Vael Drop 1: "The Fields" (Tasks 3–5 read these names) ------
   greaterVael: {
