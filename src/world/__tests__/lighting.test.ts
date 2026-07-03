@@ -23,4 +23,9 @@ describe('resolveZoneLighting', () => {
     const l = resolveZoneLighting(base({ ambientFloor: 0.06, keyLightIntensity: 0 }));
     expect(l.key.intensity).toBe(0);
   });
+  it('the Undercroft floors ambient AND zeroes the key so the wraith void survives', () => {
+    const l = resolveZoneLighting(base({ ambientFloor: 0.06, keyLightIntensity: 0 }));
+    expect(l.ambient).toBeCloseTo(0.06);
+    expect(l.key.intensity).toBe(0);
+  });
 });

@@ -14,6 +14,7 @@ import type { GridPos, ZoneDef } from '../../world/zoneDef';
 import { buildHeightRamps, gridToPlacements } from '../../world/ZoneBuilder';
 import { doorEntry, doorSpan, pairedDoor } from '../../world/zoneGraph';
 import { FUTURE_ZONE_IDS, ZONES, hasZone, zoneOrThrow } from '../zones';
+import { UNDERCROFT } from '../zones/undercroft';
 import { LORE } from '../lore';
 import { TUNING } from '../tuning';
 import { isQuietSighting } from '../../engine/DreadDirector';
@@ -411,6 +412,12 @@ describe('Greater Vael Watcher sightings (finding 2)', () => {
       }
     }
     expect(checked, 'no showsWatcher trigger cells were checked').toBeGreaterThan(0);
+  });
+});
+
+describe('Undercroft wraith-showcase guard (realism pass)', () => {
+  it('the undercroft zeroes its realism-pass key light (wraith showcase guard)', () => {
+    expect(UNDERCROFT.keyLightIntensity).toBe(0);
   });
 });
 

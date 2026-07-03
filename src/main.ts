@@ -2376,6 +2376,7 @@ async function startScene(): Promise<void> {
         darkness = approach(darkness, wantDark, (DARKEN_SPEED * dt) / 1000);
         zones.setTorchScale(1 - darkness * (1 - torchOut));
         ambient.intensity = (activeDef.ambientFloor ?? DEFAULT_AMBIENT) * (1 - darkness * 0.9);
+        moonLight.intensity = moonBaseIntensity * (1 - darkness * 0.9);
       }
 
       // Portcullis slide toward its target height (sealed down / open up).

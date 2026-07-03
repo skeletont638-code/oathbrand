@@ -87,6 +87,7 @@ export const UNDERCROFT: ZoneDef = {
   ],
   ambience: ['amb-crypt-drip', 'amb-wraith-whisper'],
   ambientFloor: 0.06,
+  keyLightIntensity: 0, // the faint interior directional must NOT defeat the wraith showcase (spec §3)
   ngPlus: {
     // The promised extra wraith (four now), one holding the stair itself.
     enemies: [
