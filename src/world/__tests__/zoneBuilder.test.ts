@@ -204,4 +204,12 @@ describe('ZoneBuilder.build (exterior)', () => {
     expect(built.cellHeightM(1, 1)).toBe(0); // interiors are flat
     expect(built.updateExterior).toBeUndefined();
   });
+
+  it('an exterior build exposes a moonDir; an interior build does not', () => {
+    const ext = new ZoneBuilder().build(exteriorZone(['.,t', 'T#.']), fakeAssets());
+    expect(ext.moonDir).toBeDefined();
+    expect(ext.moonDir!.y).toBeGreaterThan(0);
+    const int = new ZoneBuilder().build(zone(['###', '#.#', '###']), fakeAssets()); // `zone()` is the file's interior helper
+    expect(int.moonDir).toBeUndefined();
+  });
 });

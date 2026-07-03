@@ -105,4 +105,25 @@ export const TUNING = {
     },
     exterior: { fogFarDefaultM: 16, lowFogCellM: 11, maxHeightStep: 3 },
   } as const,
+  // --- Realism pass: lighting v2 — "the moon is a key light" (spec §3) ------
+  // A DirectionalLight (the moon) + a HemisphereLight per exterior preset give
+  // flat-shaded faces face-to-face luminance variation (FORM), with the ambient
+  // floor dropped so total scene brightness stays ~constant — the DISTRIBUTION
+  // changes, not the mean. Per-vertex lights: 0 draw calls, no shadow maps.
+  // Rule: ≤1 directional + ≤1 hemisphere per zone (shared, rebound per zone).
+  lighting: {
+    exterior: {
+      // moon.color = cold slate-blue key; low intensity. hemi.sky = a COOL tint
+      // (a lightened sky read, NOT the near-black dome zenith, which would add ~0
+      // — see "Ambiguities resolved"); hemi.ground = ash. ambient dropped from the
+      // old 0.6 flat toward ~0.3 so form appears without lifting the mean.
+      field:  { ambient: 0.30, moon: { color: 0x8fa3c8, intensity: 0.45 }, hemi: { sky: 0x3a4658, ground: 0x3a3632, intensity: 0.25 } },
+      forest: { ambient: 0.28, moon: { color: 0x7f93b8, intensity: 0.38 }, hemi: { sky: 0x2b3428, ground: 0x33302c, intensity: 0.22 } },
+      gorge:  { ambient: 0.32, moon: { color: 0xb2895f, intensity: 0.42 }, hemi: { sky: 0x3a2620, ground: 0x2e211c, intensity: 0.28 } },
+    },
+    // Interiors keep their torch pools; a faint cool directional gives unlit
+    // geometry FORM instead of void. The Undercroft zeroes it (keyLightIntensity: 0
+    // in its zone def, Task 2) so the wraith showcase's void-black east half survives.
+    interior: { directional: { color: 0xa8b4c8, intensity: 0.12 } },
+  } as const,
 } as const;

@@ -89,6 +89,9 @@ export interface BuiltZone {
   /** Per-frame tick for exterior ambient FX (ash-fall drift). Undefined on
    *  interior zones — the ZoneManager only calls it when present. */
   updateExterior?(dtMs: number): void;
+  /** Unit direction toward the moon (realism pass, spec §3) — main orients the
+   *  shared DirectionalLight from it. Set on exterior builds; undefined interior. */
+  moonDir?: Vector3;
 }
 
 // --- budgets & kit facts ----------------------------------------------------
@@ -434,6 +437,8 @@ export class ZoneBuilder {
       Number(heightDigit(def, row, col)) * HEIGHT_LEVEL_M;
     /** Set by the exterior branch to drift the ash-fall each frame. */
     let updateExterior: ((dtMs: number) => void) | undefined;
+    /** Set by the exterior branch: unit direction toward the moon (key light). */
+    let moonDir: Vector3 | undefined;
 
     // Geometry buckets keyed by material *name*: every KayKit piece embeds
     // its own copy of the same atlas material (name "texture"), so keying by
@@ -612,6 +617,7 @@ export class ZoneBuilder {
       });
       group.add(backdrop.dome, backdrop.moon, backdrop.ash);
       updateExterior = backdrop.update;
+      moonDir = backdrop.moonDir;
     }
 
     const toWorld = ([row, col]: readonly [number, number]): Vector3 =>
@@ -629,6 +635,7 @@ export class ZoneBuilder {
       lights,
       cellHeightM,
       updateExterior,
+      moonDir,
     };
 
     // Second-Vigil anomalies (T16): they alter `built` in place — add spectral

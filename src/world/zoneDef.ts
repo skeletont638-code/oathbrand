@@ -257,6 +257,12 @@ export interface ZoneDef {
    * uses 0.06 so its unlit east half stays black for the wraith showcase.
    */
   ambientFloor?: number;
+  /**
+   * Overrides the resolved DirectionalLight (moon/interior key) intensity for
+   * this zone (realism pass, spec §3). The Undercroft sets 0 so its faint
+   * interior directional never defeats the void-black wraith showcase (Task 2).
+   */
+  keyLightIntensity?: number;
   /** One-shot scripted vista (spec §9); ashen-gate carries clip #1. */
   vista?: VistaDef;
   /** Fog far-plane for this zone, meters. Default 16 (main.ts); the

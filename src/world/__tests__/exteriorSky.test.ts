@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { Points } from 'three';
 import type { MeshBasicMaterial } from 'three';
-import { buildExteriorSky } from '../exteriorSky';
+import { buildExteriorSky, moonDirection } from '../exteriorSky';
 
 describe('buildExteriorSky', () => {
   it('builds a fog-immune dome + moon and an ash Points system for each preset', () => {
@@ -29,5 +29,19 @@ describe('buildExteriorSky', () => {
     expect(Number.isFinite(y1)).toBe(true);
     expect(y1).not.toBe(y0); // it moved
     bg.dispose();
+  });
+});
+
+describe('moon direction', () => {
+  it('points UP and NORTH (−z) so the key agrees with the visible moon', () => {
+    const d = moonDirection(40);
+    expect(d.length()).toBeCloseTo(1);
+    expect(d.y).toBeGreaterThan(0.4);
+    expect(d.z).toBeLessThan(0);
+  });
+  it('the built backdrop exposes the same moonDir', () => {
+    const b = buildExteriorSky('field', { spanM: 40 });
+    expect(b.moonDir.y).toBeGreaterThan(0.4);
+    b.dispose();
   });
 });

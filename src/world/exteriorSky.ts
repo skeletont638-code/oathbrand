@@ -21,6 +21,7 @@ import {
   Points,
   PointsMaterial,
   SphereGeometry,
+  Vector3,
 } from 'three';
 import type { ExteriorSky } from './zoneDef';
 
@@ -56,10 +57,24 @@ export interface ExteriorBackdrop {
   dome: Mesh;
   moon: Mesh;
   ash: Points;
+  /** Unit direction from the play-space centre toward the moon disc — the key
+   *  light is oriented from this so the moon reads as the scene's light source. */
+  moonDir: Vector3;
   /** Drift the ash-fall down (and wrap it), meters per `dtMs`. */
   update(dtMs: number): void;
   /** Free the three geometries + materials (also covered by group teardown). */
   dispose(): void;
+}
+
+/** Moon world offset from play-space centre (matches the moon.position math below). */
+function moonOffset(spanM: number): Vector3 {
+  return new Vector3(-spanM * 0.2, MOON_RADIUS * 0.62, -MOON_RADIUS * 0.7);
+}
+/** Unit direction from the play-space centre TOWARD the visible moon disc. The
+ *  DirectionalLight is oriented from this so the key light AGREES with the moon
+ *  (or the world reads stage-lit — spec §3). Up (+y) and north (−z). */
+export function moonDirection(spanM: number): Vector3 {
+  return moonOffset(spanM).normalize();
 }
 
 /** Vertical dome gradient baked into vertex colours (horizon→zenith by height). */
@@ -110,7 +125,7 @@ export function buildExteriorSky(
     new MeshBasicMaterial({ color: pal.moon, fog: false, depthWrite: false }),
   );
   moon.name = 'exterior-moon';
-  moon.position.set(cx - span * 0.2, MOON_RADIUS * 0.62, cz - MOON_RADIUS * 0.7);
+  moon.position.copy(moonOffset(span)).add(new Vector3(cx, 0, cz)); // was moon.position.set(cx - span*0.2, ...)
   moon.lookAt(cx, 0, cz); // face the play space
   moon.renderOrder = -9;
   moon.frustumCulled = false;
@@ -150,5 +165,5 @@ export function buildExteriorSky(
     }
   };
 
-  return { dome, moon, ash, update, dispose };
+  return { dome, moon, ash, moonDir: moonDirection(span), update, dispose };
 }

@@ -48,6 +48,7 @@ import { flashDenied, hidePrompt, showPrompt } from './ui/prompt';
 import { AshPriest, ashPriestsIn } from './entities/AshPriest';
 import { dialogueSequence } from './content/dialogue';
 import type { BuiltZone, PlacedDoor } from './world/ZoneBuilder';
+import { resolveZoneLighting } from './world/lighting';
 import { ZoneManager } from './world/ZoneManager';
 import { kickOpen, takeItem } from './world/mechanics';
 import type { HagThresholdDef, ScareBeat, WatcherAnchor, ZoneDef } from './world/zoneDef';
@@ -303,6 +304,20 @@ async function startScene(): Promise<void> {
   // 0.06 so its unlit east half stays black for the wraith showcase).
   const ambient = new THREE.AmbientLight(0x8a8a92, DEFAULT_AMBIENT);
   scene.add(ambient);
+
+  // Realism pass (Task 1): the moon key light + a hemisphere fill — ONE shared
+  // instance of each, rebound per zone in enterZone (≤1 directional/≤1 hemisphere,
+  // ever). Per-vertex, no shadow maps, 0 draw calls.
+  const moonLight = new THREE.DirectionalLight(0x8fa3c8, 0);
+  moonLight.castShadow = false;
+  scene.add(moonLight);
+  scene.add(moonLight.target); // target must be in-scene; direction = position → target
+  const hemiLight = new THREE.HemisphereLight(0x000000, 0x000000, 0);
+  scene.add(hemiLight);
+  /** Interior faint-key direction (a soft top/front cool wash) when there is no moon. */
+  const INTERIOR_KEY_DIR = new THREE.Vector3(0.35, 1, 0.25).normalize();
+  /** Base directional intensity for this zone (restored after the Forsworn P3 blackout, Task 2). */
+  let moonBaseIntensity = 0;
 
   const game = new Game();
 
@@ -1690,7 +1705,21 @@ async function startScene(): Promise<void> {
       forestBoostM: forestFogBoost,
     });
     fog.far = baseFogFar;
-    ambient.intensity = activeDef.ambientFloor ?? DEFAULT_AMBIENT;
+    // Realism pass (Task 1): resolve this zone's ambient + moon key + hemisphere
+    // fill and rebind the three shared lights. Exteriors orient the key from the
+    // built moon direction; interiors use a faint fixed cool wash. moonBaseIntensity
+    // banks the zone's base key level (the Forsworn P3 blackout restores it, Task 2).
+    const lit = resolveZoneLighting(activeDef);
+    ambient.intensity = lit.ambient;
+    moonLight.color.setHex(lit.key.color);
+    moonBaseIntensity = lit.key.intensity;
+    moonLight.intensity = moonBaseIntensity;
+    const keyDir = built.moonDir ?? INTERIOR_KEY_DIR;
+    moonLight.position.copy(keyDir).multiplyScalar(50);
+    moonLight.target.position.set(0, 0, 0);
+    hemiLight.color.setHex(lit.hemi.sky);
+    hemiLight.groundColor.setHex(lit.hemi.ground);
+    hemiLight.intensity = lit.hemi.intensity;
     // Snap the visual ground height to the arrival cell so exterior entry does
     // not lerp up from 0 (interior zones are flat → this stays 0).
     groundY = built.cellHeightM(
