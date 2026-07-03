@@ -230,11 +230,23 @@ describe('ZoneBuilder.build (exterior)', () => {
     expect(g!.geometry.getAttribute('uv')).toBeDefined();
   });
 
-  it('keeps the kit merge bucket count at 1 for an exterior zone (≤6 budget)', () => {
+  it('winds the exterior ground up-facing (+y) so it renders from above', () => {
+    const built = new ZoneBuilder().build(exteriorZone(['.,t', 'p#.']), fakeAssets());
+    const g = meshNamed(built.group, 'exterior-ground')!;
+    // Every vertex normal must face up — a down-facing (0,-1,0) winding would be
+    // FrontSide-culled from the player's above-ground viewpoint (and unlit by the moon).
+    const normal = g.geometry.getAttribute('normal');
+    expect(normal).toBeDefined();
+    for (let i = 0; i < normal.count; i++) {
+      expect(normal.getY(i)).toBeGreaterThan(0);
+    }
+  });
+
+  it('keeps the kit merge bucket count at exactly 1 for an exterior zone (≤6 budget)', () => {
     const built = new ZoneBuilder().build(exteriorZone(['H,t', 'T#.']), fakeAssets());
     // only the wall/H atlas remains a kit bucket; ground/skirt/forest are separate meshes
+    expect(mergedNames(built.group)).toEqual(['merged:wall']); // the H ruin block, and nothing else
     expect(mergedNames(built.group).length).toBeLessThanOrEqual(6);
-    expect(mergedNames(built.group)).toContain('merged:wall'); // the H ruin block still buckets
     expect(mergedNames(built.group)).not.toContain('merged:floor');
   });
 });

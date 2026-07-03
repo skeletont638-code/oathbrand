@@ -396,14 +396,18 @@ function buildExteriorGround(cell: number, spots: ForestSpot[]): Mesh | null {
     const x1 = x + cell / 2;
     const z0 = z - cell / 2;
     const z1 = z + cell / 2;
-    // two tris, CCW facing +y
+    // Two tris wound so the FRONT face (three.js CCW) is +y — the ground must
+    // render from the player's above-ground viewpoint and catch the moonlight.
+    // (Reversed order, e.g. [x0,z0],[x1,z0],[x1,z1], yields normal (0,-1,0):
+    // FrontSide-culled from above. Correct winding beats DoubleSide — half the
+    // fragment work.)
     const corners: [number, number][] = [
       [x0, z0],
-      [x1, z0],
+      [x0, z1],
       [x1, z1],
       [x0, z0],
       [x1, z1],
-      [x0, z1],
+      [x1, z0],
     ];
     for (const [cx, cz] of corners) {
       pos.push(cx, y, cz);
@@ -414,6 +418,9 @@ function buildExteriorGround(cell: number, spots: ForestSpot[]): Mesh | null {
   const geo = new BufferGeometry();
   geo.setAttribute('position', new Float32BufferAttribute(new Float32Array(pos), 3));
   geo.setAttribute('uv', new Float32BufferAttribute(new Float32Array(uv), 2));
+  // flatShading derives face normals in-shader, so this attribute is not needed
+  // to render — kept because the orientation unit test reads it to prove the
+  // winding faces +y (the bug it guards against was a down-wound, culled ground).
   geo.computeVertexNormals();
   const map = getTexture('ground-dirt');
   const material = new MeshStandardMaterial({
