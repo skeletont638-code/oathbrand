@@ -22,6 +22,7 @@ import { TUNING } from '../content/tuning';
 import { patchMaterial } from '../ps1/patchMaterial';
 import type { WatcherAnchor } from '../world/zoneDef';
 import type { EntityView } from './animator';
+import { WATCHER_TINT } from './palette';
 
 const W = TUNING.greaterVael.watcher;
 const D = TUNING.greaterVael.dread;
@@ -185,7 +186,7 @@ export class WatcherPresence {
 function darkMat(sink: MeshStandardMaterial[]): MeshStandardMaterial {
   // Pure black diffuse + black emissive → reflects no light → an unlit
   // silhouette under any zone ambient; fog tints it toward the sky horizon.
-  const mat = new MeshStandardMaterial({ color: 0x000000, roughness: 1, metalness: 0 });
+  const mat = new MeshStandardMaterial({ color: WATCHER_TINT, roughness: 1, metalness: 0 });
   mat.emissive = new Color(0x000000);
   patchMaterial(mat);
   sink.push(mat);

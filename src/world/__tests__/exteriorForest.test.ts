@@ -39,4 +39,19 @@ describe('exteriorForest geometry', () => {
       geo.dispose();
     });
   }
+
+  it('rebalanced under the key light: vertex colours sit in the readable band', () => {
+    for (const build of [pineGeometry, trunkGeometry, grassGeometry]) {
+      const geo = build();
+      const col = geo.getAttribute('color')!;
+      let maxLuma = 0;
+      for (let i = 0; i < col.count; i++) {
+        const luma = 0.2126 * col.getX(i) + 0.7152 * col.getY(i) + 0.0722 * col.getZ(i);
+        maxLuma = Math.max(maxLuma, luma);
+      }
+      expect(maxLuma).toBeGreaterThan(0.20); // lifted from the old near-0.1 flat-ambient values
+      expect(maxLuma).toBeLessThan(0.45);    // still a dead, desaturated forest
+      geo.dispose();
+    }
+  });
 });

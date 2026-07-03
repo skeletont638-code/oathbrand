@@ -30,6 +30,7 @@ import { Enemy } from './Enemy';
 import type { EnemyCtx, EnemyDeps } from './Enemy';
 import { steppedTime } from './animator';
 import type { EntityView } from './animator';
+import { HOUND_TINT } from './palette';
 
 const H = TUNING.greaterVael.hound;
 const C = H.circle;
@@ -240,7 +241,7 @@ export class AshHound extends Enemy {
 
 /** A dark-ash matte part material, PS1-patched and tracked for disposal. */
 function houndMat(sink: MeshStandardMaterial[]): MeshStandardMaterial {
-  const mat = new MeshStandardMaterial({ color: 0x2a2521, roughness: 1, metalness: 0 });
+  const mat = new MeshStandardMaterial({ color: HOUND_TINT, roughness: 1, metalness: 0 });
   mat.emissive = new Color(0x000000);
   patchMaterial(mat);
   sink.push(mat);

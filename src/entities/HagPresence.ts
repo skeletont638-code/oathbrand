@@ -23,6 +23,7 @@ import type { GridPos, HagThresholdDef } from '../world/zoneDef';
 import { steppedTime } from './animator';
 import type { EntityView } from './animator';
 import type { Vec2Like, Vec3Like } from './WatcherPresence';
+import { HAG_TINT } from './palette';
 
 const HG = TUNING.greaterVael.hag;
 
@@ -111,7 +112,7 @@ export class HagPresence {
 // ---------------------------------------------------------------------------
 
 function darkMat(sink: MeshStandardMaterial[]): MeshStandardMaterial {
-  const mat = new MeshStandardMaterial({ color: 0x000000, roughness: 1, metalness: 0 });
+  const mat = new MeshStandardMaterial({ color: HAG_TINT, roughness: 1, metalness: 0 });
   mat.emissive = new Color(0x000000);
   patchMaterial(mat);
   sink.push(mat);

@@ -30,6 +30,7 @@ import { Enemy } from './Enemy';
 import type { EnemyCtx, EnemyDeps } from './Enemy';
 import { steppedTime } from './animator';
 import type { EntityView } from './animator';
+import { KNEELER_TINT } from './palette';
 
 const K = TUNING.greaterVael.kneeler;
 const RISE = K.rise;
@@ -222,7 +223,7 @@ export class KneelerView implements EntityView {
   private deadT = -1;
 
   constructor(private readonly hollow: KneelingHollow) {
-    this.mat = new MeshStandardMaterial({ color: 0x232026, roughness: 1, metalness: 0 });
+    this.mat = new MeshStandardMaterial({ color: KNEELER_TINT, roughness: 1, metalness: 0 });
     this.mat.emissive = new Color(0x000000);
     patchMaterial(this.mat);
     const m = this.mat;

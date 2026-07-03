@@ -21,11 +21,14 @@
 import { BufferGeometry, ConeGeometry, CylinderGeometry, Float32BufferAttribute } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
-// Dark, desaturated ash/forest palette (the world is dead; nothing is lush) —
-// muted but light enough to read as shape under ambient-only night light.
-const BARK = 0x3b322a; // dead brown
-const NEEDLE = 0x4a5340; // grey-green
-const BLADE = 0x4d5140; // dry grass
+// Dark, desaturated ash/forest palette (the world is dead; nothing is lush).
+// Rebalanced under the moon key light (Task 3): the old values were darkened
+// to survive the flat ambient-only model; with the key giving face-to-face
+// variation they lift a touch so trunk/needle faces catch the moon — form
+// visible within ~8 m, silhouette against fog unchanged at range (spec §3).
+const BARK = 0x463a30; // was 0x3b322a — a touch lifted so trunk faces catch the moon
+const NEEDLE = 0x59614c; // was 0x4a5340
+const BLADE = 0x5b6050; // was 0x4d5140
 
 /** Low radial resolution — a pentagon prism/cone reads perfectly at PS1 res. */
 const SEG = 5;
