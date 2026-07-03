@@ -8,6 +8,8 @@
 
 **Tech Stack:** three@^0.183 (vanilla `WebGLRenderer`, no engine), vite@^6, typescript@^5 (strict), vitest@^3, playwright (CI e2e budgets). Texture crunch is a build-time python3 + Pillow script. No new runtime dependency. Assets CC0 (AmbientCG-class) with `assets/LICENSES.md` rows.
 
+> **Amendment (spec §11, owner-approved 2026-07-03):** the **Curves pass C1–C4** is inserted after Task 9 and PRECEDES Task 10 — atmosphere then animates the curved shapes (atmosphere shrinks if time runs short; curves do not). Tasks 1–9 are already implemented on `feat/realism` (~`d865aa1`); C1–C4 are written against that LIVE code. Every hand-authored geometry keeps the phase policy: **orientation/UV assertions + tri accounting in unit tests** (Task 6's ground shipped invisible until an orientation test pinned the winding).
+
 ## Global Constraints
 
 Copied verbatim from spec §8; every task's requirements implicitly include this section.
@@ -45,6 +47,8 @@ New textured materials create NEW merge buckets — this table proves ≤6 merge
 
 **Kit buckets per exterior zone = 1** (≤6 ✔). **Total exterior draw calls ≈ 12–15** (<100 ✔). Cinder's optional second wall-atlas variant (spec §4.4, "only if time allows") is DEFERRED to keep the kit bucket at 1; door-void differentiation uses `wall-arch.glb` (same atlas → same bucket) instead.
 
+**Curves-pass tri accounting (C1–C4 — zero new draw calls, tri deltas only):** entities ≤600 tris each (vs ~100 boxed; ~4 visible/zone ≈ 2.4k); ground ×4 tris from the 2×2 sub-quad undulation grid (worst zone ~200 floor cells → ~1.6k); crooked trees pine ≤160 / trunk ≤120 (guards, not targets — worst forest ~60 dense + 20 sparse ≈ 12k); boulder clutter ≤140/kind (instanced). Worst-case zone total ≈ 20–25k visible tris (<100k ✔, CI e2e still asserts).
+
 ---
 
 ## Core shared interfaces (defined in Tasks 1/5, consumed by later tasks)
@@ -81,15 +85,34 @@ export function configureTexture(tex: Texture): Texture;   // NearestFilter, no 
 export function preloadTextures(): Promise<void>;           // loads all tex PNGs; missing → flat fallback, never throws
 export function getTexture(name: TexName): Texture | undefined;  // sync; undefined until preloaded (tests → flat)
 
-// src/world/exteriorProps.ts — (Task 9, extended Task 10):
-export function gibbetGeometry(): BufferGeometry;      // hanging iron cage + bone bundle
-export function roofWedgeGeometry(): BufferGeometry;   // pitched burnt-roof cap over an H/A house cell
-export function stoneGeometry(): BufferGeometry;       // ground clutter (Task 10)
-export function bonePileGeometry(): BufferGeometry;    // ground clutter (Task 10)
-export function stumpGeometry(): BufferGeometry;       // ground clutter (Task 10)
+// src/world/exteriorProps.ts — (Task 9 SHIPPED; gibbet rounded + clutter added in C4):
+export function gibbetGeometry(): BufferGeometry;      // hanging iron cage + bone bundle (C4: rods/rings, not boxes)
+export function roofWedgeGeometry(): BufferGeometry;   // pitched burnt-roof cap over an H/A house cell (shipped)
+export function stoneGeometry(): BufferGeometry;       // ground clutter (C4 — displaced icosahedron; consumed by Task 10 scatter)
+export function bonePileGeometry(): BufferGeometry;    // ground clutter (C4)
+export function stumpGeometry(): BufferGeometry;       // ground clutter (C4)
 
 // src/entities/palette.ts — (Task 3):
 export const HOUND_TINT = 0x2a2521, KNEELER_TINT = 0x232026, WATCHER_TINT = 0x000000, HAG_TINT = 0x000000;
+
+// src/world/noise.ts — seeded, position-stable noise (C1 creates; C2 extends):
+export function mulberry32(seed: number): () => number;                       // the game's PRNG (main.ts/AudioManager precedent)
+export function seededAt(ix: number, iy: number, iz: number, seed: number): number; // deterministic [0,1) at a lattice point
+export function displaceRadial(geo: BufferGeometry, ampM: number, seed: number): BufferGeometry; // watertight lumpiness (C1/C3/C4)
+export const UNDULATION_AMP_M: number;                                        // 0.12 (C2)
+export function undulation(worldX: number, worldZ: number): number;           // smooth seeded height offset, |out| ≤ AMP (C2)
+
+// src/entities/organic.ts — curved-rig vocabulary (C1):
+export function taperedCapsule(rBottom: number, rTop: number, len: number, radial?: number): BufferGeometry; // base-at-y0
+export function centredCapsule(rBottom: number, rTop: number, len: number, radial?: number): BufferGeometry; // box drop-in
+export function bentLimb(len: number, rTop: number, rBottom: number, bowM: number, radial?: number, segs?: number): BufferGeometry; // hangs from origin
+export function blobHead(r: number, seed: number): BufferGeometry;            // crunched faceless skull-blob
+export function latheShape(profile: readonly (readonly [number, number])[], radial?: number): BufferGeometry;
+
+// src/world/ZoneBuilder.ts — BuiltZone gains (C2):
+//   groundYAt(worldX: number, worldZ: number): number;  // cell height + undulation (exterior); flat cellHeightM (interior)
+// stampForest signature after C3 (Task 10 extends the SAME opts object):
+//   stampForest(group, name, geometry, spots, opts?: { tilt?: boolean; windMats?: MeshStandardMaterial[] })
 
 // src/ps1/patchMaterial.ts — signature extended (Task 10, backward-compatible):
 export interface WindOpts { ampM: number; freqHz: number; heightRefM: number; }
@@ -1286,24 +1309,1116 @@ git commit -m "feat(props): gibbet cage, cinder house rooflines/door-voids, bann
 
 ---
 
+## Curves pass (spec §11) — C1–C4, owner-approved: these four tasks run AFTER Task 9 and BEFORE Task 10
+
+Owner verdict on the lit build: geometry is the remaining "Minecraft" tell — box rigs and perfect cones read voxel-game, not PS1. Real PS1 characters were low-poly but ORGANIC (tapered limbs, bent trunks, lumpy ground). All randomness is **seeded (mulberry32, the audio knock-jitter precedent) — never `Math.random`** — so every build is byte-reproducible and testable. Every hand-authored geometry carries orientation/UV assertions + tri accounting (the phase policy).
+
+### Task C1: Organic entities — curved rigs, same joints, same numbers
+
+**Files:**
+- Create: `src/world/noise.ts` (seeded `mulberry32`/`seededAt`/`displaceRadial` — C2 extends it with `undulation`)
+- Create: `src/entities/organic.ts` (`taperedCapsule`/`centredCapsule`/`bentLimb`/`blobHead`/`latheShape`)
+- Modify: `src/entities/AshHound.ts:284-328` (`HoundView` constructor geometry ONLY — `update()` at 330-394 untouched)
+- Modify: `src/entities/KneelingHollow.ts:196-288` (`segment()` helper + `KneelerView` constructor ONLY — `update()` at 290-378 untouched)
+- Modify: `src/entities/WatcherPresence.ts:196-224` (`buildWatcher` — now exported for the test)
+- Modify: `src/entities/HagPresence.ts:122-163` (`buildHag` — now exported for the test)
+- Modify: `src/entities/CrossingSilhouette.ts:41-93` (`leg()` helper + constructor ONLY — `arm()`/`update()` untouched)
+- Test: `src/world/__tests__/noise.test.ts`, `src/entities/__tests__/organic.test.ts`
+
+**Interfaces:**
+- Produces: `noise.ts` + `organic.ts` exports (exact signatures in the Core shared interfaces block); `buildWatcher`/`buildHag` now exported. C3/C4 consume `displaceRadial`/`seededAt`; C2 extends `noise.ts`.
+- Consumes: the LIVE view classes. **Load-bearing joint/group audit (verified against the code — these names/pivots are what `update()` animates and MUST survive byte-identical):**
+  - `HoundView`: `body` (Group — death topple rot z / lean rot x / pos y), `torso` (**Mesh** — `position.y = HOUND_TORSO_Y + bob`), `neck` (Group at `(0, HOUND_TORSO_Y+0.22, 1.25)`, `rotation.x = 0.9`, update sets `rotation.y`), `hips[0..3]` (Groups at `(±0.2, HOUND_HIP_Y, ±1.05)`, update sets `rotation.x`). Back-solve preserved: ridge-top = `HOUND_LEG_LEN + HOUND_BACK_RISE = H.heightM` (2.3).
+  - `KneelerView`: `frame` (death), `hipG` (`position.y` kneel-lerp), `spine` (`rotation.x`), `neck` (`rotation.x/.z`), `torso` (**Mesh** — breath `scale`), `thighL/R`, `kneeL/R`, `shoulderL/R` (all `segment()` pivot Groups, update sets `rotation.x`). `segment()`'s contract: geometry hangs DOWN from the group origin.
+  - `WatcherView`: static `figure` from `buildWatcher` — feet-at-0 rising to EXACTLY `W.heightM` (3.0; `update()` positions root at `wp.y − heightM*0.5`).
+  - `HagView`: `buildHag` returns `{ root, hunch }`; `hunch` Group pivot `(0, 1.08, 0)`, base `rotation.x = 0.95` (update sways `hunch.rotation.x`).
+  - `CrossingSilhouette`: `legL`/`legR` pivot Groups (update sets `rotation.x`); `figure.rotation.x = 0.12` lean.
+  - Materials are UNTOUCHED: `houndMat` (HOUND_TINT × hound-hide map), `KneelerView.mat` (KNEELER_TINT × kneeler-cloth), `darkMat` (pure black 0x000000) — so the T8 luma band (hound body mean ~9, lit faces ~38 vs terrain ~13 vs Watcher ~0; `.superpowers/sdd/realism-task-8-report.md`) and the 12 fps `steppedTime` sampling are inherited, not re-implemented. Lathe/cylinder/sphere geometry all generate UVs natively, so the hide/cloth maps bind unchanged.
+
+`src/world/noise.ts` (full):
+
+```ts
+/**
+ * Curves pass (C1/C2, spec §11): seeded, position-stable noise. ALL curve and
+ * terrain randomness routes through here — mulberry32-seeded (the audio
+ * knock-jitter precedent, AudioManager.ts:116), NEVER Math.random — so builds
+ * are byte-reproducible and unit-testable. Pure math, no three.js render state.
+ */
+import type { BufferGeometry } from 'three';
+
+/** The game's tiny seeded PRNG — same implementation as main.ts:201. */
+export function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Deterministic [0,1) at an integer lattice point, per seed. */
+export function seededAt(ix: number, iy: number, iz: number, seed: number): number {
+  const h =
+    (Math.imul(ix | 0, 374761393) ^ Math.imul(iy | 0, 668265263) ^ Math.imul(iz | 0, 1274126177) ^ (seed | 0)) >>> 0;
+  return mulberry32(h)();
+}
+
+/**
+ * Seeded radial vertex displacement (±ampM along the vertex's direction from
+ * the local origin). Keyed on the QUANTIZED POSITION (mm), not the vertex
+ * index, so duplicated verts (non-indexed geometry, sphere seams) displace
+ * identically — the surface stays watertight. Recomputes normals.
+ */
+export function displaceRadial(geo: BufferGeometry, ampM: number, seed: number): BufferGeometry {
+  const pos = geo.getAttribute('position');
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const len = Math.hypot(x, y, z);
+    if (len < 1e-6) continue; // a vertex at the origin has no radial direction
+    const n = seededAt(Math.round(x * 1000), Math.round(y * 1000), Math.round(z * 1000), seed) * 2 - 1;
+    const k = 1 + (n * ampM) / len;
+    pos.setXYZ(i, x * k, y * k, z * k);
+  }
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+  return geo;
+}
+```
+
+`src/entities/organic.ts` (full):
+
+```ts
+/**
+ * Curves pass (C1, spec §11): the shared organic geometry vocabulary for the
+ * entity views — tapered lathe capsules, bent limbs, crunched blob heads.
+ * Real PS1 characters were low-poly but ORGANIC; these replace the box
+ * vocabulary so silhouettes read tapered/attenuated, never Minecraft — and
+ * MORE unsettling, not cuddly: every shape is narrower than its box (underfed)
+ * and bowed (wrong). All shapes generate UVs natively (lathe/cylinder/sphere),
+ * so the hound-hide / kneeler-cloth detail maps bind unchanged. Deterministic
+ * (blob displacement is seeded). Pure three.js construction — vitest-safe.
+ */
+import { BufferGeometry, CylinderGeometry, LatheGeometry, SphereGeometry, Vector2 } from 'three';
+import { displaceRadial } from '../world/noise';
+
+/** Radial resolution — deliberately low; a heptagon column reads round at 320×240. */
+const RADIAL = 7;
+
+/**
+ * A vertically-tapered capsule authored base-at-y0 → top at `len` (rounded
+ * caps, straight tapered flank). rBottom ≠ rTop = attenuation.
+ */
+export function taperedCapsule(rBottom: number, rTop: number, len: number, radial = RADIAL): BufferGeometry {
+  const pts: Vector2[] = [];
+  const CAP = 3;
+  for (let i = 0; i <= CAP; i++) {
+    const a = (i / CAP) * (Math.PI / 2); // bottom pole → equator
+    pts.push(new Vector2(Math.sin(a) * rBottom, rBottom - Math.cos(a) * rBottom));
+  }
+  for (let i = 1; i <= CAP; i++) {
+    const a = (i / CAP) * (Math.PI / 2); // top equator → pole
+    pts.push(new Vector2(Math.cos(a) * rTop, len - rTop + Math.sin(a) * rTop));
+  }
+  return new LatheGeometry(pts, radial);
+}
+
+/** `taperedCapsule` re-authored CENTRED on the origin — a drop-in where a
+ *  centred BoxGeometry stood (same position math in the constructors). */
+export function centredCapsule(rBottom: number, rTop: number, len: number, radial = RADIAL): BufferGeometry {
+  return taperedCapsule(rBottom, rTop, len, radial).translate(0, -len / 2, 0);
+}
+
+/**
+ * A limb hanging DOWN from its pivot origin (the `segment()` convention):
+ * a tapered open cylinder bowed by `bowM` at mid-length (both ends fixed),
+ * so legs/arms read bent, never straight prisms.
+ */
+export function bentLimb(len: number, rTop: number, rBottom: number, bowM: number, radial = 6, segs = 3): BufferGeometry {
+  const g = new CylinderGeometry(rTop, rBottom, len, radial, segs, true);
+  g.translate(0, -len / 2, 0); // pivot (top) at y=0, extremity at −len
+  const pos = g.getAttribute('position');
+  for (let i = 0; i < pos.count; i++) {
+    const t = -pos.getY(i) / len; // 0 at the pivot → 1 at the extremity
+    pos.setZ(i, pos.getZ(i) + Math.sin(Math.PI * t) * bowM);
+  }
+  pos.needsUpdate = true;
+  g.computeVertexNormals();
+  return g;
+}
+
+/** A crunched, faceless blob head: a low-poly sphere, seeded radial
+ *  displacement ~18% of r — a lumpy skull-shape, never a readable face. */
+export function blobHead(r: number, seed: number): BufferGeometry {
+  return displaceRadial(new SphereGeometry(r, 7, 5), r * 0.18, seed);
+}
+
+/** A lathe from an `[radius, y]` profile (robes, shrouds, columns). */
+export function latheShape(profile: readonly (readonly [number, number])[], radial = 8): BufferGeometry {
+  return new LatheGeometry(profile.map(([r, y]) => new Vector2(r, y)), radial);
+}
+```
+
+**Rebuilds — each block REPLACES only the geometry construction; every group name, pivot position, and material call is byte-identical to the live code.**
+
+`AshHound.ts` `HoundView` constructor (replace lines 284-328; add `import { bentLimb, blobHead, centredCapsule, taperedCapsule } from './organic';`; the `box()` helper at 260-262 becomes dead — delete it):
+
+```ts
+  constructor(private readonly hound: AshHound) {
+    this.root = new Group();
+    this.root.name = `hound:${hound.id}`;
+    this.root.add(this.body);
+
+    // Elongated, underfed torso — a narrow tapered capsule lying along z
+    // (haunch thicker than the chest), centred like the box it replaces.
+    // Radius 0.23 = the old box's half-height, so HOUND_TORSO_Y stacking and
+    // the heightM back-solve are unchanged.
+    this.torso = new Mesh(centredCapsule(0.23, 0.17, 2.6).rotateX(Math.PI / 2), houndMat(this.mats));
+    this.torso.position.set(0, HOUND_TORSO_Y, 0);
+    this.body.add(this.torso);
+    // The gaunt ridge — a thin spindle along the spine; its thick end tops out
+    // at +0.11 (the old box half-height): ridge-top = heightM back-solve HELD.
+    const ridge = new Mesh(centredCapsule(0.11, 0.08, 1.9).rotateX(Math.PI / 2), houndMat(this.mats));
+    ridge.position.set(0, HOUND_TORSO_Y + 0.3, -0.1);
+    this.body.add(ridge);
+
+    // Four over-long BENT thin legs (bowed at the wrong place — mid-shaft).
+    // bentLimb hangs from the pivot origin, so no half-length offset mesh.
+    const legX = 0.2;
+    const legZ = 1.05;
+    for (const [sx, sz] of [
+      [legX, legZ],
+      [-legX, legZ],
+      [legX, -legZ],
+      [-legX, -legZ],
+    ] as const) {
+      const hip = new Group();
+      hip.position.set(sx, HOUND_HIP_Y, sz);
+      hip.add(new Mesh(bentLimb(HOUND_LEG_LEN, 0.075, 0.045, 0.09), houndMat(this.mats)));
+      this.body.add(hip);
+      this.hips.push(hip);
+    }
+
+    // The long drooping neck — a tapered spindle authored 0..1.15 along +z
+    // from the pivot (the old box spanned −0.08..1.08); same pivot, same pitch.
+    this.neck.position.set(0, HOUND_TORSO_Y + 0.22, 1.25);
+    this.neck.rotation.x = 0.9;
+    this.neck.add(new Mesh(taperedCapsule(0.13, 0.09, 1.15).rotateX(Math.PI / 2), houndMat(this.mats)));
+    const head = new Mesh(blobHead(0.19, 0xa5b), houndMat(this.mats));
+    head.position.set(0, -0.14, 1.05);
+    this.neck.add(head);
+    this.body.add(this.neck);
+  }
+```
+
+`KneelingHollow.ts` — replace the `box()`/`segment()` helpers (lines 196-207) and the `KneelerView` constructor geometry (244-287); add `import { bentLimb, blobHead, centredCapsule, taperedCapsule } from './organic';`:
+
+```ts
+/** A pivot Group with a BENT tapered limb hanging DOWN from its joint —
+ *  the same contract the box version had (geometry below the origin). */
+function segment(len: number, w: number, mat: Material): Group {
+  const g = new Group();
+  g.add(new Mesh(bentLimb(len, w * 0.55, w * 0.35, len * 0.07), mat));
+  return g;
+}
+```
+
+Constructor body replacements (pelvis/torso/neck/head only — the spine/shoulder/thigh wiring and every `position.set` stays as-is):
+
+```ts
+    // Pelvis + spine stack.
+    const pelvis = new Mesh(centredCapsule(0.11, 0.11, 0.3).rotateZ(Math.PI / 2), m);
+    pelvis.position.set(0, 0, 0);
+    this.hipG.add(pelvis);
+    this.spine.position.set(0, 0.08, 0);
+    this.hipG.add(this.spine);
+
+    // Underfed torso: hips 0.19 tapering to 0.13 at the shoulders. Centred,
+    // full height = K_TORSO_H — the old box's exact vertical footprint, so the
+    // breath-scale and every stacked offset are unchanged.
+    this.torso = new Mesh(centredCapsule(0.19, 0.13, K_TORSO_H), m);
+    this.torso.position.set(0, K_TORSO_H / 2, 0);
+    this.spine.add(this.torso);
+
+    // Long thin neck (authored 0..0.34 up from the pivot) + crunched blob head.
+    this.neck.position.set(0, K_TORSO_H, 0);
+    this.spine.add(this.neck);
+    this.neck.add(new Mesh(taperedCapsule(0.07, 0.055, 0.34), m));
+    const head = new Mesh(blobHead(0.16, 0x17e), m);
+    head.position.set(0, 0.34 + 0.12, 0.03);
+    this.neck.add(head);
+```
+
+(The arms/legs blocks — `segment(K_ARM_LEN, 0.12, m)`, `segment(K_THIGH, 0.15, m)`, `segment(K_SHIN, 0.14, m)` and their `position.set`/`add` wiring — are call-compatible and stay byte-identical; the rewritten `segment()` gives them bent limbs for free.)
+
+`WatcherPresence.ts` — replace `buildWatcher` (lines 200-224; EXPORT it for the test; delete the dead `box()` helper; add `import { blobHead, latheShape } from './organic';`):
+
+```ts
+/** Build the ~3.0 m column-humanoid. y=0 is the ground; it rises to heightM.
+ *  One continuous shrouded lathe column — curves, but STILL a clean vertical
+ *  (never the Hag's stoop): a narrow hem, an attenuated waist, a barely-wider
+ *  shoulder, a thin neck, a crunched blob head capping it at exactly heightM. */
+export function buildWatcher(mats: MeshStandardMaterial[]): Group {
+  const g = new Group();
+  const H = W.heightM; // 3.0
+  const column = new Mesh(
+    latheShape([
+      [0.2, 0], [0.24, H * 0.06], [0.15, H * 0.42], [0.19, H * 0.62],
+      [0.21, H * 0.8], [0.12, H * 0.86], [0.055, H * 0.9], [0.05, H * 0.94],
+    ]),
+    darkMat(mats),
+  );
+  g.add(column);
+  const headR = 0.11;
+  const head = new Mesh(blobHead(headR, 0x3aa), darkMat(mats));
+  head.position.set(0, H - headR, 0); // head top = H exactly (±18% blob crunch)
+  g.add(head);
+  return g;
+}
+```
+
+`HagPresence.ts` — replace `buildHag` (lines 126-163; EXPORT it; delete the dead `box()` helper; add `import { blobHead, centredCapsule, latheShape } from './organic';` and `CylinderGeometry` to the three import):
+
+```ts
+/** Build the stooped crone. y=0 is the ground. Exported for the C1 tests. */
+export function buildHag(mats: MeshStandardMaterial[]): { root: Group; hunch: Group } {
+  const root = new Group();
+  // The A-line robe as ONE lathe — a wide hem sweeping to a narrow waist
+  // (a woman's skirted silhouette, unmistakably not the Watcher's column).
+  const robe = new Mesh(
+    latheShape([[0.5, 0], [0.44, 0.35], [0.3, 0.72], [0.24, 0.95], [0.26, 1.12]]),
+    darkMat(mats),
+  );
+  root.add(robe);
+
+  // The hunch: SAME pivot, SAME base pitch — HagView sways this group.
+  const hunch = new Group();
+  hunch.position.set(0, 1.08, 0);
+  hunch.rotation.x = 0.95;
+  root.add(hunch);
+
+  // The humped upper back — a bent-read capsule, thick at the shoulders.
+  const backT = new Mesh(centredCapsule(0.24, 0.18, 0.72), darkMat(mats));
+  backT.position.set(0, 0.36, 0);
+  hunch.add(backT);
+  // The shawl bulk — a squashed seeded blob, the top of the hump.
+  const shawl = new Mesh(blobHead(0.3, 0x9c1).scale(1.15, 0.55, 0.9), darkMat(mats));
+  shawl.position.set(0, 0.64, 0.02);
+  hunch.add(shawl);
+  // Bowed, hooded head — low and pushed forward past the shoulders.
+  const head = new Mesh(blobHead(0.17, 0x44d), darkMat(mats));
+  head.position.set(0, 0.82, 0.16);
+  hunch.add(head);
+
+  // The long staff — a thin ROUNDED rod planted at her side.
+  const staff = new Mesh(new CylinderGeometry(0.025, 0.035, 1.7, 6, 1), darkMat(mats));
+  staff.position.set(0.46, 0.85, 0.16);
+  staff.rotation.x = 0.12;
+  root.add(staff);
+
+  return { root, hunch };
+}
+```
+
+`CrossingSilhouette.ts` — replace `leg()` (lines 46-52) and the constructor figure blocks (71-90); add `import { bentLimb, blobHead, centredCapsule, taperedCapsule } from './organic';`; delete the dead `box()` helper:
+
+```ts
+/** A pivot Group with a BENT thin leg hanging DOWN from its joint. */
+function leg(len: number, mat: Material): Group {
+  const g = new Group();
+  g.add(new Mesh(bentLimb(len, 0.09, 0.055, len * 0.06), mat));
+  return g;
+}
+```
+
+```ts
+    const legLen = FIG_H * 0.5;
+    // Two over-long bent thin legs on a hip line (the stride sells "moving").
+    this.legL = leg(legLen, darkMat(this.mats));
+    this.legL.position.set(0.13, legLen, 0);
+    this.legR = leg(legLen, darkMat(this.mats));
+    this.legR.position.set(-0.13, legLen, 0);
+    this.figure.add(this.legL, this.legR);
+    // A narrow tapered torso, a thin neck spindle, a small crunched blob head.
+    const torsoH = FIG_H * 0.3;
+    const torso = new Mesh(centredCapsule(0.19, 0.13, torsoH), darkMat(this.mats));
+    torso.position.set(0, legLen + torsoH / 2, 0);
+    this.figure.add(torso);
+    const neck = new Mesh(taperedCapsule(0.065, 0.05, FIG_H * 0.1), darkMat(this.mats));
+    neck.position.set(0, legLen + torsoH, 0);
+    this.figure.add(neck);
+    const head = new Mesh(blobHead(0.12, 0x77c), darkMat(this.mats));
+    head.position.set(0, legLen + torsoH + FIG_H * 0.13, 0.02);
+    this.figure.add(head);
+    this.figure.rotation.x = 0.12; // a slight forward lean along the travel
+```
+
+- [ ] **Step 1: Write the failing tests.**
+
+`src/world/__tests__/noise.test.ts`:
+```ts
+import { describe, it, expect } from 'vitest';
+import { SphereGeometry } from 'three';
+import { displaceRadial, mulberry32, seededAt } from '../noise';
+
+describe('seeded noise (C1)', () => {
+  it('mulberry32 matches the game PRNG contract: deterministic, [0,1)', () => {
+    const a = mulberry32(42), b = mulberry32(42);
+    for (let i = 0; i < 100; i++) {
+      const v = a();
+      expect(v).toBe(b());
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThan(1);
+    }
+  });
+  it('seededAt is position-stable and seed-sensitive', () => {
+    expect(seededAt(3, 0, 7, 1)).toBe(seededAt(3, 0, 7, 1));
+    expect(seededAt(3, 0, 7, 1)).not.toBe(seededAt(3, 0, 7, 2));
+  });
+  it('displaceRadial keeps duplicated verts welded (watertight) and is deterministic', () => {
+    const build = (): SphereGeometry => new SphereGeometry(0.3, 7, 5);
+    const g1 = build().toNonIndexed();
+    const g2 = build().toNonIndexed();
+    displaceRadial(g1, 0.06, 9);
+    displaceRadial(g2, 0.06, 9);
+    const p1 = g1.getAttribute('position'), p2 = g2.getAttribute('position');
+    // deterministic: same build + seed → identical arrays
+    for (let i = 0; i < p1.count; i++) {
+      expect(p1.getX(i)).toBe(p2.getX(i));
+      expect(p1.getY(i)).toBe(p2.getY(i));
+      expect(p1.getZ(i)).toBe(p2.getZ(i));
+    }
+    // watertight: verts that shared a position before displacement still do
+    const byKey = new Map<string, [number, number, number]>();
+    const orig = build().toNonIndexed().getAttribute('position');
+    for (let i = 0; i < orig.count; i++) {
+      const key = `${orig.getX(i).toFixed(5)},${orig.getY(i).toFixed(5)},${orig.getZ(i).toFixed(5)}`;
+      const disp: [number, number, number] = [p1.getX(i), p1.getY(i), p1.getZ(i)];
+      const prev = byKey.get(key);
+      if (prev) {
+        expect(disp[0]).toBeCloseTo(prev[0], 6);
+        expect(disp[1]).toBeCloseTo(prev[1], 6);
+        expect(disp[2]).toBeCloseTo(prev[2], 6);
+      } else byKey.set(key, disp);
+    }
+  });
+});
+```
+
+`src/entities/__tests__/organic.test.ts`:
+```ts
+import { describe, it, expect } from 'vitest';
+import { Box3, Group, Mesh, MeshStandardMaterial } from 'three';
+import { EventBus } from '../../engine/events';
+import { AshHound, HoundView } from '../AshHound';
+import { KneelingHollow, KneelerView } from '../KneelingHollow';
+import { buildWatcher } from '../WatcherPresence';
+import { buildHag } from '../HagPresence';
+import { CrossingSilhouette } from '../CrossingSilhouette';
+import { blobHead } from '../organic';
+
+/** Total triangles across every mesh under a root (the tri-accounting helper). */
+function viewTris(root: Group): number {
+  let tris = 0;
+  root.traverse((o) => {
+    const m = o as Mesh;
+    if (m.isMesh) {
+      const g = m.geometry;
+      tris += (g.index ? g.index.count : g.getAttribute('position').count) / 3;
+    }
+  });
+  return tris;
+}
+
+/** Every mesh under the root carries a uv attribute (the map-bind guard). */
+function allHaveUV(root: Group): boolean {
+  let ok = true;
+  root.traverse((o) => {
+    const m = o as Mesh;
+    if (m.isMesh && !m.geometry.getAttribute('uv')) ok = false;
+  });
+  return ok;
+}
+
+function houndView(): HoundView {
+  return new HoundView(new AshHound({ id: 'h', bus: new EventBus(), rng: () => 0.5, pantCue: () => {} }));
+}
+function kneelerView(): KneelerView {
+  return new KneelerView(new KneelingHollow({ id: 'k', bus: new EventBus(), pulse: () => 0, creakCue: () => {} }));
+}
+
+describe('C1 organic entities — tri accounting, UVs, preserved numbers', () => {
+  it('hound: curved rig ≤600 tris (and clearly not boxes), every part UV-mapped', () => {
+    const v = houndView();
+    const t = viewTris(v.root);
+    expect(t).toBeGreaterThan(200); // boxes were ~100 — proves the rebuild landed
+    expect(t).toBeLessThanOrEqual(600);
+    expect(allHaveUV(v.root)).toBe(true); // hound-hide map binds on every part
+    v.dispose();
+  });
+  it('hound: the heightM back-solve is preserved — ridge-top at 2.3 m', () => {
+    const v = houndView();
+    v.root.updateMatrixWorld(true);
+    const box = new Box3().setFromObject(v.root);
+    expect(Math.abs(box.max.y - 2.3)).toBeLessThanOrEqual(0.06);
+    expect(box.min.y).toBeGreaterThanOrEqual(-0.12); // feet at the ground (bow ≤ 0.09 in z only)
+    v.dispose();
+  });
+  it('kneeler: ≤600 tris, UV-mapped, update() still drives the same joints', () => {
+    const v = kneelerView();
+    const t = viewTris(v.root);
+    expect(t).toBeGreaterThan(200);
+    expect(t).toBeLessThanOrEqual(600);
+    expect(allHaveUV(v.root)).toBe(true); // kneeler-cloth map binds on every part
+    expect(() => v.update(16)).not.toThrow(); // the untouched update() animates the new rig
+    v.root.updateMatrixWorld(true);
+    const box = new Box3().setFromObject(v.root);
+    expect(box.max.y).toBeGreaterThan(0.9); // kneeling pose, believable envelope
+    expect(box.max.y).toBeLessThan(2.0);
+    v.dispose();
+  });
+  it('watcher: still EXACTLY 3.0 m, still a clean column (never the Hag stoop)', () => {
+    const mats: MeshStandardMaterial[] = [];
+    const g = buildWatcher(mats);
+    g.updateMatrixWorld(true);
+    const box = new Box3().setFromObject(g);
+    expect(Math.abs(box.max.y - 3.0)).toBeLessThanOrEqual(0.06);
+    expect(box.min.y).toBeGreaterThanOrEqual(-0.02);
+    expect(box.max.x).toBeLessThanOrEqual(0.3); // a column, not a skirt
+    expect(viewTris(g)).toBeLessThanOrEqual(300);
+    for (const m of mats) expect(m.color.getHex()).toBe(0x000000); // pure black held
+  });
+  it('hag: stooped woman silhouette — wide lathe hem, hunch pivot preserved', () => {
+    const mats: MeshStandardMaterial[] = [];
+    const { root, hunch } = buildHag(mats);
+    expect(hunch.position.y).toBeCloseTo(1.08);
+    expect(hunch.rotation.x).toBeCloseTo(0.95); // HagView's baseHunchX reads this
+    root.updateMatrixWorld(true);
+    const box = new Box3().setFromObject(root);
+    expect(box.max.x).toBeGreaterThanOrEqual(0.45); // the robe hem — NOT a column
+    expect(viewTris(root)).toBeLessThanOrEqual(400);
+    for (const m of mats) expect(m.color.getHex()).toBe(0x000000);
+  });
+  it('crossing silhouette: bent legs still animate, ≤400 tris', () => {
+    const c = new CrossingSilhouette();
+    expect(viewTris(c.root)).toBeLessThanOrEqual(400);
+    c.arm({ x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, 1000);
+    expect(() => c.update(16, { x: 50, y: 0, z: 50 })).not.toThrow();
+    c.dispose();
+  });
+  it('blobHead is deterministic (seeded, never Math.random)', () => {
+    const a = blobHead(0.2, 7).getAttribute('position');
+    const b = blobHead(0.2, 7).getAttribute('position');
+    for (let i = 0; i < a.count; i++) expect(a.getY(i)).toBe(b.getY(i));
+  });
+});
+```
+
+- [ ] **Step 2: Run tests to verify they fail.**
+
+Run: `npx vitest run src/world/__tests__/noise.test.ts src/entities/__tests__/organic.test.ts`
+Expected: FAIL — `../noise` and `../organic` do not exist; `buildWatcher`/`buildHag` not exported.
+
+- [ ] **Step 3: Implement.** Create `noise.ts` + `organic.ts`; apply the five view rebuilds exactly as written (constructors/helpers only — every `update()` body untouched; verify with `git diff` that no diff hunk lands inside an `update()` method).
+
+- [ ] **Step 4: Run tests to verify they pass.**
+
+Run: `npx vitest run src/world/__tests__/noise.test.ts src/entities/__tests__/organic.test.ts` → PASS.
+Run: `npx vitest run src/entities` → ALL green — the FSM suites (`ashHound`/`kneelingHollow`/`watcherPresence`/`hagPresence`/`crossingSilhouette`) and `palette.test.ts` (tint invariants + map-bind + flat fallback) prove animation/FSM/material contracts survived the rebuild.
+Run: `npm run typecheck` → clean.
+
+- [ ] **Step 5: Ratify + commit.** Re-shoot the T8 evidence angles (isolated entity, moon-axis vantage — method in `.superpowers/sdd/realism-task-8-report.md`):
+```bash
+node scripts/shoot.mjs ashen-forest-n realism-c1-hound 0
+node scripts/shoot.mjs cinder-village realism-c1-kneeler 0
+node scripts/shoot.mjs gate-fields realism-c1-watcher 0
+```
+Expected: tapered/bowed silhouettes — attenuated, underfed, faceless; the hound's bent too-long legs read WRONGER than the boxes; 12 fps stepping visibly unchanged; hound/kneeler luma still in the T8 band (body darker than terrain, lit faces ~35–40, never Watcher-black). Then:
+```bash
+git add src/world/noise.ts src/entities/organic.ts src/entities/AshHound.ts src/entities/KneelingHollow.ts src/entities/WatcherPresence.ts src/entities/HagPresence.ts src/entities/CrossingSilhouette.ts src/world/__tests__/noise.test.ts src/entities/__tests__/organic.test.ts docs/shots/realism-c1-hound.png docs/shots/realism-c1-kneeler.png docs/shots/realism-c1-watcher.png
+git commit -m "feat(curves): organic entity rigs — tapered capsules, bent limbs, blob heads (joints/FSM untouched)"
+```
+
+---
+
+### Task C2: Undulating terrain — seeded ground noise + smoothed risers + shared y-grounding
+
+**Files:**
+- Modify: `src/world/noise.ts` (add `UNDULATION_AMP_M` + `undulation`)
+- Modify: `src/world/ZoneBuilder.ts` (`buildExteriorGround` 2×2 sub-quads + per-vertex undulation; skirt edges follow the undulation + midpoint subdivision; ALL exterior placements sample the surface; `BuiltZone.groundYAt`)
+- Modify: `src/main.ts` (six `cellHeightM` view-y consumers → `groundYAt`)
+- Test: extend `src/world/__tests__/noise.test.ts`, extend `src/world/__tests__/zoneBuilder.test.ts`
+
+**Interfaces:**
+- Produces: `undulation(worldX, worldZ): number` (|out| ≤ `UNDULATION_AMP_M` = 0.12) — **the ONE surface function**; `BuiltZone.groundYAt(worldX, worldZ): number`.
+- Consumes: `seededAt`/`mulberry32` (C1); the live `buildExteriorGround`/`buildTerrainSkirt`/`cellHeightM`.
+
+**Y-grounding decision (spec §11.2 — plan-writer decides): BOTH.** A shared noise function sampled by every view-y consumer AND a small amplitude (0.12 m) as belt-and-braces. `cellHeightM` (per-cell base height) stays; `groundYAt = cellHeightM + undulation` becomes the surface truth. Static placements sample it at build time inside ZoneBuilder; the three dynamic consumers (camera `groundY`, enemy-view `groundY`, Ash-Priest y) sample it at runtime via `built.groundYAt` — the existing `GROUND_EASE_MS` lerp smooths cell-crossings exactly as before. **Collision, `fogCells`, and all 2D grid logic untouched** (`logic.pos.y` stays 0; the collider never sees y).
+
+Add to `noise.ts`:
+
+```ts
+// --- C2: terrain undulation ------------------------------------------------
+/** Max height offset of the exterior ground undulation, metres. Small enough
+ *  that even an unsampled consumer could never visibly float — but every
+ *  consumer DOES sample it (belt and braces). */
+export const UNDULATION_AMP_M = 0.12;
+/** NOT a multiple of the 2 m cell — the swell never reads as per-cell steps. */
+const UNDULATION_WAVELENGTH_M = 3.7;
+const UNDULATION_SEED = 0x51e7;
+const smooth = (t: number): number => t * t * (3 - 2 * t);
+const mix = (a: number, b: number, t: number): number => a + (b - a) * t;
+
+/**
+ * Smooth seeded value-noise height offset (m) at a world position — the ONE
+ * undulation function: ground verts, skirt edges, placements, and every
+ * view-y consumer sample IT, so feet can never drift from the surface.
+ */
+export function undulation(worldX: number, worldZ: number): number {
+  const gx = worldX / UNDULATION_WAVELENGTH_M;
+  const gz = worldZ / UNDULATION_WAVELENGTH_M;
+  const x0 = Math.floor(gx);
+  const z0 = Math.floor(gz);
+  const fx = smooth(gx - x0);
+  const fz = smooth(gz - z0);
+  const v = (ix: number, iz: number): number => seededAt(ix, 0, iz, UNDULATION_SEED) * 2 - 1;
+  const a = mix(v(x0, z0), v(x0 + 1, z0), fx);
+  const b = mix(v(x0, z0 + 1), v(x0 + 1, z0 + 1), fx);
+  return mix(a, b, fz) * UNDULATION_AMP_M;
+}
+```
+
+`ZoneBuilder.ts` — replace the quad loop in `buildExteriorGround` (keep everything from `const geo = new BufferGeometry();` down unchanged; add `import { undulation } from './noise';` and the `GROUND_SUB` const near `GROUND_TILE_M`):
+
+```ts
+/** Ground sub-quads per cell axis: 1 m facets give the undulation edges to
+ *  catch the moon under flatShading (2 m corners alone read as flat plates). */
+const GROUND_SUB = 2;
+```
+
+```ts
+  const pos: number[] = [];
+  const uv: number[] = [];
+  const subM = cell / GROUND_SUB;
+  for (const { x, y, z } of spots) {
+    const x0 = x - cell / 2;
+    const z0 = z - cell / 2;
+    for (let sx = 0; sx < GROUND_SUB; sx++) {
+      for (let sz = 0; sz < GROUND_SUB; sz++) {
+        const ax = x0 + sx * subM;
+        const az = z0 + sz * subM;
+        const bx = ax + subM;
+        const bz = az + subM;
+        // +y winding preserved (the Task 6 orientation guard keeps passing);
+        // per-VERTEX undulation: shared corners sample the same world position
+        // → the same offset → the sheet stays watertight across cells.
+        const corners: [number, number][] = [
+          [ax, az], [ax, bz], [bx, bz],
+          [ax, az], [bx, bz], [bx, az],
+        ];
+        for (const [cx, cz] of corners) {
+          pos.push(cx, y + undulation(cx, cz), cz);
+          const [u, v] = planarUV(cx, cz);
+          uv.push(u, v);
+        }
+      }
+    }
+  }
+```
+
+`buildTerrainSkirt` — replace the seam loop (smoothed risers: top/bottom edges follow the undulation; a midpoint splits each seam into two sub-quads, killing the razor-straight step):
+
+```ts
+  for (const { a, b } of seams) {
+    const [ra, ca] = a;
+    const [rb, cb] = b;
+    const ylo = Math.min(cellHeightM(ra, ca), cellHeightM(rb, cb));
+    const yhi = Math.max(cellHeightM(ra, ca), cellHeightM(rb, cb));
+    // Both edges sample the SAME undulation as the ground at the shared world
+    // positions (ends + midpoint) — the riser meets the displaced ground
+    // watertight on both its lips (ground verts sit at 1 m spacing too).
+    const pushQuad = (x0: number, z0: number, x1: number, z1: number): void => {
+      const lo0 = ylo + undulation(x0, z0);
+      const lo1 = ylo + undulation(x1, z1);
+      const hi0 = yhi + undulation(x0, z0);
+      const hi1 = yhi + undulation(x1, z1);
+      v.push(x0, lo0, z0, x1, lo1, z1, x1, hi1, z1, x0, lo0, z0, x1, hi1, z1, x0, hi0, z0);
+    };
+    if (cb !== ca) {
+      const bx = Math.max(ca, cb) * cell;
+      const z0 = ra * cell;
+      const zm = z0 + cell / 2;
+      pushQuad(bx, z0, bx, zm);
+      pushQuad(bx, zm, bx, z0 + cell);
+    } else {
+      const bz = Math.max(ra, rb) * cell;
+      const x0 = ca * cell;
+      const xm = x0 + cell / 2;
+      pushQuad(x0, bz, xm, bz);
+      pushQuad(xm, bz, x0 + cell, bz);
+    }
+  }
+```
+
+`ZoneBuilder.build` — the surface truth + settled placements. Add right after the `cellHeightM` definition:
+
+```ts
+    /** Surface height at a world point: cell base + the C2 undulation
+     *  (exteriors; interiors stay flat). THE one function placements and
+     *  view-y consumers use — exposed on BuiltZone as groundYAt. */
+    const groundYAt = (worldX: number, worldZ: number): number => {
+      const base = cellHeightM(Math.floor(worldZ / cell), Math.floor(worldX / cell));
+      return def.kind === 'exterior' ? base + undulation(worldX, worldZ) : base;
+    };
+    /** Kit architecture settles slightly INTO the dirt — a block may sink a
+     *  few cm on a swell but can never float on one (ruins sit, they don't hover). */
+    const KIT_SETTLE_M = 0.05;
+```
+
+Then swap the exterior placement heights (each a one-line change; grep anchors given):
+1. Forest/instance spots — `const spot = (): ForestSpot => ({ x, y, z, row, col });` → `({ x, y: groundYAt(x, z), z, row, col })` (the `ground` floor-cell spots KEEP base `y` — `buildExteriorGround` adds undulation per-vertex itself).
+2. `addExteriorWall(row, col, x, y, z)` call sites (`H`, `A`, unknown-wall) and the exterior `addPiece('wall-door', x, y, …)` — pass `groundYAt(x, z) - KIT_SETTLE_M` instead of `y`.
+3. Roof-wedge spots (`houseCells.map`) — `y: cellHeightM(r, c)` → `y: groundYAt(c * cell + half, r * cell + half) - KIT_SETTLE_M` (the SAME settle as the wall below, so roofs stay glued).
+4. Props loop — `const py = cellHeightM(row, col);` → `const py = groundYAt(px, pz);` (covers kit props AND the `prop:gibbet` standalone mesh).
+5. Torch mount — `const ty = cellHeightM(row, col);` → `const ty = groundYAt(cx, cz);`.
+6. Banner — `addPiece('banner', …, cellHeightM(row, col), …)` → `groundYAt(cx + dc * setback, cz + dr * setback)`.
+
+Add `groundYAt(worldX: number, worldZ: number): number;` to the `BuiltZone` interface (after `cellHeightM`) and `groundYAt,` to the `built` literal.
+
+`main.ts` — swap the six view-y consumers (line anchors from the live code; each keeps its `GROUND_EASE_MS` lerp):
+1. `main.ts:667` (crossing-silhouette arm height) — `y: built.cellHeightM(r, c),` → `y: built.groundYAt((c + 0.5) * built.cellM, (r + 0.5) * built.cellM),`
+2. `main.ts:1348` (Ash-Priest) — `priest.root.position.y = built.cellHeightM(placement.at[0], placement.at[1]);` → `priest.root.position.y = built.groundYAt((placement.at[1] + 0.5) * built.cellM, (placement.at[0] + 0.5) * built.cellM);`
+3. `main.ts:1647` (enemy spawn seed) — `enemies.push({ logic, view, groundY: built.cellHeightM(row, col) });` → `enemies.push({ logic, view, groundY: built.groundYAt((col + 0.5) * built.cellM, (row + 0.5) * built.cellM) });`
+4. `main.ts:1727` (enterZone camera snap) — `groundY = built.cellHeightM(Math.floor(controller.pos.z / built.cellM), Math.floor(controller.pos.x / built.cellM));` → `groundY = built.groundYAt(controller.pos.x, controller.pos.z);`
+5. `main.ts:2329` (per-frame enemy view ease) — `e.groundY += (built.cellHeightM(er, ec) - e.groundY) * Math.min(1, dt / GROUND_EASE_MS);` → `e.groundY += (built.groundYAt(e.logic.pos.x, e.logic.pos.z) - e.groundY) * Math.min(1, dt / GROUND_EASE_MS);`
+6. `main.ts:2571` (per-frame camera ease) — `groundY += (built.cellHeightM(gRow, gCol) - groundY) * Math.min(1, dt / GROUND_EASE_MS);` → `groundY += (built.groundYAt(controller.pos.x, controller.pos.z) - groundY) * Math.min(1, dt / GROUND_EASE_MS);`
+(Watcher anchors keep their own elevation contract — off-grid backdrop positions have no ground mesh under them; a 0.12 m offset at ≥16 m in fog is invisible. Interiors: `groundYAt` returns flat `cellHeightM` → 0, so every swap is a no-op indoors.)
+
+- [ ] **Step 1: Write the failing tests.**
+
+Extend `noise.test.ts`:
+```ts
+import { UNDULATION_AMP_M, undulation } from '../noise';
+
+describe('terrain undulation (C2)', () => {
+  it('is deterministic, bounded by the amplitude, and non-flat', () => {
+    expect(undulation(3.2, 7.7)).toBe(undulation(3.2, 7.7));
+    let spread = 0;
+    for (let i = 0; i < 200; i++) {
+      const u = undulation(i * 1.31, i * 2.17);
+      expect(Math.abs(u)).toBeLessThanOrEqual(UNDULATION_AMP_M + 1e-9);
+      spread = Math.max(spread, Math.abs(u));
+    }
+    expect(spread).toBeGreaterThan(UNDULATION_AMP_M * 0.3); // it actually varies
+  });
+  it('is smooth at view-y scale — no pops between close samples', () => {
+    for (let i = 0; i < 50; i++) {
+      const x = i * 0.83, z = i * 1.7;
+      expect(Math.abs(undulation(x + 0.1, z) - undulation(x, z))).toBeLessThan(0.03);
+    }
+  });
+});
+```
+
+Extend `zoneBuilder.test.ts` (exterior describe; `zone()`/`exteriorZone()`/`meshNamed` are the file's live helpers):
+```ts
+import { UNDULATION_AMP_M, undulation } from '../noise';
+
+it('the ground undulates within the amplitude and stays watertight at shared corners', () => {
+  const built = new ZoneBuilder().build(exteriorZone(['..', '..']), fakeAssets());
+  const g = meshNamed(built.group, 'exterior-ground')!;
+  const pos = g.geometry.getAttribute('position');
+  let deviated = false;
+  const atKey = new Map<string, number>();
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i);
+    expect(Math.abs(y)).toBeLessThanOrEqual(UNDULATION_AMP_M + 1e-6); // flat heightGrid ⇒ pure undulation
+    if (Math.abs(y) > 0.01) deviated = true;
+    const key = `${pos.getX(i).toFixed(3)},${pos.getZ(i).toFixed(3)}`;
+    const prev = atKey.get(key);
+    if (prev !== undefined) expect(y).toBeCloseTo(prev, 6); // duplicated corners weld
+    atKey.set(key, y);
+  }
+  expect(deviated).toBe(true);
+});
+it('ground orientation still faces +y after the undulation (Task 6 guard extended)', () => {
+  const built = new ZoneBuilder().build(exteriorZone(['..']), fakeAssets());
+  const normal = meshNamed(built.group, 'exterior-ground')!.geometry.getAttribute('normal');
+  for (let i = 0; i < normal.count; i++) expect(normal.getY(i)).toBeGreaterThan(0);
+});
+it('groundYAt = cell height + undulation on exteriors; flat on interiors', () => {
+  const ext = new ZoneBuilder().build(exteriorZone(['..']), fakeAssets());
+  expect(ext.groundYAt(1, 1)).toBeCloseTo(undulation(1, 1), 6);
+  const int = new ZoneBuilder().build(zone(['###', '#.#', '###']), fakeAssets());
+  expect(int.groundYAt(3, 3)).toBe(0);
+});
+```
+
+- [ ] **Step 2: Run tests to verify they fail.**
+
+Run: `npx vitest run src/world/__tests__/noise.test.ts src/world/__tests__/zoneBuilder.test.ts`
+Expected: FAIL — `undulation`/`UNDULATION_AMP_M` not exported; ground verts all exactly flat; `groundYAt` undefined.
+
+- [ ] **Step 3: Implement.** Add `undulation` to `noise.ts`; apply the `GROUND_SUB` ground loop, the skirt `pushQuad` loop, `groundYAt` + `KIT_SETTLE_M` + the six placement swaps in `ZoneBuilder.build`; add `groundYAt` to `BuiltZone`; apply the six `main.ts` consumer swaps.
+
+- [ ] **Step 4: Run tests to verify they pass.**
+
+Run: `npx vitest run src/world/__tests__/noise.test.ts src/world/__tests__/zoneBuilder.test.ts` → PASS (including the Task 6 orientation + Task 9 prop/roof tests, unchanged). Run `npm run typecheck` → clean. Run `npx vitest run` → whole suite green.
+
+- [ ] **Step 5: Ratify + commit.** Shoot the terrain (feet-grounding is the thing to eyeball — walk near a tree/kneeler and confirm no float):
+```bash
+node scripts/shoot.mjs gate-fields realism-c2-terrain 1
+node scripts/shoot.mjs pilgrims-descent realism-c2-risers 1
+```
+Expected: the field rolls gently (1 m moon-catching facets, never per-cell steps); Pilgrim's risers read as broken earth, not extruded rectangles; trees/props/enemies/camera all sit ON the displaced surface. Then:
+```bash
+git add src/world/noise.ts src/world/ZoneBuilder.ts src/main.ts src/world/__tests__/noise.test.ts src/world/__tests__/zoneBuilder.test.ts docs/shots/realism-c2-terrain.png docs/shots/realism-c2-risers.png
+git commit -m "feat(curves): seeded terrain undulation + smoothed risers + shared groundYAt y-grounding"
+```
+
+---
+
+### Task C3: Crooked trees — bent trunks, displaced canopies, asymmetric silhouettes
+
+**Files:**
+- Modify: `src/world/exteriorForest.ts` (`pineGeometry`/`trunkGeometry` rebuilt crooked; grass EXCLUDED — spec §11.3 names trunks/canopies; a 0.45 m blade is ~2 px at 320×240)
+- Modify: `src/world/ZoneBuilder.ts` (`stampForest` gains `opts: { tilt?: boolean }` — per-instance seeded tilt + y-squash for TREE kinds only; roof wedges stay upright)
+- Modify: `assets/LICENSES.md` (procedural-geometry paragraph: tri figures updated)
+- Test: extend `src/world/__tests__/exteriorForest.test.ts`, extend `src/world/__tests__/zoneBuilder.test.ts`
+
+**Interfaces:**
+- Produces: crooked `pineGeometry`/`trunkGeometry` (same exports/signatures); `stampForest(group, name, geometry, spots, opts?: { tilt?: boolean })` — **Task 10 extends this SAME opts object with `windMats`**.
+- Consumes: `displaceRadial`/`seededAt` (C1). Raised tri caps WITH accounting: pine 25→**≤160**, trunk 15→**≤120**, grass **≤12 unchanged**. Worst forest (~60 dense + 20 sparse) ≈ 12k tris — the <100k budget holds with 8× headroom (guards, not targets).
+
+**Per-instance variation is resolved WITHOUT breaking 1 draw/kind:** true per-instance vertex displacement is impossible on a shared `InstancedMesh` geometry, so per-instance-ness comes from the INSTANCE MATRIX (seeded tilt ±0.08 rad on x/z + y-squash 0.88–1.16, on top of the existing yaw+scale jitter) over a strongly ASYMMETRIC base (bent trunk + offset lumpy cones): different yaws present different silhouettes, so no two neighbours read alike — still exactly 1 draw call per kind.
+
+`exteriorForest.ts` — add `import { displaceRadial, seededAt } from './noise';`, replace `trunk()`/`coneAt()` usage in the two tree builders (the `trunk`/`coneAt` helpers stay for any other caller; add the two new helpers + rebuilt builders):
+
+```ts
+/** A trunk bowed toward +x with a progressive (t²) lean — base planted, crown
+ *  carried sideways. 2 height segments = 3 lean stations: the low-poly PS1
+ *  "segmented bend", not a smooth arc. Open-ended like `trunk()`. */
+function bentTrunk(radiusTop: number, radiusBottom: number, height: number, leanM: number, hex: number): BufferGeometry {
+  const g = new CylinderGeometry(radiusTop, radiusBottom, height, SEG, 2, true);
+  g.translate(0, height / 2, 0);
+  const pos = g.getAttribute('position');
+  for (let i = 0; i < pos.count; i++) {
+    const t = pos.getY(i) / height;
+    pos.setX(i, pos.getX(i) + leanM * t * t);
+  }
+  pos.needsUpdate = true;
+  return paint(g, hex);
+}
+
+/** A needle cone with seeded lumpy displacement, its axis carried `xOff` off
+ *  the root line (following the trunk's lean) — the asymmetric dead canopy. */
+function crookedCone(radius: number, height: number, baseY: number, wobbleM: number, seed: number, xOff: number, hex: number): BufferGeometry {
+  const g = new ConeGeometry(radius, height, SEG + 1, 2, true);
+  displaceRadial(g, wobbleM, seed);
+  g.translate(xOff, baseY + height / 2, 0);
+  return paint(g, hex);
+}
+```
+
+```ts
+/**
+ * A dead pine, CROOKED (C3): a bowed trunk under three lumpy, offset needle
+ * cones — the crown carried ~0.22 m off the root line. ~95 tris (cap 160), ~3.1 m.
+ */
+export function pineGeometry(): BufferGeometry {
+  const LEAN = 0.22;
+  const at = (y: number): number => LEAN * (y / 3.1) ** 2; // the trunk's lean at height y
+  return merge([
+    bentTrunk(0.1, 0.16, 0.9, at(0.9), BARK),
+    crookedCone(0.92, 1.2, 0.5, 0.11, 0xf1, at(1.1), NEEDLE),
+    crookedCone(0.66, 1.1, 1.3, 0.1, 0xf2, at(1.85), NEEDLE),
+    crookedCone(0.44, 1.0, 2.1, 0.09, 0xf3, at(2.6), NEEDLE),
+  ]);
+}
+
+/**
+ * A bare/sparse trunk, CROOKED: a hard 0.28 m bow with one thin lumpy crown.
+ * ~45 tris (cap 120). Walkable partial occlusion, as before.
+ */
+export function trunkGeometry(): BufferGeometry {
+  const LEAN = 0.28;
+  return merge([
+    bentTrunk(0.12, 0.18, 1.9, LEAN, BARK),
+    crookedCone(0.5, 0.9, 1.7, 0.08, 0xf4, LEAN * 0.8, NEEDLE),
+  ]);
+}
+```
+
+`ZoneBuilder.ts` — `stampForest` signature + compose loop (add `Euler` to the three import; the C3 diff to the LIVE function):
+
+```ts
+function stampForest(group: Group, name: string, geometry: BufferGeometry, spots: ForestSpot[], opts: { tilt?: boolean } = {}): void {
+```
+and inside the `spots.forEach` compose loop, replace the yaw/scale lines with:
+```ts
+    const yaw = cellNoise(spot.row, spot.col, 1) * Math.PI * 2;
+    const scale = 0.85 + cellNoise(spot.row, spot.col, 2) * 0.35; // 0.85–1.2
+    if (opts.tilt) {
+      // Seeded per-instance lean + squash (C3): the instance matrix carries the
+      // per-tree crookedness the shared geometry can't — 1 draw/kind held.
+      const tx = (cellNoise(spot.row, spot.col, 4) - 0.5) * 0.16; // ±0.08 rad
+      const tz = (cellNoise(spot.row, spot.col, 6) - 0.5) * 0.16;
+      const squash = 0.88 + cellNoise(spot.row, spot.col, 5) * 0.28; // 0.88–1.16 y
+      m.compose(p.set(spot.x, spot.y, spot.z), q.setFromEuler(euler.set(tx, yaw, tz)), s.set(scale, scale * squash, scale));
+    } else {
+      m.compose(p.set(spot.x, spot.y, spot.z), q.setFromAxisAngle(UP, yaw), s.set(scale, scale, scale));
+    }
+    mesh.setMatrixAt(i, m);
+```
+(declare `const euler = new Euler();` beside the existing `const q = new Quaternion();`). Call sites: the three forest stamps pass `{ tilt: true }`; the roof-wedge stamp passes nothing (roofs stay upright — asserted below).
+
+`assets/LICENSES.md` — in the "Procedural geometry" paragraph, update the tri sentence: `caps the dense pine at ~25 tris` → `caps the dense pine at ~95 tris (crooked rebuild, C3; budget guard 160)`.
+
+- [ ] **Step 1: Write the failing tests.**
+
+Extend `exteriorForest.test.ts` — raise the cap table and add asymmetry/determinism:
+```ts
+  // C3 (spec §11.3): caps RAISED with accounting — guards, not targets.
+  // Worst forest ≈ 60 dense + 20 sparse ⇒ ~12k tris; <100k holds with 8× headroom.
+  for (const [name, build, triCap] of [
+    ['pine (dense)', pineGeometry, 160],
+    ['trunk (sparse)', trunkGeometry, 120],
+    ['grass tuft', grassGeometry, 12],
+  ] as const) {
+```
+(the loop body — position/color/base-at-y0 assertions — is unchanged), plus:
+```ts
+  it('C3: trees are asymmetric (bent trunk breaks mirror symmetry) and deterministic', () => {
+    for (const build of [pineGeometry, trunkGeometry]) {
+      const a = build();
+      const pos = a.getAttribute('position');
+      let minX = Infinity, maxX = -Infinity;
+      for (let i = 0; i < pos.count; i++) {
+        minX = Math.min(minX, pos.getX(i));
+        maxX = Math.max(maxX, pos.getX(i));
+      }
+      expect(Math.abs(minX + maxX)).toBeGreaterThan(0.05); // the lean: |minX| ≠ maxX
+      const b = build();
+      const pb = b.getAttribute('position');
+      for (let i = 0; i < pos.count; i++) expect(pos.getX(i)).toBe(pb.getX(i)); // seeded, reproducible
+      a.dispose();
+      b.dispose();
+    }
+  });
+```
+Extend `zoneBuilder.test.ts` (add `Matrix4, Quaternion, Vector3` to the file's existing `three` import):
+```ts
+it('C3: tree instances carry seeded tilt; roof wedges stay upright', () => {
+  const built = new ZoneBuilder().build(exteriorZone(['TH', 'T.']), fakeAssets());
+  const m = new Matrix4(); const q = new Quaternion(); const p = new Vector3(); const s = new Vector3();
+  let treeTilted = false;
+  built.group.traverse((o) => {
+    if (!(o instanceof InstancedMesh)) return;
+    for (let i = 0; i < o.count; i++) {
+      o.getMatrixAt(i, m);
+      m.decompose(p, q, s);
+      const tilted = Math.abs(q.x) > 1e-4 || Math.abs(q.z) > 1e-4;
+      if (o.name === 'pine-dense' && tilted) treeTilted = true;
+      if (o.name === 'roof-wedge') expect(tilted).toBe(false); // buildings never lean
+    }
+  });
+  expect(treeTilted).toBe(true);
+});
+```
+
+- [ ] **Step 2: Run tests to verify they fail.**
+
+Run: `npx vitest run src/world/__tests__/exteriorForest.test.ts src/world/__tests__/zoneBuilder.test.ts`
+Expected: FAIL — trees still mirror-symmetric (|minX+maxX| ≈ 0); no instance tilt. (The raised caps alone would pass — the asymmetry assertion is what bites.)
+
+- [ ] **Step 3: Implement.** Add `bentTrunk`/`crookedCone` + the two rebuilt builders to `exteriorForest.ts`; add the `opts.tilt` branch to `stampForest` + `{ tilt: true }` on the three forest call sites; update the LICENSES.md tri sentence.
+
+- [ ] **Step 4: Run tests to verify they pass.**
+
+Run: `npx vitest run src/world/__tests__/exteriorForest.test.ts src/world/__tests__/zoneBuilder.test.ts` → PASS (including the untouched vertex-colour luma-band + UV tests — `bentTrunk`/`crookedCone` still `paint()` BARK/NEEDLE and CylinderGeometry/ConeGeometry carry UVs). Run `npm run typecheck` → clean.
+
+- [ ] **Step 5: Ratify + commit.**
+```bash
+node scripts/shoot.mjs ashen-forest-n realism-c3-crooked-forest 1
+```
+Expected: the treeline reads as a dead, crooked stand — bowed trunks, lumpy offset crowns, no two neighbours alike, silhouette-against-fog still reads "pine". Then:
+```bash
+git add src/world/exteriorForest.ts src/world/ZoneBuilder.ts assets/LICENSES.md src/world/__tests__/exteriorForest.test.ts src/world/__tests__/zoneBuilder.test.ts docs/shots/realism-c3-crooked-forest.png
+git commit -m "feat(curves): crooked trees — bent trunks, displaced canopies, seeded per-instance lean"
+```
+
+---
+
+### Task C4: Boulder-ized props — rounded gibbet, lumpy rocks/bones/stumps
+
+**Files:**
+- Modify: `src/world/exteriorProps.ts` (gibbet rebuilt from rods/rings/blob — the shipped bars ARE boxes, verified `exteriorProps.ts:42-58`; ADD `stoneGeometry`/`bonePileGeometry`/`stumpGeometry` for Task 10's scatter)
+- Test: extend `src/world/__tests__/exteriorProps.test.ts`
+
+**Interfaces:**
+- Produces: `stoneGeometry()`/`bonePileGeometry()`/`stumpGeometry()` — the EXACT zero-arg contract Task 10's `CLUTTER` map consumes; `gibbetGeometry()` same signature, rounded internals.
+- Consumes: `displaceRadial`/`seededAt` (C1); the live `paint`/`merge` helpers in `exteriorProps.ts`.
+
+Replace the `bar()`-based gibbet and add the clutter (add to the three import: `CylinderGeometry, IcosahedronGeometry, LatheGeometry, SphereGeometry, TorusGeometry, Vector2`; add `import { displaceRadial, seededAt } from './noise';` — keep `bar()` for `roofWedgeGeometry`'s neighbours if unused, else delete it):
+
+```ts
+/** A rounded iron rod (6-sided cylinder), authored along y, centred at (x, y, z). */
+function rod(r: number, len: number, y: number, x: number, z: number, hex: number): BufferGeometry {
+  const g = new CylinderGeometry(r, r, len, 6, 1);
+  g.translate(x, y, z);
+  return paint(g, hex);
+}
+
+/** A cage ring — a low-poly torus lying flat at height y. */
+function ring(r: number, tube: number, y: number, hex: number): BufferGeometry {
+  const g = new TorusGeometry(r, tube, 4, 10);
+  g.rotateX(Math.PI / 2);
+  g.translate(0, y, 0);
+  return paint(g, hex);
+}
+
+/** A rusted iron cage hung high (rusted open — lore card), with a slumped bone
+ *  occupant. C4: ROUNDED — rod uprights, torus rings, a displaced bone blob;
+ *  no box bars. Same footprint/heights as the shipped box version. ~370 tris. */
+export function gibbetGeometry(): BufferGeometry {
+  const parts: BufferGeometry[] = [];
+  const yTop = 2.6;
+  const cage = 1.0;
+  const half = 0.28;
+  parts.push(rod(0.03, 0.4, yTop + 0.2, 0, 0, IRON)); // hanger stem
+  parts.push(ring(0.34, 0.028, yTop, IRON)); // top ring
+  parts.push(ring(0.34, 0.028, yTop - cage, IRON)); // bottom ring
+  for (const [x, z] of [[half, half], [-half, half], [half, -half], [-half, -half]] as const) {
+    parts.push(rod(0.024, cage, yTop - cage / 2, x, z, IRON)); // four rounded uprights
+  }
+  // The slumped occupant — a displaced bone blob, not a box.
+  const bone = displaceRadial(new SphereGeometry(0.17, 7, 5), 0.05, 0xb0e);
+  bone.scale(1, 1.4, 1);
+  bone.translate(0, yTop - cage + 0.38, 0);
+  parts.push(paint(bone, BONE));
+  return merge(parts);
+}
+
+// --- C4 ground clutter (consumed by Task 10's scatter `CLUTTER` map) ---------
+
+/** A lumpy field stone (~0.5 m) — a seeded noise-displaced icosahedron,
+ *  squashed and SETTLED into the ash (embedded a few cm; never floating). */
+export function stoneGeometry(): BufferGeometry {
+  const g = displaceRadial(new IcosahedronGeometry(0.26, 1), 0.07, 0x57e);
+  g.scale(1.1, 0.62, 0.95);
+  g.translate(0, 0.14, 0);
+  return paint(g, 0x4a4640);
+}
+
+/** A small bone pile — three tumbled rounded long-bones over a low ash mound. */
+export function bonePileGeometry(): BufferGeometry {
+  const parts: BufferGeometry[] = [];
+  const bone = (len: number, y: number, yaw: number, seed: number): BufferGeometry => {
+    const g = new CylinderGeometry(0.03, 0.042, len, 5, 1);
+    g.rotateZ(Math.PI / 2 - 0.12);
+    g.rotateY(yaw);
+    g.translate((seededAt(seed, 0, 0, 3) - 0.5) * 0.2, y, (seededAt(0, seed, 0, 3) - 0.5) * 0.2);
+    return paint(g, BONE);
+  };
+  parts.push(bone(0.52, 0.05, 0.3, 1), bone(0.44, 0.1, 1.7, 2), bone(0.38, 0.15, 2.6, 3));
+  const mound = displaceRadial(new SphereGeometry(0.2, 6, 4), 0.05, 0x60e);
+  mound.scale(1.3, 0.45, 1.2);
+  mound.translate(0, 0.05, 0);
+  parts.push(paint(mound, BONE));
+  return merge(parts);
+}
+
+/** A cut stump (~0.5 m) — a lathe with a root flare, lumpy bark, capped top. */
+export function stumpGeometry(): BufferGeometry {
+  const g = new LatheGeometry(
+    [new Vector2(0.34, 0), new Vector2(0.24, 0.09), new Vector2(0.2, 0.28), new Vector2(0.22, 0.48), new Vector2(0.02, 0.5)],
+    7,
+  );
+  displaceRadial(g, 0.03, 0x7a2);
+  return paint(g, 0x3b322a);
+}
+```
+
+- [ ] **Step 1: Write the failing tests.** Extend `exteriorProps.test.ts` (the file's `tris`/`minY` helpers are live):
+```ts
+import { bonePileGeometry, stoneGeometry, stumpGeometry } from '../exteriorProps';
+
+describe('C4 boulder-ized props', () => {
+  it('the gibbet is rounded — the cylindrical/toroidal rebuild lands well above the box tri count', () => {
+    const g = gibbetGeometry();
+    expect(tris(g)).toBeGreaterThan(250); // the 7-part box cage was ~96 tris
+    expect(tris(g)).toBeLessThanOrEqual(600);
+    expect(minY(g)).toBeGreaterThanOrEqual(-0.001); // still hangs — nothing below the floor
+    g.dispose();
+  });
+  for (const [name, build, cap] of [
+    ['stone', stoneGeometry, 90],
+    ['bone pile', bonePileGeometry, 140],
+    ['stump', stumpGeometry, 120],
+  ] as const) {
+    it(`${name}: lumpy, low-poly (≤${cap} tris), vertex-coloured, settled (embedded ≤0.15 m, never floating)`, () => {
+      const g = build();
+      expect(g.getAttribute('color')).toBeDefined();
+      expect(g.getAttribute('uv')).toBeDefined(); // phase policy: UV assertion on every hand geometry
+      expect(tris(g)).toBeGreaterThan(0);
+      expect(tris(g)).toBeLessThanOrEqual(cap);
+      expect(minY(g)).toBeLessThanOrEqual(0.02); // touches/embeds the ground — no hover
+      expect(minY(g)).toBeGreaterThanOrEqual(-0.15);
+      g.dispose();
+    });
+  }
+  it('clutter is deterministic (seeded, never Math.random)', () => {
+    for (const build of [stoneGeometry, bonePileGeometry, stumpGeometry, gibbetGeometry]) {
+      const a = build().getAttribute('position');
+      const b = build().getAttribute('position');
+      expect(a.count).toBe(b.count);
+      for (let i = 0; i < a.count; i++) expect(a.getY(i)).toBe(b.getY(i));
+    }
+  });
+});
+```
+
+- [ ] **Step 2: Run tests to verify they fail.**
+
+Run: `npx vitest run src/world/__tests__/exteriorProps.test.ts`
+Expected: FAIL — `stoneGeometry`/`bonePileGeometry`/`stumpGeometry` not exported; the box gibbet sits at ~96 tris (< 250).
+
+- [ ] **Step 3: Implement.** Apply the `exteriorProps.ts` changes above.
+
+- [ ] **Step 4: Run tests to verify they pass.**
+
+Run: `npx vitest run src/world/__tests__/exteriorProps.test.ts src/world/__tests__/zoneBuilder.test.ts` → PASS (the Task 9 `prop:gibbet` placement test is signature-compatible — same export, new internals). Run `npm run typecheck` → clean. Run `npx vitest run` → whole suite green.
+
+- [ ] **Step 5: Ratify + commit.**
+```bash
+node scripts/shoot.mjs gate-fields realism-c4-gibbet 1
+```
+Expected: the gibbet reads as a rusted round cage (rods/rings) with a slumped occupant, not a box lattice. Then:
+```bash
+git add src/world/exteriorProps.ts src/world/__tests__/exteriorProps.test.ts docs/shots/realism-c4-gibbet.png
+git commit -m "feat(curves): rounded gibbet + lumpy stone/bone/stump clutter geometry"
+```
+
+---
+
 ### Task 10: Atmosphere — smooth wind sway, banner sway, ground clutter, per-preset particles
 
 **Files:**
 - Modify: `src/ps1/patchMaterial.ts` (add the optional `{ wind }` opt — a SMOOTH vertex sway; distinct program cache key)
 - Modify: `src/world/ZoneBuilder.ts` (`stampForest` sets per-instance `aWindPhase` + patches with wind; collect forest materials; advance `uWindTime` in `updateExterior`; render the banner STANDALONE for sway; stamp `def.scatter` clutter)
-- Modify: `src/world/exteriorForest.ts` (extend `exteriorProps` clutter import is not here — clutter geometry lives in `exteriorProps.ts`)
-- Modify: `src/world/exteriorProps.ts` (add `stoneGeometry`/`bonePileGeometry`/`stumpGeometry`)
+- Modify: `src/world/exteriorForest.ts` (export the `WIND` const only — clutter geometry shipped in C4, in `exteriorProps.ts`)
 - Modify: `src/world/exteriorSky.ts` (per-preset ash count/speed + gorge ember `Points`)
 - Modify: `src/world/zoneDef.ts` (add `scatter?` field)
 - Modify: `src/content/zones/gateFields.ts`, `src/content/zones/cinderVillage.ts` (sparse `scatter` lists)
 - Modify: `src/main.ts` (slow banner-mesh sway each frame — smooth)
-- Test: `src/ps1/__tests__/patchMaterial.test.ts` (create/extend), extend `src/world/__tests__/exteriorProps.test.ts`, extend `src/world/__tests__/zoneBuilder.test.ts`, extend `src/world/__tests__/exteriorSky.test.ts`
+- Test: `src/ps1/__tests__/patchMaterial.test.ts` (create/extend), extend `src/world/__tests__/zoneBuilder.test.ts`, extend `src/world/__tests__/exteriorSky.test.ts`
 
 **Interfaces:**
-- Produces: `WindOpts` + `patchMaterial(mat, { wind })`; the `WIND` amplitude const (exported for the bounds test); clutter geometries; `ZoneDef.scatter?`; per-preset particle tuning.
-- Consumes: `patchMaterial`, `stampForest`, `getTexture`, the existing `updateExterior` tick (ZoneManager registers `zones` as a Subsystem, so `updateExterior(dtMs)` runs every frame).
+- Produces: `WindOpts` + `patchMaterial(mat, { wind })`; the `WIND` amplitude const (exported for the bounds test); `ZoneDef.scatter?`; per-preset particle tuning.
+- Consumes: `patchMaterial`, `stampForest` (with C3's `opts` object — this task EXTENDS it with `windMats`), `getTexture`, C4's `stoneGeometry`/`bonePileGeometry`/`stumpGeometry` (already shipped + tested), the existing `updateExterior` tick (ZoneManager registers `zones` as a Subsystem, so `updateExterior(dtMs)` runs every frame).
 
-**Wind design (SMOOTH — never stepped, spec §6):** inject a sway into the forest instanced material's vertex shader at `#include <begin_vertex>` (before projection, so vertex-snap + affine still operate on the swayed clip position). Per-instance `aWindPhase` (an `InstancedBufferAttribute`) desyncs trees; `uWindTime` advances continuously; the sway weights by object-space height so trunk bases stay planted. Amplitude a few cm.
+**Wind design (SMOOTH — never stepped, spec §6):** inject a sway into the forest instanced material's vertex shader at `#include <begin_vertex>` (before projection, so vertex-snap + affine still operate on the swayed clip position). Per-instance `aWindPhase` (an `InstancedBufferAttribute`) desyncs trees; `uWindTime` advances continuously; the sway weights by object-space height so trunk bases stay planted. Amplitude a few cm. **Reconciled against C3's crooked trees:** the sway weight is `transformed.y / uWindHeight`, pure object-space height — C3's bent trunks and displaced canopies keep y ∈ [0, ~3.1] in object space, so displaced crown verts simply inherit the full sway weight and bases stay planted; C3's per-instance tilt lives in the instance matrix, which multiplies AFTER `begin_vertex`, so tilted trees sway correctly along their leaned axes. No change needed — the assumptions hold by construction.
 
 `patchMaterial.ts` — add the opt (backward-compatible; every existing `patchMaterial(mat)` call is unaffected):
 ```ts
@@ -1391,28 +2506,33 @@ export function patchMaterial(mat: Material, opts: { wind?: WindOpts } = {}): vo
 export const WIND = { ampM: 0.06, freqHz: 1.1, heightRefM: 3 } as const;
 ```
 
-`ZoneBuilder.ts` — `stampForest` gains wind (per-instance phase + wind patch), and returns/collects its material:
+`ZoneBuilder.ts` — `stampForest`'s C3 `opts` object gains `windMats` (wind = per-instance phase + wind patch, applied ONLY when `windMats` is passed):
 ```ts
 function stampForest(
   group: Group, name: string, geometry: BufferGeometry, spots: ForestSpot[],
-  windMats?: MeshStandardMaterial[],
+  opts: { tilt?: boolean; windMats?: MeshStandardMaterial[] } = {},
 ): void {
   if (spots.length === 0) { geometry.dispose(); return; }
-  const map = name === GRASS_KIND ? undefined : getTexture('bark'); // grass keeps vertex colour only
-  const material = new MeshStandardMaterial({ vertexColors: true, map, roughness: 1, metalness: 0, flatShading: true });
+  // Shipped kinds keep their ratified bark×tint look (T7/T9); only the NEW
+  // clutter kinds stay vertex-colour-only (a bark-wrapped stone reads wrong).
+  const map = name.startsWith('clutter-') ? undefined : getTexture('bark');
+  const material = new MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, flatShading: true });
+  if (map) material.map = map; // set BEFORE patchMaterial so the affine warp binds (live Task 7 pattern)
   forceNearest(material);
-  patchMaterial(material, { wind: WIND }); // SMOOTH sway; affine still applies (map set for trees)
+  patchMaterial(material, opts.windMats ? { wind: WIND } : {}); // SMOOTH sway on wind kinds only
   const mesh = new InstancedMesh(geometry, material, spots.length);
-  // per-instance wind phase so trees desync
-  const phase = new Float32Array(spots.length);
-  spots.forEach((s, i) => { phase[i] = cellNoise(s.row, s.col, 3) * Math.PI * 2; });
-  geometry.setAttribute('aWindPhase', new InstancedBufferAttribute(phase, 1));
-  // ...(existing matrix compose loop unchanged)...
+  if (opts.windMats) {
+    // per-instance wind phase so trees desync
+    const phase = new Float32Array(spots.length);
+    spots.forEach((s, i) => { phase[i] = cellNoise(s.row, s.col, 3) * Math.PI * 2; });
+    geometry.setAttribute('aWindPhase', new InstancedBufferAttribute(phase, 1));
+    opts.windMats.push(material);
+  }
+  // ...(the C3 compose loop — yaw/scale + opts.tilt lean/squash — unchanged)...
   group.add(mesh);
-  windMats?.push(material);
 }
 ```
-(add `InstancedBufferAttribute` + `WIND` imports.) The three forest stamps pass a shared `const windMats: MeshStandardMaterial[] = [];`. Roof-wedge and clutter stamps also pass `windMats` (roofs/clutter get near-zero sway because their crown height is low or the height weight is small — acceptable; OR pass `undefined` for clutter to leave it static. Pass `undefined` for roof-wedge/clutter to keep buildings and stones still). So ONLY the three forest kinds pass `windMats`.
+(add `InstancedBufferAttribute` + `WIND` imports.) Call sites: the three forest stamps pass `{ tilt: true, windMats }` (a shared `const windMats: MeshStandardMaterial[] = [];`); the roof-wedge and clutter stamps pass nothing — buildings and stones never sway or lean.
 
 Advance `uWindTime` in `updateExterior` — wrap the backdrop update:
 ```ts
@@ -1460,10 +2580,10 @@ Banner standalone (for smooth sway) — `addPiece('banner', …)` merges the ban
       return mesh;
     };
 ```
-In the banner block, branch exteriors to it:
+In the banner block, branch exteriors to it (the banner y is C2's `groundYAt` on exteriors — same expression the live banner `addPiece` uses after C2):
 ```ts
       if (def.kind === 'exterior') {
-        bannerMeshRef = buildStandaloneBanner(cx + dc * setback, cellHeightM(row, col), cz + dr * setback, Math.atan2(dc, dr), bScale);
+        bannerMeshRef = buildStandaloneBanner(cx + dc * setback, groundYAt(cx + dc * setback, cz + dr * setback), cz + dr * setback, Math.atan2(dc, dr), bScale);
         if (bannerMeshRef) group.add(bannerMeshRef);
       } else {
         addPiece('banner', cx + dc * setback, cellHeightM(row, col), cz + dr * setback, Math.atan2(dc, dr), bScale);
@@ -1471,21 +2591,7 @@ In the banner block, branch exteriors to it:
 ```
 Set `bannerMesh: bannerMeshRef,` in the `built` literal. (Interiors keep the merged banner — no sway indoors.)
 
-`exteriorProps.ts` — add clutter geometries:
-```ts
-/** A low field stone (~0.4 m). */
-export function stoneGeometry(): BufferGeometry {
-  const g = new BoxGeometry(0.5, 0.3, 0.4); g.translate(0, 0.15, 0); return paint(g, 0x4a4640);
-}
-/** A small bone pile (~0.3 m). */
-export function bonePileGeometry(): BufferGeometry {
-  return merge([bar(0.5, 0.08, 0.09, 0.06, 0, 0, BONE), bar(0.09, 0.08, 0.45, 0.13, 0.05, 0.03, BONE)]);
-}
-/** A cut stump (~0.5 m). */
-export function stumpGeometry(): BufferGeometry {
-  const g = new CylinderGeometry(0.24, 0.3, 0.5, 6, 1, true); g.translate(0, 0.25, 0); return paint(g, 0x3b322a);
-}
-```
+Clutter geometry: `stoneGeometry`/`bonePileGeometry`/`stumpGeometry` shipped in **C4** (rounded/lumpy, tested there) — this task only wires the scatter.
 
 `zoneDef.ts` — add the field (all optional; absent ⇒ no clutter):
 ```ts
@@ -1493,7 +2599,7 @@ export function stumpGeometry(): BufferGeometry {
   scatter?: { kind: 'stone' | 'bones' | 'stump'; cells: GridPos[] }[];
 ```
 
-`ZoneBuilder.ts` — stamp scatter (after the ground mesh, exterior branch):
+`ZoneBuilder.ts` — stamp scatter (after the ground mesh, exterior branch; `groundYAt` is C2's surface function, so clutter sits ON the undulated dirt):
 ```ts
       const CLUTTER: Record<string, () => BufferGeometry> = {
         stone: stoneGeometry, bones: bonePileGeometry, stump: stumpGeometry,
@@ -1501,12 +2607,12 @@ export function stumpGeometry(): BufferGeometry {
       for (const s of def.scatter ?? []) {
         const geo = CLUTTER[s.kind]();
         const spots: ForestSpot[] = s.cells.map(([r, c]) => ({
-          x: c * cell + half, y: cellHeightM(r, c), z: r * cell + half, row: r, col: c,
+          x: c * cell + half, y: groundYAt(c * cell + half, r * cell + half), z: r * cell + half, row: r, col: c,
         }));
-        stampForest(group, `clutter-${s.kind}`, geo, spots); // static (no windMats) — stones don't sway
+        stampForest(group, `clutter-${s.kind}`, geo, spots); // no opts — clutter never sways or leans
       }
 ```
-(But `stampForest` sets a bark `map` for non-grass names; clutter should be vertex-colour only. Guard: `const map = (name === GRASS_KIND || name.startsWith('clutter-') || name === 'roof-wedge') ? undefined : getTexture('bark');`.) Add `SCATTER_CAP = 40` and warn/clamp if a zone's total scatter exceeds it.
+(add `import { bonePileGeometry, stoneGeometry, stumpGeometry } from './exteriorProps';` — the `clutter-` map guard is already in the `stampForest` snippet above.) Add `SCATTER_CAP = 40` and warn/clamp if a zone's total scatter exceeds it.
 
 `exteriorSky.ts` — per-preset particle tuning + gorge embers. Replace the fixed `ASH_COUNT`/`ASH_FALL_MPS` with a per-preset table and add an ember `Points` for `gorge`:
 ```ts
@@ -1549,7 +2655,7 @@ describe('patchMaterial wind', () => {
   });
 });
 ```
-Extend `exteriorProps.test.ts` (loop the three clutter kinds through the same low-poly/grounded assertions, caps: stone ≤16, bones ≤24, stump ≤24).
+(Clutter geometry assertions live in C4's `exteriorProps.test.ts` extension — nothing to add here.)
 Extend `zoneBuilder.test.ts`:
 ```ts
 it('forest instanced geometry carries a per-instance aWindPhase attribute', () => {
@@ -1580,14 +2686,14 @@ it('the gorge preset adds a warm ember Points system; field does not', () => {
 
 - [ ] **Step 2: Run tests to verify they fail.**
 
-Run: `npx vitest run src/ps1/__tests__/patchMaterial.test.ts src/world/__tests__/exteriorProps.test.ts src/world/__tests__/zoneBuilder.test.ts src/world/__tests__/exteriorSky.test.ts`
+Run: `npx vitest run src/ps1/__tests__/patchMaterial.test.ts src/world/__tests__/zoneBuilder.test.ts src/world/__tests__/exteriorSky.test.ts`
 Expected: FAIL — `WIND` unexported, no wind cache key, no `aWindPhase`, no `clutter-stone`, no gorge `embers`.
 
-- [ ] **Step 3: Implement.** Add the wind opt to `patchMaterial`; `WIND` + wind wiring + scatter + standalone banner to `ZoneBuilder`; clutter geoms to `exteriorProps`; per-preset ash + gorge embers to `exteriorSky`; `scatter?` to `zoneDef`; sparse `scatter` lists to `gateFields`/`cinderVillage`; banner sway to `main`.
+- [ ] **Step 3: Implement.** Add the wind opt to `patchMaterial`; `WIND` (in `exteriorForest.ts`) + wind wiring + scatter + standalone banner to `ZoneBuilder`; per-preset ash + gorge embers to `exteriorSky`; `scatter?` to `zoneDef`; sparse `scatter` lists to `gateFields`/`cinderVillage`; banner sway to `main`. (Clutter geometry: consume C4's exports as-is.)
 
 - [ ] **Step 4: Run tests to verify they pass.**
 
-Run: `npx vitest run src/ps1/__tests__/patchMaterial.test.ts src/world/__tests__/exteriorProps.test.ts src/world/__tests__/zoneBuilder.test.ts src/world/__tests__/exteriorSky.test.ts` → PASS. Run `npm run typecheck` → clean. Run `npx vitest run` → whole suite green.
+Run: `npx vitest run src/ps1/__tests__/patchMaterial.test.ts src/world/__tests__/zoneBuilder.test.ts src/world/__tests__/exteriorSky.test.ts` → PASS. Run `npm run typecheck` → clean. Run `npx vitest run` → whole suite green.
 
 - [ ] **Step 5: Ratify (60 fps + smooth) + commit.** Shoot a couple of frames to confirm sway is present and SMOOTH (not stepped), and check the dev HUD fps holds:
 ```bash
@@ -1596,7 +2702,7 @@ node scripts/shoot.mjs pilgrims-descent realism-gorge-embers 0
 ```
 Expected: grass/canopy sway gently (per-instance out of phase), the banner skews slowly, stones/bones scatter sparsely, the gorge shows warm ember flecks; entities remain 12-fps stepped against the smooth world. Then:
 ```bash
-git add src/ps1/patchMaterial.ts src/world/ZoneBuilder.ts src/world/exteriorForest.ts src/world/exteriorProps.ts src/world/exteriorSky.ts src/world/zoneDef.ts src/content/zones/gateFields.ts src/content/zones/cinderVillage.ts src/main.ts src/ps1/__tests__/patchMaterial.test.ts src/world/__tests__/exteriorProps.test.ts src/world/__tests__/zoneBuilder.test.ts src/world/__tests__/exteriorSky.test.ts docs/shots/realism-atmosphere.png docs/shots/realism-gorge-embers.png
+git add src/ps1/patchMaterial.ts src/world/ZoneBuilder.ts src/world/exteriorForest.ts src/world/exteriorSky.ts src/world/zoneDef.ts src/content/zones/gateFields.ts src/content/zones/cinderVillage.ts src/main.ts src/ps1/__tests__/patchMaterial.test.ts src/world/__tests__/zoneBuilder.test.ts src/world/__tests__/exteriorSky.test.ts docs/shots/realism-atmosphere.png docs/shots/realism-gorge-embers.png
 git commit -m "feat(atmosphere): smooth wind sway, banner sway, ground clutter, per-preset particles"
 ```
 
@@ -1748,6 +2854,10 @@ git commit -m "test(evidence): all-zone realism sweep + full suite/e2e/build gre
 - **Cinder second wall-atlas variant (spec §4.4 "only if time allows"):** DEFERRED to hold the kit bucket at 1; house differentiation instead uses `wall-arch.glb` door voids (same atlas → same bucket) + a procedural roof-wedge instanced cap.
 - **Banner readability (spec §5):** RESOLVED via an exterior-only larger banner scale (`BANNER_EXT_SCALE = 0.65`) rather than per-banner data fields — applies to Pilgrim's and every exterior checkpoint uniformly.
 - **Great Hall statue overlap cell:** RESOLVED to `[1,13]` (back to the north wall, clear of the inner-chamber NE wall block at `[3,11-14]`); browser-eyeballed in Task 9/12.
+- **C2 y-grounding (spec §11.2 "plan-writer decides"):** RESOLVED as BOTH options — one shared `undulation()` function is sampled by the ground mesh, skirt, every build-time placement, and every runtime view-y consumer (camera/enemy/priest via `BuiltZone.groundYAt`), AND the amplitude is capped at 0.12 m as belt-and-braces. Kit architecture additionally settles `KIT_SETTLE_M` (0.05 m) INTO the dirt so a block can sink on a swell but never float.
+- **C3 "seeded per-instance canopy displacement" vs "1 draw/kind stays":** true per-instance vertex displacement is impossible on a shared `InstancedMesh` geometry. RESOLVED: seeded displacement is baked into the shared geometry (strongly asymmetric bent trunk + lumpy offset cones) and per-instance-ness comes from the instance matrix (seeded tilt ±0.08 rad + y-squash 0.88–1.16 + existing yaw/scale) — different yaws present different silhouettes; exactly 1 draw call per kind held.
+- **C1 "same named joint-group structure":** the load-bearing joints were audited from the live `update()` bodies (hound `body`/`torso`/`neck`/`hips[4]`; kneeler `frame`/`hipG`/`spine`/`neck`/`torso`/`thighL/R`/`kneeL/R`/`shoulderL/R`; hag `hunch`; crossing `legL/R`) — the rebuilds replace only geometry inside those groups, `update()` diffs must be empty, and the FSM suites + a Box3 height test (hound 2.3 back-solve, Watcher 3.0) enforce it.
+- **C3 grass excluded from the crook pass:** spec §11.3 names trunks/canopies; a 0.45 m blade is ~2 px at 320×240 — bending it is invisible cost. Grass caps stay 12.
 
 ## Risks flagged
 
@@ -1756,6 +2866,10 @@ git commit -m "test(evidence): all-zone realism sweep + full suite/e2e/build gre
 - **Wind + affine + instancing shader interaction:** the wind injects at `#include <begin_vertex>` (before projection) so vertex-snap + affine still operate on the swayed clip position; a distinct `customProgramCacheKey` ('ps1-patched-wind') prevents a wind material from sharing a compiled program with a static one. Verified only headlessly (cache key + attribute presence) — the 60 fps/smooth read is a Task 10/12 browser gate.
 - **Draw-call creep on exteriors:** new static meshes (ground, skirt, roof-wedge, clutter, gibbet, standalone banner, gorge embers) add ~8–10 draws; the accounting table lands each zone ~12–15 (<100). Task 12 Step 2 probes `drawCalls` per zone to confirm before merge.
 - **Texture × vertex-colour double-darkening:** the crunched maps are already palette-darkened AND multiply the vertex tint — trees/ground could read too dark. Task 3 lifts vertex tints first; Tasks 7/8 use `color: 0xffffff` for map-bearing ground so the map shows at its own brightness; entities keep the tint as a deliberate multiply. Re-checked in the Task 7/8/12 browser ratify (re-tune the crunch darkening, not blindly).
+- **C1 rig regression risk (curves under an untouched `update()`):** a capsule that mismatches its box's pivot/extent by even a few cm skews every animated pose. Mitigation: each replacement is authored to the box's exact vertical footprint (capsule radius = box half-height; `segment()`/`leg()` keep the hang-from-origin contract), the Box3 tests pin the hound 2.3/Watcher 3.0 envelopes, and the untouched FSM suites must stay green. Final read is the C1 Step 5 eyeball.
+- **C2 float/sink at structure edges:** a 2 m kit block on a 3.7 m-wavelength swell can deviate from the surface at its corners (max ~±0.07 m at amp 0.12). Mitigation: `KIT_SETTLE_M` embeds blocks 0.05 m (ruins sit, never hover); sinking a few cm reads as settled ruin — floating is the visible bug and is bounded out. Eyeballed in C2 Step 5.
+- **C2 watertightness at ground/skirt lips:** both sample the SAME `undulation()` at the same 1 m-spaced world positions, so seams weld by construction — and the zoneBuilder weld test asserts it (the Task 6 "invisible ground" lesson, applied).
+- **C4/Task-9 gibbet test coupling:** `gibbetGeometry` keeps its export signature and hanging envelope (`minY ≥ 0`), so Task 9's placement test (`prop:gibbet`) passes unchanged; only tri counts move (asserted 250–600 in C4).
 
 ## Spec-coverage mapping (every spec section → task)
 
@@ -1769,6 +2883,7 @@ git commit -m "test(evidence): all-zone realism sweep + full suite/e2e/build gre
 - §8 constraints → Global Constraints + Perf trap accounting (obeyed by all).
 - §9 process & verification (Gate Fields ratify first, per-zone sweep, e2e green, new unit tests) → Task 4 (ratify), Task 12 (sweep + budgets) + per-task TDD.
 - §10 timeline → informational; the task order matches 7/4 lighting → 7/5 textures → 7/6 props+atmosphere+housekeeping.
+- **§11 curves addendum** → C1 (organic entities: §11.1), C2 (undulating terrain: §11.2), C3 (crooked trees: §11.3), C4 (boulder-ized props: §11.4); determinism (mulberry32, never Math.random) + the orientation/UV/tri phase policy → `noise.ts` + every C-task's tests; sequencing (after Task 9, before Task 10) → the header amendment + section placement.
 
 ## Self-review notes (done)
 
@@ -1776,4 +2891,5 @@ git commit -m "test(evidence): all-zone realism sweep + full suite/e2e/build gre
 - **Placeholder scan:** no "TBD"/"similar to Task N"/"add error handling". Every code step shows complete code; every test step shows real assertions; all `TUNING.lighting` values, texture IDs, prop geometry, and shader injections are written out in full.
 - **Type/name consistency (Produces↔Consumes cross-checked):** `TUNING.lighting.exterior[preset]` shape identical in Task 1 (defn) and `resolveZoneLighting`/tests; `moonDirection`/`ExteriorBackdrop.moonDir`/`BuiltZone.moonDir` names match across Tasks 1/10; `TexName` union + `getTexture`/`configureTexture`/`preloadTextures` identical in Task 5 (defn) and Tasks 6/7/8 (use); `patchMaterial(mat, { wind })` + `WindOpts`/`WIND` match Task 10 defn and its callers/tests; `planarUV`, `exterior-ground`, `roof-wedge`, `clutter-<kind>`, `prop:gibbet` mesh names match across builder + tests; `HOUND_TINT`/`KNEELER_TINT`/`WATCHER_TINT`/`HAG_TINT` identical in Task 3 (defn) and Task 8 (use); `keyLightIntensity`/`scatter` ZoneDef fields match defn (Tasks 1/10) and consumers (Task 2 undercroft, Task 10 zones).
 - **Budget honesty:** the Perf trap accounting table proves ≤6 kit buckets (exterior = 1) and <100 draws per zone AFTER all tasks; the ground swap REMOVES kit floor tiles from the shared bucket rather than adding a bucket.
-- **Ordering is dependency-honest:** lighting (1–2) → rebalance (3) → ratify (4) → texture pipeline (5) → ground/trees/entities texturing (6–8) → props (9) → atmosphere (10) → housekeeping (11) → final sweep (12). Task 5 gates 6/7/8; Task 4's `shoot.mjs` gates 12.
+- **Ordering is dependency-honest:** lighting (1–2) → rebalance (3) → ratify (4) → texture pipeline (5) → ground/trees/entities texturing (6–8) → props (9) → **curves C1–C4** → atmosphere (10) → housekeeping (11) → final sweep (12). Task 5 gates 6/7/8; Task 4's `shoot.mjs` gates 12; C1's `noise.ts` gates C2/C3/C4; C3's `stampForest` opts + C4's clutter exports gate Task 10.
+- **Curves-extension consistency (checked against the LIVE `feat/realism` code):** `noise.ts` exports (`mulberry32`/`seededAt`/`displaceRadial`/`undulation`/`UNDULATION_AMP_M`) identical in C1/C2 (defn) and C2/C3/C4 + tests (use); `organic.ts` exports match every constructor rebuild; `buildWatcher`/`buildHag` export names match the organic tests; `groundYAt` name identical on `BuiltZone`, in the six `main.ts` swaps, and in the Task 10 scatter/banner snippets; `stampForest` `opts: { tilt?, windMats? }` is ONE object across C3 (defn) and Task 10 (extension); `stoneGeometry`/`bonePileGeometry`/`stumpGeometry` zero-arg contract identical in C4 (defn) and Task 10's `CLUTTER` map; the C2 ground/skirt code was written against the SHIPPED `buildExteriorGround` (+y winding, `if (map)` conditional-assign pattern) and `buildTerrainSkirt`, not the superseded Task 6 text; Task 10's stale clutter/exteriorProps references were reconciled (clutter moved to C4; wind reconciled against bent trunks).
