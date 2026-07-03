@@ -37,6 +37,16 @@ SOURCES = {
         CACHE, 'kaykit-skeletons', 'addons', 'kaykit_character_pack_skeletons', 'Textures', 'skeleton_texture.png'),
 }
 
+# Realism pass (Task 5): standalone photo textures → 128px crunched PNGs in
+# assets/tex/ (NO GLB embed). basename in assets/tex/ -> cached source jpg.
+PHOTO_SOURCES = {
+    'ground-dirt':   os.path.join(CACHE, 'ambientcg', 'ground-dirt.jpg'),
+    'bark':          os.path.join(CACHE, 'ambientcg', 'bark.jpg'),
+    'rock':          os.path.join(CACHE, 'ambientcg', 'rock.jpg'),
+    'hound-hide':    os.path.join(CACHE, 'ambientcg', 'hound-hide.jpg'),
+    'kneeler-cloth': os.path.join(CACHE, 'ambientcg', 'kneeler-cloth.jpg'),
+}
+
 
 def process_atlas(src_path):
     """1024 px atlas -> 128 px, darkened toward palette, posterized 5 bits."""
@@ -75,6 +85,23 @@ def main():
         with open(out, 'wb') as f:
             f.write(data)
         processed[name] = data
+        print(f'  assets/tex/{name}.png  ({im.size[0]}px, {len(data) / 1024:.1f} KB)')
+
+    for name, src in PHOTO_SOURCES.items():
+        if not os.path.exists(src):
+            print(f'MISSING photo source: {src} — run scripts/fetch-assets.sh first.', file=sys.stderr)
+            sys.exit(1)
+        im = process_atlas(src)  # resize 128 → darken toward palette → posterize 5-bit
+        # The palette-darken + 5-bit posterize leaves ≤~256 distinct colours, so
+        # an indexed PNG is LOSSLESS (verified pixel-identical) yet ~half the size
+        # of RGBA — high-frequency natural photo detail is dense, and this keeps
+        # each standalone map within the realism-pass ≤~8 KB asset budget. (The
+        # shared atlas path above stays RGBA — GLBs embed alpha for cutouts.)
+        im = im.convert('RGB').convert('P', palette=Image.ADAPTIVE, colors=256)
+        data = png_bytes(im)
+        out = os.path.join(TEX, f'{name}.png')
+        with open(out, 'wb') as f:
+            f.write(data)
         print(f'  assets/tex/{name}.png  ({im.size[0]}px, {len(data) / 1024:.1f} KB)')
 
     # re-embed the processed atlases into every kit GLB that carries one

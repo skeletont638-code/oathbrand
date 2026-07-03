@@ -48,6 +48,24 @@ fi
 echo "$CROWN_SHA256  $CACHE/polypizza/crown.glb" | sha256sum -c - >/dev/null \
   || { echo "ERROR: crown.glb checksum mismatch — refusing to use it." >&2; exit 1; }
 
+# --- Realism pass (Task 5): CC0 photo textures from AmbientCG (all CC0) -------
+mkdir -p "$CACHE/ambientcg"
+fetch_acg() { # $1 = asset id, $2 = local basename
+  local zip="$CACHE/ambientcg/$1.zip"
+  if [ ! -f "$CACHE/ambientcg/$2.jpg" ]; then
+    echo "  AmbientCG $1 → $2.jpg"
+    curl -fsSL -A "Mozilla/5.0" "https://ambientcg.com/get?file=${1}_1K-JPG.zip" -o "$zip" \
+      || { echo "ERROR: AmbientCG $1 download failed (try the fallback id in LICENSES.md)" >&2; exit 1; }
+    unzip -oq "$zip" "${1}_1K-JPG_Color.jpg" -d "$CACHE/ambientcg"
+    mv "$CACHE/ambientcg/${1}_1K-JPG_Color.jpg" "$CACHE/ambientcg/$2.jpg"
+  fi
+}
+fetch_acg Ground037 ground-dirt
+fetch_acg Bark012    bark
+fetch_acg Rock030    rock
+fetch_acg Leather011 hound-hide
+fetch_acg Fabric030  kneeler-cloth
+
 # --- curate -> process textures -> verify ------------------------------------
 python3 scripts/curate-assets.py
 python3 scripts/downsample-textures.py

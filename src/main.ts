@@ -4,6 +4,7 @@ import { TUNING } from './content/tuning';
 import type { GameFlag, ZoneId } from './content/types';
 import { hasZone, zoneOrThrow, ZONES } from './content/zones';
 import { skyFogColor } from './world/exteriorSky';
+import { preloadTextures } from './world/textures';
 import { Game } from './engine/Game';
 import { DreadDirector } from './engine/DreadDirector';
 import type { DreadCtx, ScareActivation } from './engine/DreadDirector';
@@ -325,6 +326,7 @@ async function startScene(): Promise<void> {
   // vista seen-set (one-shots stay one-shot across reloads once banked at
   // a banner). Full save-restore (CONTINUE) lands with the menus (T18).
   const save = loadGame();
+  await preloadTextures(); // realism pass: ground/bark/rock/hide/cloth ready before the first zone builds
   const flags = new Set<GameFlag>(save?.flags ?? []);
   // Greater Vael Drop 1 (Task 9): the Ashen Gate postern into the Fields opens
   // once the castle is beaten. Derive `greater-vael-open` into the LIVE flag set
