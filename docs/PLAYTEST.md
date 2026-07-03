@@ -166,3 +166,197 @@ then a plain reload → **CONTINUE** restores it. Domain-level intactness checke
       `— — —` until witnessed (controller-ratified). Owner may veto the styling.
 - [ ] **Overall feel pass** — pacing of each zone, boss difficulty curve,
       ember-economy tension, ending payoffs.
+
+---
+---
+
+# OATHBRAND — Greater Vael Drop 1 (spec §12)
+
+The Drop-1 exterior expansion playtest, driven programmatically on **2026-07-03**
+against the `VITE_E2E` build (served by `vite preview`), using headless Chromium
++ the `window.__oathbrand` handle — its dev/CI-only `loadZone(id)` jump (so the
+sweep reaches a Greater Vael zone without a beaten-castle playthrough), the
+`drawCalls` reader (`renderer.info.render.calls`, whole-frame — the E2E build
+turns `autoReset` off + resets per frame exactly like the `?dev=1` HUD), and the
+deterministic `stepFrame()`. Re-run: `npx playwright test` (the four
+`e2e/greater-vael.spec.ts` cases run headless in-sandbox and in CI).
+
+**Split:** AGENT-VERIFIED items were executed now, each with an evidence pointer
+(a passing e2e assertion, an integration-sweep `SWEEP` line, a cited unit test,
+or a checked-in shot). OWNER PASS items need human hands or human judgement —
+above all the owner's *"genuinely creepy"* bar for the tall entities, which the
+agent does **not** sign off. **P0 policy unchanged** (broken progression / crash
+/ softlock / save corruption → agent fixes + commits per fix; feel/tuning →
+OWNER PASS, never `tuning.ts`).
+
+**Drop-1 sweep result: 34/34 agent checks passed · 0 P0s found.** The one P0
+adjacent to this task (main.ts wrote `version:1` checkpoints and never persisted
+`greater-vael-open`) was the T7 controller obligation — fixed under commit
+`fix(save): main.ts writes v2 checkpoints + persists greater-vael-open` (TDD).
+
+---
+
+## AGENT-VERIFIED
+
+### Playwright exterior smoke (Step 1) — executed locally + CI
+- [x] `e2e/greater-vael.spec.ts` (chromium, 4 cases): jumps to each exterior zone
+      via `__oathbrand.loadZone(id)`, polls state → `playing`, waits for the
+      renderer to draw the zone, and asserts the **whole-frame draw count < 100**.
+      Gate Fields additionally asserts **zero console errors**. **Executed
+      locally — green** (`npx playwright test`, 3× no flake), and wired into CI
+      (the config's `e2e/*.spec.ts` glob already picks the new spec up; the
+      `deploy` job still `needs: [build, e2e]`, main-only). `loadZone` /
+      `drawCalls` are exposed only under `?dev=1` **or** a `VITE_E2E=1` build —
+      never the shipped bundle.
+
+### Performance sweep (Step 2) — all four exterior zones under budget
+Steady-state, measured live via `__oathbrand.drawCalls` (whole frame, both PS1
+pipeline passes) + a scene-graph light count. **Draw calls is the GPU-independent
+pass/fail gate.** FPS is not tabled: Playwright's headless GL is SwiftShader (no
+GPU), so it reads depressed — judge draws/tris/lights (per the T19 quirk note).
+
+| zone | draw calls | triangles | lights | budget |
+|------|-----------:|----------:|-------:|--------|
+| gate-fields | 30 | 56,098 | 1 | ✅ <100 · <100k · ≤4 |
+| ashen-forest-n | 7 | 20,013 | 1 | ✅ (instanced grass/trunk/canopy = 3 draws) |
+| cinder-village | 16 | 54,420 | 1 | ✅ |
+| pilgrims-descent | 7 | 13,709 | 1 | ✅ (height layer adds no draw surface) |
+
+- [x] **< 100 draw calls / zone** — max **30** (gate-fields). ✅
+- [x] **< 100k triangles / zone** — max **56,098** (gate-fields). ✅
+- [x] **≤ 4 lights / zone** — **1** each (the scene `AmbientLight`; the moon +
+      sky dome + ash-fall are meshes/`Points`, not lights — zone `lights: []`). ✅
+- [x] **Tightening fog only reduces draws** — the fog far-plane is a *shader*
+      pull-in (the camera far-plane, `100 m`, is the cull boundary and is
+      constant); a scare spawns **no** new drawable, so the measured steady-state
+      is the per-zone ceiling — a scare can only hold or drop it. No zone is near
+      the ceiling, so **no merge pass is needed**.
+
+### Full Drop-1 traverse + doors both ways (`SWEEP B`)
+- [x] Every Greater Vael zone loads to `playing` and renders (`SWEEP B-*-live`),
+      and every authored door resolves with the correct destination — both
+      directions of all four pairs:
+      ashen-gate↔gate-fields (`gate-to-fields`/`gf-to-gate`), and the hub's three
+      spokes gate-fields↔{cinder-village, ashen-forest-n, pilgrims-descent}
+      (`gf-to-*`/`*-to-fields`). The two Drop-2 arches (`cv-to-saltroad`,
+      `pd-to-saltroad`) are present but target the **unbuilt** `salt-road` (still
+      in `FUTURE_ZONE_IDS` → sealed). **Zero console errors** across the traverse
+      (`SWEEP B-console-clean`).
+
+### Postern seal → open + v1→v2 migration in place (`SWEEP A`)
+- [x] A **fresh** boot (no save) leaves `greater-vael-open` unset — the postern
+      is sealed (`SWEEP A1-fresh-sealed`). A staged **beaten-castle v1** save
+      (`endingsSeen:[1]`) migrates to **v2 in place** on load, opens the postern
+      (`greater-vael-open` derived into the live flag set), and the stored payload
+      now reads `version:2` with `greaterVael.open:true` (`SWEEP A2-*`). Migration
+      + round-trip stay green (`save.test.ts`, 20 cases).
+
+### Hag bargain — all four offer paths wired (`SWEEP C`, Ashen Forest N threshold)
+- [x] **Ember tithe** — `maxEmberCap` drops `5→4`, `hag-tithed` set, one live
+      ember burns now (`SWEEP C-ember-tithe`). **Kneel** — `hag-kneeled` set, cap
+      untouched (`SWEEP C-kneel`). **Give ledger** — requires `tithe-ledger`;
+      sets `hag-ledger-given`, consumes the ledger, cap untouched
+      (`SWEEP C-ledger`). **Turn away (decline)** — a pure no-op: cap + struck
+      bargains unchanged (`SWEEP C-decline-noop`). The **max-ember cap lowers on
+      `ember` and restores on leaving Greater Vael** is code-verified at the GV
+      boundary (`main.ts` `goThrough`: exterior→interior calls `restoreEmberCap` +
+      persists at once) and unit-proven (`hagBargain.test.ts` `restoreEmberCap`,
+      + the fog-line-once-per-visit guard). The full §6.4 table (all four rows,
+      decline no-op, tithe-keeps-dropping) is exhaustively unit-tested
+      (`hagBargain.test.ts`, 14 cases).
+
+### Checkpoint save-write at a gv banner (`SWEEP D`) — the T7 obligation, live
+- [x] Kneeling (rekindle) in Cinder Village writes a checkpoint that is **v2
+      directly** (no v1↔v2 oscillation), carries the current zone, and mirrors the
+      real postern flag into `greaterVael.open:true` (`SWEEP D-v2/-zone/-gv-open`).
+      A reload re-derives the postern-open from that save and the saved zone
+      persists (`SWEEP D-resume-*`) — save-quit-resume intact at a gv banner.
+
+### DreadDirector ledger + the hard rules
+- [x] The run-scoped director boots with a **clean ledger** on drop entry —
+      `watcherSightings:0`, empty `glitchSeen` (`SWEEP F-*`). The Drop-1 caps are
+      proven exhaustively (deterministic timers) in **`dreadDirector.test.ts`**:
+      **≤10 beats/drop & ≤2× per gimmick** (`caps each gimmick at 2 and never
+      exceeds 10 beats`), **≥90 s cooldown** (`fires A on approach, then holds the
+      90s cooldown`), **never in combat / no cooldown burn** (`never fires in
+      combat…`), **no damage field** (a damaging scare is unrepresentable),
+      **Watcher ≤6** (`increments Watcher sightings and caps them at 6`),
+      **min-sighting-range rule 10**, and **per-zone anchor scoping** (T5/T10
+      review guards). 17 cases, all green.
+- [x] **Checkpoint banner never spoofed** — PD-2 is a `desaturation`-only beat
+      (touches no banner mesh; zone data `oneLine` "A banner burns where you can't
+      reach; yours is safe."); the player's OWN banner sits at `[7,10]` as a real
+      placed `built.banner` (a KNEEL interactable), so kneeling there always works
+      (owner decision 8). Structurally guaranteed by the zone data.
+- [x] **Flicker-safe strips per-frame components on all four gimmicks** — the
+      screen-scare kit is flicker-safe **by construction** (no per-frame-random
+      term in any of snap-grid / resolution-drop / desaturation / false-pulse), so
+      `setFlickerSafe(true)` has nothing to strip. Proven byte-identical
+      (`screenScareKit.test.ts` — `produces byte-identical output at the same
+      elapsed`). The pipeline + kit toggles are both driven off the one settings
+      sink (`main.ts` `setFlickerSafe`).
+
+### v1 castle regression spot-check (`SWEEP E`)
+- [x] A **fresh boot targets the Ashen Gate** (v1 start), unchanged: **22 draw
+      calls** — byte-for-byte the T19 baseline. A **castle-interior walk**
+      (great-hall) still loads + renders clean at **42 draw calls** — again the
+      exact T19 number. **Zero console errors.** (`SWEEP E-boot-ashen-gate`,
+      `-great-hall`, `-console-clean`.)
+- [x] **v1 vista clip #1 still fires** after T12's vista-fire relocation:
+      standing on the Ashen Gate vista row (`[1,5]`) and stepping banks
+      `vista-ashen-gate` into `vista.seenIds` (`SWEEP E-vista-clip1`). The
+      relocation did not regress the castle's signature reveal.
+
+### Clip crops — every clip renders in a 9:16 phone crop (Step 4)
+- [x] All five hero/beat crops verified at **720×1280** (ratio 0.5625, chasm
+      741×1318 ≈ 0.562):
+      `docs/shots/gv-clip-oak-916.png` (#1 oak) ·
+      `gv-clip-watcher-916.png` (#2 AF-2 Watcher, hero) ·
+      `gv-clip-hag-bargain-916.png` (#3 Hag) ·
+      `gv-clip-lights-916.png` (#4 procession) ·
+      `gv-clip-chasm-916.png` (#5 PD-1 chasm, hero). The oak canonical-name crop
+      and the missing Hag 9:16 crop were produced this pass from their landscape
+      sources; the other three shipped in Tasks 9–12.
+
+---
+
+## OWNER PASS (human hands / human judgement)
+
+### The creepy bar (the drop's whole reason)
+- [ ] **The tall entities are *genuinely* creepy** — the Watcher (frozen 3 m
+      silhouette, never approached, despawn ≤10 m) and the Hag at the fog-line
+      must *unsettle*, not read as janky props. This is the owner's call; the
+      agent verified the *discipline* (frustum-freeze, off-screen-only reposition,
+      budget), not the *dread*.
+- [ ] **Watcher sighting cadence & framing** — target **4** across the drop (Gate
+      Fields treeline / AF-2 / Cinder rooftop / PD-1), within the 3–6 budget.
+      Confirm each sighting lands where intended, holds menace, and never lets you
+      close the distance. (Budget + range + despawn are code/unit-enforced; the
+      *staging feel* is yours.)
+- [ ] **Scare pacing by feel** — the ≥90 s / ≤10-beat / ≤2×-gimmick rules make it
+      *safe*; only play tells you if the cadence reads as mounting dread rather
+      than a metronome. Ratify or ask for a retune (values in `tuning.ts`).
+
+### Must be done on real hardware / by ear
+- [ ] **Audio soundscape listen** — the four gv beds (field-wind/tithe-toll,
+      forest-hush/wrong, cinder-wind/knock, descent-drone/wind), the **knock**,
+      the **silence-spike** duck-to-silence, and the pant/creak positional cues —
+      all set analytically (T6). Ratify by ear.
+- [ ] **Mobile device run** — the exterior zones on a real phone: touch stick +
+      drag-look, portrait/landscape, the height ramps, no page scroll, 60 fps on
+      a real GPU (agent's fps was SwiftShader).
+
+### Feel / tuning ratification (NOT changed by the agent)
+- [ ] **Veteran difficulty is owner-tunable (owner decision 6).** Ember-economy
+      retune notes for the owner: the Hag ember tithe is a **permanent −1 cap for
+      the whole drop** (restored only on leaving Greater Vael / the next Vigil),
+      the floor is `MIN_EMBER_CAP` and a tithe is refused at the floor or without
+      a spare live ember (`canTithe`). On a beaten-castle entry the brand starts
+      full (cap 5). If Drop 1 should bite harder on a veteran run, the levers are
+      `TUNING.greaterVael` (fog defaults, Watcher range) + the ember-tithe
+      cost/floor — all owner-side, none touched by this task.
+- [ ] **Fog-line boon generosity** — an ember tithe parts Ashen Forest N's fog
+      `+6 m` for the visit. Ratify the reach or shrink it.
+- [ ] **Overall Drop-1 feel pass** — zone-to-zone pacing off the Gate Fields hub,
+      the tithe story spine (inscriptions → visions → Ash-Priest), and whether the
+      one interaction (the Hag) carries the drop.

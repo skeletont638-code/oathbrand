@@ -1805,6 +1805,13 @@ async function startScene(): Promise<void> {
   // without the dev HUD. Zone-scoped values are getters — rebound each transition.
   const exposeDevHandle = hud !== null || import.meta.env.VITE_E2E === '1';
   if (exposeDevHandle) {
+    // The PS1 pipeline renders twice/frame (scene → low-res target, then the
+    // upscale blit). With autoReset on, renderer.info.render would only ever show
+    // the final 1-call blit — so `drawCalls` (below) would be a meaningless 1 in
+    // the VITE_E2E build (which has no dev HUD). Turn autoReset off and reset once
+    // per frame (the render section below) so `drawCalls` covers the WHOLE frame,
+    // exactly as the ?dev=1 HUD does. Never runs in the shipped bundle.
+    renderer.info.autoReset = false;
     (window as unknown as Record<string, unknown>).__oathbrand = {
       renderer,
       zones,
@@ -1907,6 +1914,25 @@ async function startScene(): Promise<void> {
       },
       // Dev-only deterministic stepper for headless QA (throttled rAF).
       stepFrame: (dtMs = 16) => step(performance.now(), dtMs),
+      // Task 13: dev/CI-only zone jump so the Greater Vael exterior smoke can
+      // reach a gv zone without a beaten-castle playthrough. Loads the zone,
+      // stands the knight at its spawn, and drops into play — the frame loop
+      // then renders it (so `drawCalls` populates). Gated with the whole handle
+      // behind `?dev=1` / VITE_E2E, so it is NEVER in the shipped bundle.
+      loadZone: async (id: string): Promise<void> => {
+        built = await zones.load(id as ZoneId, ngPlus);
+        const s = findSpawn(resolveZone(id as ZoneId));
+        controller.pos.set(s.x, 0, s.z);
+        controller.yaw = 0;
+        controller.pitch = 0;
+        enterZone();
+        beginPlay();
+      },
+      // Task 13: the renderer's last-frame draw-call count — the GPU-independent
+      // perf budget the smoke asserts (< 100). Reads `renderer.info.render.calls`.
+      get drawCalls() {
+        return renderer.info.render.calls;
+      },
     };
     // Dev-only brand test keys: H burns an ember, R kneels at a phantom
     // banner, K strikes the Forsworn for 4 (fast phase-forcing in QA).
@@ -2503,7 +2529,11 @@ async function startScene(): Promise<void> {
     //    max() so the stab never fights (or is fought by) the ember ramp.
     pipeline.setDesaturation(Math.max(pipeline.getDesaturation(), scareKit.desatBoost()));
 
-    hud?.begin();
+    // Frame-start info reset so draw calls cover both pipeline passes. The dev
+    // HUD does this in begin(); the VITE_E2E build (no HUD, handle exposed) needs
+    // it too so `__oathbrand.drawCalls` reads the real per-frame count.
+    if (hud) hud.begin();
+    else if (exposeDevHandle) renderer.info.reset();
     pipeline.render(scene, camera);
     shots?.afterRender();
     hud?.end(zones.current);
