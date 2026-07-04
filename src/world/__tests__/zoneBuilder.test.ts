@@ -311,6 +311,30 @@ describe('ZoneBuilder.build (exterior)', () => {
       exteriorZone(['..', '..'], { scatter: [{ kind: 'stone', cells: [[0, 0], [1, 1]] }] }), fakeAssets());
     expect(instancedNames(built.group)).toContain('clutter-stone');
   });
+  it('the standalone banner pivots about its own pole: world anchor on mesh.position, geometry local', () => {
+    // Regression guard (T10 review): baking the FULL world placement into the
+    // geometry and leaving the mesh at (0,0,0) makes main's rotation.z sway
+    // pivot about the WORLD ORIGIN — a metre-scale heave, not a pendulum skew.
+    // The anchor must live on mesh.position; the geometry stays at its base.
+    const built = new ZoneBuilder().build(
+      exteriorZone(['.B', '..'], { banner: { at: [0, 1], name: 'Test Banner' } }), fakeAssets());
+    const bannerMesh = meshNamed(built.group, 'banner-standalone');
+    expect(bannerMesh).toBeDefined();
+    expect(built.bannerMesh).toBe(bannerMesh);
+    // World anchor carried by the mesh transform (banner cell [0,1] → cx=3,
+    // cz=1, hung on the implicit north wall: z = cz − setback, setback =
+    // half − BANNER_BACK_M × BANNER_EXT_SCALE = 1 − 0.69 × 0.65).
+    expect(bannerMesh!.position.x).toBeCloseTo(3, 6);
+    expect(bannerMesh!.position.z).toBeCloseTo(1 - (1 - 0.69 * 0.65), 6);
+    expect(bannerMesh!.position.y).toBeCloseTo(
+      built.groundYAt(bannerMesh!.position.x, bannerMesh!.position.z), 6);
+    // Geometry stays LOCAL to the pole (bbox centred near its own origin, not
+    // out at world x≈3) so rotation.z skews about the attachment point.
+    bannerMesh!.geometry.computeBoundingBox();
+    const c = bannerMesh!.geometry.boundingBox!.getCenter(new Vector3());
+    expect(Math.abs(c.x)).toBeLessThan(1);
+    expect(Math.abs(c.z)).toBeLessThan(1);
+  });
 
   it("a prop kind inherited from Object.prototype (e.g. 'toString') stays a kit piece", () => {
     // Object.hasOwn guard: a plain index/`in` lookup on PROCEDURAL_PROPS reaches

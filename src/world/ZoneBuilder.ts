@@ -655,13 +655,17 @@ export class ZoneBuilder {
       });
     };
 
-    /** A standalone (un-merged) banner mesh so it can sway (exterior only). Clones
-     *  the template's mesh geometry with the placement baked in + a patched material
-     *  clone; the atlas texture stays shared with the template cache. */
+    /** A standalone (un-merged) banner mesh so it can sway (exterior only). Bakes
+     *  only the LOCAL rotation/scale into the cloned geometry and carries the
+     *  world anchor on `mesh.position`, so `main`'s `rotation.z` sway pivots
+     *  about the banner's own pole — NOT the world origin (which would heave
+     *  the whole banner metres sideways). Material is a patched clone; the
+     *  atlas texture stays shared with the template cache. */
     const buildStandaloneBanner = (x: number, y: number, z: number, rotY: number, scale: number): Mesh | undefined => {
       const template = assets.get('banner');
-      const place = new Matrix4().compose(
-        new Vector3(x, y, z), new Quaternion().setFromAxisAngle(UP, rotY), new Vector3(scale, scale, scale),
+      // Zero translation: the geometry stays anchored at its own base.
+      const local = new Matrix4().compose(
+        new Vector3(0, 0, 0), new Quaternion().setFromAxisAngle(UP, rotY), new Vector3(scale, scale, scale),
       );
       const geoms: BufferGeometry[] = [];
       let srcMat: Material | undefined;
@@ -670,7 +674,7 @@ export class ZoneBuilder {
         if (!mesh.isMesh || Array.isArray(mesh.material)) return;
         srcMat = mesh.material;
         const g = mesh.geometry.clone();
-        g.applyMatrix4(new Matrix4().multiplyMatrices(place, mesh.matrixWorld));
+        g.applyMatrix4(new Matrix4().multiplyMatrices(local, mesh.matrixWorld));
         geoms.push(g);
       });
       if (geoms.length === 0 || !srcMat) return undefined;
@@ -681,6 +685,7 @@ export class ZoneBuilder {
       forceNearest(material);
       patchMaterial(material);
       const mesh = new Mesh(geometry, material);
+      mesh.position.set(x, y, z); // world anchor — the sway's pivot
       mesh.name = 'banner-standalone';
       return mesh;
     };
