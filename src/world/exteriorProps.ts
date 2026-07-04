@@ -10,11 +10,23 @@
  * `base at y0` convention of the forest kit is relaxed here: the only grounded
  * invariant the test guards is that nothing dips below the floor (minY ≥ 0).
  *
- * (Ground-clutter geometry — `stoneGeometry`/`bonePileGeometry`/`stumpGeometry`
- * — is ADDED in Task 10.)
+ * Curves pass (C4): the gibbet is REBUILT from rounded rods/rings/blob (no box
+ * bars) and the ground-clutter geometry — `stoneGeometry`/`bonePileGeometry`/
+ * `stumpGeometry` — is ADDED here, consumed by Task 10's scatter `CLUTTER` map.
  */
-import { BoxGeometry, BufferGeometry, ConeGeometry, Float32BufferAttribute } from 'three';
+import {
+  BufferGeometry,
+  ConeGeometry,
+  CylinderGeometry,
+  Float32BufferAttribute,
+  IcosahedronGeometry,
+  LatheGeometry,
+  SphereGeometry,
+  TorusGeometry,
+  Vector2,
+} from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { displaceRadial, seededAt } from './noise';
 
 const IRON = 0x2a2724; // rusted dark iron
 const BONE = 0x6b6252; // the occupant bundle
@@ -38,24 +50,80 @@ function merge(parts: BufferGeometry[]): BufferGeometry {
   return m;
 }
 
-/** A painted box of size w×h×d, centred at (x, y, z). */
-function bar(w: number, h: number, d: number, y: number, x: number, z: number, hex: number): BufferGeometry {
-  const g = new BoxGeometry(w, h, d); g.translate(x, y, z); return paint(g, hex);
+/** A rounded iron rod (6-sided cylinder), authored along y, centred at (x, y, z). */
+function rod(r: number, len: number, y: number, x: number, z: number, hex: number): BufferGeometry {
+  const g = new CylinderGeometry(r, r, len, 6, 1);
+  g.translate(x, y, z);
+  return paint(g, hex);
 }
 
-/** A rusted iron cage hung high (rusted open — lore card), with a bone bundle
- *  inside. ~1.0 m cage, hung so its top bar sits ~2.6 m up. */
+/** A cage ring — a low-poly torus lying flat at height y. */
+function ring(r: number, tube: number, y: number, hex: number): BufferGeometry {
+  const g = new TorusGeometry(r, tube, 4, 10);
+  g.rotateX(Math.PI / 2);
+  g.translate(0, y, 0);
+  return paint(g, hex);
+}
+
+/** A rusted iron cage hung high (rusted open — lore card), with a slumped bone
+ *  occupant. C4: ROUNDED — rod uprights, torus rings, a displaced bone blob;
+ *  no box bars. Same footprint/heights as the shipped box version. ~370 tris. */
 export function gibbetGeometry(): BufferGeometry {
   const parts: BufferGeometry[] = [];
-  const yTop = 2.6, cage = 1.0, half = 0.28;
-  parts.push(bar(0.06, 0.4, 0.06, yTop + 0.2, 0, 0, IRON));           // hanger stem
-  parts.push(bar(0.7, 0.06, 0.7, yTop, 0, 0, IRON));                  // top ring
-  parts.push(bar(0.7, 0.06, 0.7, yTop - cage, 0, 0, IRON));           // bottom ring
+  const yTop = 2.6;
+  const cage = 1.0;
+  const half = 0.28;
+  parts.push(rod(0.03, 0.4, yTop + 0.2, 0, 0, IRON)); // hanger stem
+  parts.push(ring(0.34, 0.028, yTop, IRON)); // top ring
+  parts.push(ring(0.34, 0.028, yTop - cage, IRON)); // bottom ring
   for (const [x, z] of [[half, half], [-half, half], [half, -half], [-half, -half]] as const) {
-    parts.push(bar(0.05, cage, 0.05, yTop - cage / 2, x, z, IRON));   // four uprights
+    parts.push(rod(0.024, cage, yTop - cage / 2, x, z, IRON)); // four rounded uprights
   }
-  parts.push(bar(0.22, 0.5, 0.22, yTop - cage + 0.35, 0, 0, BONE));   // slumped bone bundle
+  // The slumped occupant — a displaced bone blob, not a box.
+  const bone = displaceRadial(new SphereGeometry(0.17, 7, 5), 0.05, 0xb0e);
+  bone.scale(1, 1.4, 1);
+  bone.translate(0, yTop - cage + 0.38, 0);
+  parts.push(paint(bone, BONE));
   return merge(parts);
+}
+
+// --- C4 ground clutter (consumed by Task 10's scatter `CLUTTER` map) ---------
+
+/** A lumpy field stone (~0.5 m) — a seeded noise-displaced icosahedron,
+ *  squashed and SETTLED into the ash (embedded a few cm; never floating). */
+export function stoneGeometry(): BufferGeometry {
+  const g = displaceRadial(new IcosahedronGeometry(0.26, 1), 0.07, 0x57e);
+  g.scale(1.1, 0.62, 0.95);
+  g.translate(0, 0.14, 0);
+  return paint(g, 0x4a4640);
+}
+
+/** A small bone pile — three tumbled rounded long-bones over a low ash mound. */
+export function bonePileGeometry(): BufferGeometry {
+  const parts: BufferGeometry[] = [];
+  const bone = (len: number, y: number, yaw: number, seed: number): BufferGeometry => {
+    const g = new CylinderGeometry(0.03, 0.042, len, 5, 1);
+    g.rotateZ(Math.PI / 2 - 0.12);
+    g.rotateY(yaw);
+    g.translate((seededAt(seed, 0, 0, 3) - 0.5) * 0.2, y, (seededAt(0, seed, 0, 3) - 0.5) * 0.2);
+    return paint(g, BONE);
+  };
+  parts.push(bone(0.52, 0.05, 0.3, 1), bone(0.44, 0.1, 1.7, 2), bone(0.38, 0.15, 2.6, 3));
+  const mound = displaceRadial(new SphereGeometry(0.2, 6, 4), 0.05, 0x60e);
+  mound.scale(1.3, 0.45, 1.2);
+  mound.translate(0, 0.05, 0);
+  parts.push(paint(mound, BONE));
+  return merge(parts);
+}
+
+/** A cut stump (~0.5 m) — a lathe with a root flare, lumpy bark, capped top. */
+export function stumpGeometry(): BufferGeometry {
+  const g = new LatheGeometry(
+    [new Vector2(0.34, 0), new Vector2(0.24, 0.09), new Vector2(0.2, 0.28), new Vector2(0.22, 0.48), new Vector2(0.02, 0.5)],
+    7,
+  );
+  displaceRadial(g, 0.03, 0x7a2);
+  return paint(g, 0x3b322a);
 }
 
 /** A pitched, charred roof wedge capping an H/A house cell (~2 m footprint). */

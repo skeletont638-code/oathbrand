@@ -137,7 +137,7 @@ describe('exteriorForest geometry', () => {
     expect(worstTris).toBeGreaterThan(0); // at least one exterior actually plants a forest
     // Conservative allowance for everything that is NOT forest: undulating
     // ground (~8 tris/cell × ~200 cells ≈ 1.6k), terrain skirt, sky dome +
-    // moon + ash Points, kit ruin blocks, roof wedges, props (gibbet ~96),
+    // moon + ash Points, kit ruin blocks, roof wedges, props (gibbet ~336),
     // entities (≤600 each, ~4 visible ≈ 2.4k) — 50k dwarfs all of it combined
     // (plan header accounts the true worst zone at ~20–25k INCLUDING forest).
     const STATIC_ALLOWANCE = 50_000;
