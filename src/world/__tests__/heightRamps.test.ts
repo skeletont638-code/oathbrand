@@ -58,4 +58,38 @@ describe('buildHeightRamps', () => {
     const seams = buildHeightRamps(zone(['.T'], ['03'], { T: 'wall' }));
     expect(seams).toEqual([]);
   });
+
+  // --- H4: band-1 (Δ1) path↔void lips get a cliff skirt too --------------------
+  // ('.' is floor by default — the descent's `p` trail maps to the same 'floor'
+  // kind, so the classifier behaves identically without declaring a tile.)
+  it('classifies a Δ1 path↔~ void lip as a cliff (H4 — band-1 gorge lip)', () => {
+    // A band-1 trail (level 1) beside a `~` gorge void (level 0): Δ1 with exactly
+    // ONE walkable side. Pre-H4 this matched neither branch (ramp needs both
+    // walkable; cliff needed Δ≥2) → no riser → a raw drop showing sky/void under
+    // the single-sided trail lip. It MUST now get a cliff face like the band-2/3 lips.
+    const seams = buildHeightRamps(zone(['.~'], ['10']));
+    expect(seams).toContainEqual({ a: [0, 0], b: [0, 1], kind: 'cliff' });
+    expect(seams.filter((s) => s.kind === 'ramp')).toHaveLength(0);
+  });
+
+  it('band-1 lips on BOTH sides of a one-cell trail arm each get a cliff', () => {
+    // `~.~` at heights 0/1/0 — the switchback ribbon is one cell wide, void on
+    // both flanks. Forward E-scan owns both seams: [0,0]↔[0,1] and [0,1]↔[0,2].
+    const seams = buildHeightRamps(zone(['~.~'], ['010']));
+    expect(seams).toContainEqual({ a: [0, 0], b: [0, 1], kind: 'cliff' });
+    expect(seams).toContainEqual({ a: [0, 1], b: [0, 2], kind: 'cliff' });
+    expect(seams.filter((s) => s.kind === 'cliff')).toHaveLength(2);
+  });
+
+  it('a Δ0 path↔void seam still emits nothing (coplanar lip needs no riser)', () => {
+    // The bottom band (level 0) beside a level-0 void has no height drop → a
+    // zero-height cliff would be degenerate; H4 only skirts Δ≥1 lips.
+    expect(buildHeightRamps(zone(['.~'], ['00']))).toEqual([]);
+  });
+
+  it('band-1↔band-0 walkable seam stays a ramp (H4 did not turn ramps into cliffs)', () => {
+    const seams = buildHeightRamps(zone(['.', '.'], ['1', '0']));
+    expect(seams).toContainEqual({ a: [0, 0], b: [1, 0], kind: 'ramp' });
+    expect(seams.filter((s) => s.kind === 'cliff')).toHaveLength(0);
+  });
 });

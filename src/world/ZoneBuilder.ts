@@ -319,7 +319,12 @@ export function buildHeightRamps(def: ZoneDef): { a: GridPos; b: GridPos; kind: 
         if (!walkable(ka) && !walkable(kb)) continue; // void↔void: nothing to stand on
         const d = Math.abs(Number(heightDigit(def, row, col)) - Number(heightDigit(def, nr, nc)));
         if (walkable(ka) && walkable(kb) && d === 1) out.push({ a: [row, col], b: [nr, nc], kind: 'ramp' });
-        else if (d >= 2) out.push({ a: [row, col], b: [nr, nc], kind: 'cliff' });
+        // A walkable↔void lip needs a cliff face at ANY drop ≥1 (H4): a band-1
+        // trail beside a `~` gorge is Δ1 with one non-walkable side — pre-H4 it
+        // matched neither branch (ramp wants both walkable; cliff wanted Δ≥2), so
+        // the single-sided trail quad showed sky/void under its lip. Band-2/3 lips
+        // (Δ≥2) already got a face; this gives band-1 (and any Δ1 path↔void) one too.
+        else if (d >= 2 || (d >= 1 && walkable(ka) !== walkable(kb))) out.push({ a: [row, col], b: [nr, nc], kind: 'cliff' });
       }
     }
   }
