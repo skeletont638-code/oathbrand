@@ -2047,6 +2047,11 @@ async function startScene(): Promise<void> {
 
   // Settings apply LIVE through the real setters on the T2 pipeline, the T17
   // mixer, the T7 controller, and the DOM text scale — never invented APIs.
+  // The player's CRT preference, tracked independently of the render mode: CRT
+  // is a PS1-era artifact, so HD forces it inert while REMEMBERING this choice
+  // so returning to PS1 restores it (HD-mode brief, seam 4). Set by applySettings
+  // (setCrt runs before setGraphics) before it's read.
+  let userCrt = false;
   const settingsSinks: SettingsSinks = {
     setMasterVolume: (v) => audio.setMasterVolume(v),
     setAmbienceVolume: (v) => audio.setAmbienceVolume(v),
@@ -2058,12 +2063,23 @@ async function startScene(): Promise<void> {
       controller.invertY = b;
     },
     setRenderHeight: (h) => pipeline.setRenderScale(h),
-    setCrt: (b) => pipeline.setCrtEnabled(b),
+    setCrt: (b) => {
+      userCrt = b;
+      // Only light the CRT pass in PS1; HD keeps it inert (choice remembered).
+      pipeline.setCrtEnabled(pipeline.getRenderMode() === 'ps1' ? b : false);
+    },
     setFlickerSafe: (b) => {
       pipeline.setFlickerSafe(b);
       scareKit.setFlickerSafe(b); // held glitch timelines survive; random layers strip
     },
     setTextScale: (v) => applyTextScale(v),
+    setGraphics: (m) => {
+      // Rebuilds the render target, flips the upscale uHd gate, and flips
+      // patchMaterial's compile-time mode (marking live materials for recompile).
+      pipeline.setRenderMode(m);
+      // Force CRT off in HD; restore the player's kept CRT choice on PS1 return.
+      pipeline.setCrtEnabled(m === 'ps1' && userCrt);
+    },
   };
   const settings = loadSettings();
   applySettings(settingsSinks, settings); // push the kept dials before first paint
@@ -2600,9 +2616,18 @@ async function startScene(): Promise<void> {
     // --- Task 3: apply the screen-scare kit to the PS1 pipeline ----------
     // Read the held glitch timelines (advanced by game.update) and drive the
     // existing pipeline setters — no new render code, one glitch metaphor.
+    //
+    // HD-mode prototype (brief seam 3): the resolution-DROP and vertex-snap
+    // SPIKE riders manipulate the render scale / snap grid, neither of which
+    // exists in HD. While in HD both are NO-OPS — the DreadDirector still fires
+    // the beat, the visual rider just doesn't render (same discipline as
+    // flicker-safe suppression). The desat STAB below is PRESERVED (desat
+    // survives in HD). The DROP *restore* stays ungated so any latch pending at
+    // a mid-beat mode switch still clears cleanly.
+    const hdMode = pipeline.getRenderMode() === 'hd';
     // 1) One-frame resolution DROP: force 240 for the beat, restore after (a
     //    no-op at the default 240 — the paired diegetic guttering carries it).
-    if (scareKit.renderDrop()) {
+    if (!hdMode && scareKit.renderDrop()) {
       if (dropRestoreScale === null) {
         dropRestoreScale = pipeline.getRenderScale();
         pipeline.setRenderScale(240);
@@ -2613,15 +2638,18 @@ async function startScene(): Promise<void> {
     }
     // 2) Vertex-snap SPIKE: override the snap grid while active, restore once.
     //    (setRenderScale above already re-syncs the grid, so compute the target
-    //    from the CURRENT scale.)
-    const snapTarget: [number, number] = pipeline.getRenderScale() === 240 ? [320, 240] : [480, 360];
-    const snapNow = scareKit.snapRes();
-    if (snapNow) {
-      setSnapResolution(snapNow[0], snapNow[1]);
-      snapOverridden = true;
-    } else if (snapOverridden) {
-      setSnapResolution(snapTarget[0], snapTarget[1]);
-      snapOverridden = false;
+    //    from the CURRENT scale.) Skipped whole in HD (no snap grid; returning
+    //    to PS1 re-syncs the grid via setRenderMode's target rebuild).
+    if (!hdMode) {
+      const snapTarget: [number, number] = pipeline.getRenderScale() === 240 ? [320, 240] : [480, 360];
+      const snapNow = scareKit.snapRes();
+      if (snapNow) {
+        setSnapResolution(snapNow[0], snapNow[1]);
+        snapOverridden = true;
+      } else if (snapOverridden) {
+        setSnapResolution(snapTarget[0], snapTarget[1]);
+        snapOverridden = false;
+      }
     }
     // 3) Desaturation STAB, composited with the Brand's per-frame hollowing via
     //    max() so the stab never fights (or is fought by) the ember ramp.

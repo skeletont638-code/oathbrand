@@ -3,6 +3,7 @@ import {
   BufferGeometry,
   Camera,
   DataTexture,
+  LinearFilter,
   Mesh,
   NearestFilter,
   RawShaderMaterial,
@@ -14,10 +15,13 @@ import {
   WebGLRenderer,
   WebGLRenderTarget,
 } from 'three';
-import type { IUniform, Texture } from 'three';
+import type { IUniform, MagnificationTextureFilter, Texture } from 'three';
 import { bayer4x4 } from './bayer';
-import { setSnapResolution } from './patchMaterial';
+import { setRenderMode as setPatchRenderMode, setSnapResolution } from './patchMaterial';
+import type { RenderMode } from './patchMaterial';
 import { UPSCALE_FRAGMENT_SHADER, UPSCALE_VERTEX_SHADER } from './upscale.frag';
+
+export type { RenderMode };
 
 export interface PS1PipelineOptions {
   /** Render-target height setting: 240 -> 320x240, 360 -> 480x360. Default 240. */
@@ -25,6 +29,29 @@ export interface PS1PipelineOptions {
 }
 
 const DEFAULT_HEIGHT_SETTING: 240 | 360 = 240;
+
+/** HD-mode render target cap: never exceed 1920×1080 (spec), even on 4K/ultrawide. */
+const HD_CAP_W = 1920;
+const HD_CAP_H = 1080;
+
+/**
+ * Resolve the HD render-target size for a given drawing-buffer size, capped to
+ * {@link HD_CAP_W}×{@link HD_CAP_H} with aspect ratio preserved (scale down by
+ * whichever axis binds first). Pure + exported so the cap math is unit-tested
+ * without a GL context. Never returns a zero dimension.
+ */
+export function hdTargetSize(
+  bufW: number,
+  bufH: number,
+  capW = HD_CAP_W,
+  capH = HD_CAP_H,
+): { width: number; height: number } {
+  const scale = Math.min(1, capW / bufW, capH / bufH);
+  return {
+    width: Math.max(1, Math.round(bufW * scale)),
+    height: Math.max(1, Math.round(bufH * scale)),
+  };
+}
 
 /** Builds a single oversized triangle covering the full NDC square: one draw
  * call, no diagonal seam — the standard fullscreen-pass trick. */
@@ -70,6 +97,7 @@ interface UpscaleUniforms {
   uFlickerSafe: IUniform<number>;
   uTime: IUniform<number>;
   uAspect: IUniform<number>;
+  uHd: IUniform<number>;
 }
 
 /**
@@ -86,8 +114,12 @@ export class PS1Pipeline {
   private readonly quadCamera: Camera;
   private readonly uniforms: UpscaleUniforms;
   private time = 0;
-  /** Current render-target height setting (240 → 320×240, 360 → 480×360). */
+  /** Current render-target height setting (240 → 320×240, 360 → 480×360). Only
+   * drives the target in PS1 mode; HD renders at native size but this is
+   * remembered so returning to PS1 restores the player's chosen scale. */
   private heightSetting: 240 | 360;
+  /** PS1 (retro, downscaled) vs HD (native-res A/B lens). Default PS1. */
+  private renderMode: RenderMode = 'ps1';
 
   constructor(renderer: WebGLRenderer, opts: PS1PipelineOptions = {}) {
     this.renderer = renderer;
@@ -118,6 +150,7 @@ export class PS1Pipeline {
       uFlickerSafe: { value: 0 },
       uTime: { value: 0 },
       uAspect: { value: 1 },
+      uHd: { value: 0 },
     };
 
     const quadMaterial = new RawShaderMaterial({
@@ -154,29 +187,79 @@ export class PS1Pipeline {
   }
 
   /**
-   * Switch the internal render resolution live (240 → 320×240, 360 → 480×360).
-   * Rebuilds the offscreen render target at the new size, re-points the upscale
-   * pass at it, and re-syncs `patchMaterial`'s vertex-snap grid so the PS1
-   * wobble stays keyed to the actual pixels. A no-op when already at `height`.
+   * The render target's spec for the CURRENT mode. PS1 → the fixed low res
+   * (320×240 / 480×360), NearestFilter. HD → the native drawing-buffer size
+   * capped to 1920×1080, LinearFilter (no pixelation, no snap-crawl).
    */
-  setRenderScale(height: 240 | 360): void {
-    if (height === this.heightSetting) return;
-    this.heightSetting = height;
+  private targetSpec(): { width: number; height: number; filter: MagnificationTextureFilter } {
+    if (this.renderMode === 'hd') {
+      const buf = this.renderer.getDrawingBufferSize(new Vector2());
+      const { width, height } = hdTargetSize(buf.x, buf.y);
+      return { width, height, filter: LinearFilter };
+    }
+    const height = this.heightSetting;
     const width = height === 240 ? 320 : 480;
+    return { width, height, filter: NearestFilter };
+  }
+
+  /**
+   * (Re)create the offscreen render target for the current mode, re-point the
+   * upscale pass at it, and — in PS1 mode only — re-sync `patchMaterial`'s
+   * vertex-snap grid to the target size so the wobble stays keyed to the actual
+   * pixels. (HD has no snap grid, so it leaves the last PS1 value untouched.)
+   */
+  private rebuildTarget(): void {
+    const { width, height, filter } = this.targetSpec();
     this.target.dispose();
     this.target = new WebGLRenderTarget(width, height, {
-      minFilter: NearestFilter,
-      magFilter: NearestFilter,
+      minFilter: filter,
+      magFilter: filter,
       depthBuffer: true,
     });
     this.uniforms.tDiffuse.value = this.target.texture;
     this.uniforms.uTargetSize.value.set(width, height);
-    setSnapResolution(width, height);
+    if (this.renderMode === 'ps1') setSnapResolution(width, height);
+  }
+
+  /**
+   * Switch the internal render resolution live (240 → 320×240, 360 → 480×360).
+   * Rebuilds the offscreen render target at the new size, re-points the upscale
+   * pass at it, and re-syncs `patchMaterial`'s vertex-snap grid so the PS1
+   * wobble stays keyed to the actual pixels. A no-op when already at `height`.
+   * In HD mode the target stays native — the new height is remembered and takes
+   * effect only when the player returns to PS1.
+   */
+  setRenderScale(height: 240 | 360): void {
+    if (height === this.heightSetting) return;
+    this.heightSetting = height;
+    if (this.renderMode === 'ps1') this.rebuildTarget();
   }
 
   /** Current render-target height setting (240 or 360). */
   getRenderScale(): 240 | 360 {
     return this.heightSetting;
+  }
+
+  /**
+   * Switch between the shipped PS1 pipeline and the HD (native-res) A/B lens.
+   * Rebuilds the render target (native+Linear for HD, low-res+Nearest for PS1),
+   * flips the upscale pass's `uHd` gate (bypasses quantize/dither/CRT in HD,
+   * desat preserved), and — mirroring how the constructor drives
+   * `setSnapResolution` — flips `patchMaterial`'s compile-time mode so every
+   * live material recompiles without its snap/affine injection (wind kept).
+   * A no-op when already in `mode`.
+   */
+  setRenderMode(mode: RenderMode): void {
+    if (mode === this.renderMode) return;
+    this.renderMode = mode;
+    this.rebuildTarget();
+    this.uniforms.uHd.value = mode === 'hd' ? 1 : 0;
+    setPatchRenderMode(mode);
+  }
+
+  /** Current render mode ('ps1' | 'hd'). */
+  getRenderMode(): RenderMode {
+    return this.renderMode;
   }
 
   /** 0 = full color, 1 = grayscale. Applied in the upscale pass only — never
@@ -202,11 +285,13 @@ export class PS1Pipeline {
     this.uniforms.uFlickerSafe.value = b ? 1 : 0;
   }
 
-  /** Call after the renderer/canvas is resized. The render target itself
-   * stays a fixed low resolution; this only refreshes the aspect ratio used
-   * by the CRT vignette so it stays correctly proportioned. */
+  /** Call after the renderer/canvas is resized. In PS1 mode the render target
+   * stays a fixed low resolution, so this only refreshes the aspect ratio used
+   * by the CRT vignette. In HD mode the target tracks the native drawing
+   * buffer, so it is rebuilt to the new size to stay crisp. */
   resize(): void {
     const size = this.renderer.getSize(new Vector2());
     this.uniforms.uAspect.value = size.y === 0 ? 1 : size.x / size.y;
+    if (this.renderMode === 'hd') this.rebuildTarget();
   }
 }

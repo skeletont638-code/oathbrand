@@ -36,6 +36,11 @@ uniform float uCrt;
 uniform float uFlickerSafe;
 uniform float uTime;
 uniform float uAspect;
+// HD-Mode prototype: 1 = native-res "realistic" pass (bypass RGB555 quantize +
+// Bayer dither + all CRT extras); 0 = the shipped PS1 pass. Desaturation is
+// PRESERVED in both (scare/vision code drives it). Default 0 → PS1 path
+// executes exactly as before, bit-for-bit.
+uniform float uHd;
 
 varying vec2 vUv;
 
@@ -64,32 +69,38 @@ void main() {
   vec3 color = linearToSRGB(texel.rgb);
 
   // Desaturate toward luma so grayscale mode also dithers cleanly
-  // (0 = full color, 1 = grayscale).
+  // (0 = full color, 1 = grayscale). PRESERVED in HD — the scare/vision code
+  // drives this and it is not a PS1 artifice.
   float luma = dot(color, LUMA);
   color = mix(color, vec3(luma), uDesat);
 
-  // Ordered (Bayer) dither: uBayer is a 4x4 NearestFilter/RepeatWrapping
-  // texture, sampled at native render-target texel granularity so the dither
-  // pattern is stable per source pixel regardless of the upscale factor.
-  float threshold = texture2D(uBayer, vUv * uTargetSize * 0.25).r;
-  color = floor(color * RGB555_LEVELS + threshold) / RGB555_LEVELS;
+  // Everything below is the PS1 artifice: RGB555 quantize + Bayer dither and
+  // the optional CRT extras. HD (uHd >= 0.5) bypasses the whole block, leaving
+  // the native-res, full-colour, perspective-correct image the scene rendered.
+  if (uHd < 0.5) {
+    // Ordered (Bayer) dither: uBayer is a 4x4 NearestFilter/RepeatWrapping
+    // texture, sampled at native render-target texel granularity so the dither
+    // pattern is stable per source pixel regardless of the upscale factor.
+    float threshold = texture2D(uBayer, vUv * uTargetSize * 0.25).r;
+    color = floor(color * RGB555_LEVELS + threshold) / RGB555_LEVELS;
 
-  if (uCrt > 0.5) {
-    // Static scanlines + vignette: no time dependence, always safe.
-    float scan = sin(vUv.y * uTargetSize.y * 3.14159265) * 0.04;
-    color -= scan;
+    if (uCrt > 0.5) {
+      // Static scanlines + vignette: no time dependence, always safe.
+      float scan = sin(vUv.y * uTargetSize.y * 3.14159265) * 0.04;
+      color -= scan;
 
-    vec2 centered = (vUv - 0.5) * vec2(uAspect, 1.0);
-    float vignette = smoothstep(0.9, 0.35, length(centered));
-    color *= mix(0.7, 1.0, vignette);
+      vec2 centered = (vUv - 0.5) * vec2(uAspect, 1.0);
+      float vignette = smoothstep(0.9, 0.35, length(centered));
+      color *= mix(0.7, 1.0, vignette);
 
-    // Grain + shimmer are per-frame time-varying flicker: disabled under
-    // flicker-safe mode (photosensitivity accessibility requirement).
-    if (uFlickerSafe < 0.5) {
-      float grain = (rand(vUv * uTargetSize + uTime) - 0.5) * 0.06;
-      color += grain;
-      float shimmer = sin(uTime * 18.0 + vUv.y * 40.0) * 0.015;
-      color += shimmer;
+      // Grain + shimmer are per-frame time-varying flicker: disabled under
+      // flicker-safe mode (photosensitivity accessibility requirement).
+      if (uFlickerSafe < 0.5) {
+        float grain = (rand(vUv * uTargetSize + uTime) - 0.5) * 0.06;
+        color += grain;
+        float shimmer = sin(uTime * 18.0 + vUv.y * 40.0) * 0.015;
+        color += shimmer;
+      }
     }
   }
 

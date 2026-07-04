@@ -38,6 +38,7 @@ const VALID: Settings = {
   crt: true,
   flickerSafe: true,
   textScale: 1.15,
+  graphics: 'hd',
 };
 
 describe('sanitizeSettings — shape', () => {
@@ -111,6 +112,15 @@ describe('sanitizeSettings — ranges', () => {
     for (const s of TEXT_SCALES) expect(sanitizeSettings({ textScale: s }).textScale).toBe(s);
     expect(sanitizeSettings({ textScale: 1.5 }).textScale).toBe(DEFAULT_SETTINGS.textScale);
     expect(sanitizeSettings({ textScale: 2 }).textScale).toBe(DEFAULT_SETTINGS.textScale);
+  });
+
+  it("graphics defaults to 'ps1' and accepts only 'ps1' | 'hd'", () => {
+    expect(DEFAULT_SETTINGS.graphics).toBe('ps1');
+    expect(sanitizeSettings({ graphics: 'hd' }).graphics).toBe('hd');
+    expect(sanitizeSettings({ graphics: 'ps1' }).graphics).toBe('ps1');
+    expect(sanitizeSettings({ graphics: 'ultra' }).graphics).toBe('ps1');
+    expect(sanitizeSettings({ graphics: 1 }).graphics).toBe('ps1');
+    expect(sanitizeSettings({}).graphics).toBe('ps1');
   });
 });
 
@@ -205,6 +215,7 @@ describe('applySettings', () => {
       setCrt: (b) => (calls.crt = b),
       setFlickerSafe: (b) => (calls.flicker = b),
       setTextScale: (v) => (calls.text = v),
+      setGraphics: (m) => (calls.graphics = m),
     };
     applySettings(sinks, VALID);
     expect(calls).toEqual({
@@ -217,6 +228,7 @@ describe('applySettings', () => {
       crt: true,
       flicker: true,
       text: 1.15,
+      graphics: 'hd',
     });
   });
 });

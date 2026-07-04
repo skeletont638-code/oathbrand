@@ -12,6 +12,9 @@ import { writeFileSync } from 'node:fs';
 
 const rawArgs = process.argv.slice(2);
 const drawcallsMode = rawArgs.includes('--drawcalls');
+// HD-Mode A/B prototype: flip the pipeline into native-res HD before capturing,
+// via the dev handle (same camera/zone as the PS1 shot → a clean comparison).
+const hdMode = rawArgs.includes('--hd');
 const positional = rawArgs.filter((a) => !a.startsWith('--'));
 const [zone = 'gate-fields', outName = `realism-${zone}`, freeze = '1'] = positional;
 const BASE = process.env.OATHBRAND_URL ?? 'http://localhost:5173/oathbrand/';
@@ -42,6 +45,10 @@ for (let i = 0; i < 200; i++) {
   if (ok) break;
   await new Promise((r) => setTimeout(r, 100));
 }
+// HD-Mode: flip render mode on the exposed pipeline BEFORE pumping frames, so the
+// material recompile + native-res target rebuild settle during the warm-up.
+if (hdMode) { await evalJs("window.__oathbrand.pipeline.setRenderMode('hd')"); }
+
 // pump a few frames (rAF is throttled headless) so the zone settles + paints.
 // stepFrame runs the whole frame (sim + both PS1 passes + info.reset) synchronously,
 // so renderer.info.render.calls holds the completed frame count after each call.

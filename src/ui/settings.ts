@@ -19,6 +19,9 @@
 /** Internal render height of the PS1 pipeline: 240 → 320×240, 360 → 480×360. */
 export type RenderHeight = 240 | 360;
 
+/** Graphics mode: the shipped PS1 look vs the HD (native-res) A/B lens. */
+export type GraphicsMode = 'ps1' | 'hd';
+
 export interface Settings {
   /** Final output trim (0..1), a multiplier over the tuned master gain. */
   volMaster: number;
@@ -38,6 +41,8 @@ export interface Settings {
   flickerSafe: boolean;
   /** UI text scale (one of TEXT_SCALES; multiplies overlay type via --ui-scale). */
   textScale: number;
+  /** Graphics mode — 'ps1' (default, shipped look) or 'hd' (native-res lens). */
+  graphics: GraphicsMode;
 }
 
 export const SETTINGS_KEY = 'oathbrand.settings.v1';
@@ -59,6 +64,7 @@ export const DEFAULT_SETTINGS: Settings = {
   crt: false,
   flickerSafe: false,
   textScale: 1,
+  graphics: 'ps1',
 };
 
 // ── pure range helpers ──────────────────────────────────────────────────────
@@ -103,6 +109,7 @@ export function sanitizeSettings(raw: unknown): Settings {
       typeof o.textScale === 'number' && (TEXT_SCALES as readonly number[]).includes(o.textScale)
         ? o.textScale
         : d.textScale,
+    graphics: o.graphics === 'hd' ? 'hd' : 'ps1',
   };
 }
 
@@ -151,6 +158,7 @@ export interface SettingsSinks {
   setCrt(b: boolean): void;
   setFlickerSafe(b: boolean): void;
   setTextScale(v: number): void;
+  setGraphics(m: GraphicsMode): void;
 }
 
 /** Push every dial of `s` at the sinks (used at boot and after a load). */
@@ -164,6 +172,9 @@ export function applySettings(sinks: SettingsSinks, s: Settings): void {
   sinks.setCrt(s.crt);
   sinks.setFlickerSafe(s.flickerSafe);
   sinks.setTextScale(s.textScale);
+  // Applied LAST so the render-mode switch has the final say over CRT (CRT is a
+  // PS1-era artifact — forced inert in HD, restored on the return to PS1).
+  sinks.setGraphics(s.graphics);
 }
 
 /** Set the DOM UI text scale (the default `setTextScale` sink). */
@@ -399,6 +410,18 @@ export class SettingsPanel {
     // — Picture —
     const picture = this.group('PICTURE');
     picture.append(
+      this.segRow('Graphics', [
+        {
+          text: 'PS1',
+          active: () => this.s.graphics === 'ps1',
+          pick: () => this.commit('graphics', 'ps1', () => this.sinks.setGraphics('ps1')),
+        },
+        {
+          text: 'HD',
+          active: () => this.s.graphics === 'hd',
+          pick: () => this.commit('graphics', 'hd', () => this.sinks.setGraphics('hd')),
+        },
+      ]),
       this.segRow('Render scale', [
         {
           text: '320',
