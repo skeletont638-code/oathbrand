@@ -325,7 +325,7 @@ async function startScene(): Promise<void> {
   // Run state seeded from the save: door-lock flags, NG+ remix, and the
   // vista seen-set (one-shots stay one-shot across reloads once banked at
   // a banner). Full save-restore (CONTINUE) lands with the menus (T18).
-  const save = loadGame();
+  let save = loadGame();
   await preloadTextures(); // realism pass: ground/bark/rock/hide/cloth ready before the first zone builds
   const flags = new Set<GameFlag>(save?.flags ?? []);
   // Greater Vael Drop 1 (Task 9): the Ashen Gate postern into the Fields opens
@@ -362,7 +362,8 @@ async function startScene(): Promise<void> {
   // leaving every other field byte-identical (additive/lossless). No-op unless a
   // lowered cap was actually lifted.
   if (save?.greaterVael && (save.greaterVael.maxEmberCap ?? emberCap) !== emberCap) {
-    saveGame({ ...save, greaterVael: { ...save.greaterVael, maxEmberCap: emberCap } });
+    save = { ...save, greaterVael: { ...save.greaterVael, maxEmberCap: emberCap } };
+    saveGame(save);
   }
   let hagBargains: string[] = [...(save?.greaterVael?.bargains ?? [])];
   /** Ashen-Forest-N fog-line boon (fogFar +6) armed by an ember tithe, applied

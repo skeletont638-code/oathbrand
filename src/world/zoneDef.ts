@@ -212,6 +212,13 @@ export type ScareTrigger =
   | { on: 'seededClearing'; cells: GridPos[] } // GF-2 per-run seeded false pulse
   | { on: 'vista'; vistaId: string }; // PD-1
 
+/**
+ * Realism-pass note (spec §7c): future ScareBeat payload fields (extra visual
+ * riders on a beat) must keep the `isQuietSighting` predicate (engine/DreadDirector.ts)
+ * as the single gate for whether a beat consumes the shared cooldown / beat cap —
+ * a quiet Watcher-only sighting stays exempt. Add payload data, not a second
+ * "does this count?" code path.
+ */
 /** One authored scare beat (`id` e.g. 'GF-1' … 'PD-2'). */
 export interface ScareBeat {
   id: string;
