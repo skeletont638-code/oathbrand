@@ -738,7 +738,14 @@ async function startScene(): Promise<void> {
       const root = ghostTemplate(g.piece);
       root.scale.setScalar(ENEMY_SCALE);
       const [row, col] = g.at;
-      root.position.set((col + 0.5) * built.cellM, 0, (row + 0.5) * built.cellM);
+      // Ground the ghost on the terrain like every other view-y consumer
+      // (enemies/priests/camera) — a hardcoded y=0 buries banner-vision ghosts
+      // 1.5–3 m inside Pilgrim's Descent's raised terraces.
+      root.position.set(
+        (col + 0.5) * built.cellM,
+        built.groundYAt((col + 0.5) * built.cellM, (row + 0.5) * built.cellM),
+        (row + 0.5) * built.cellM,
+      );
       root.rotation.y = g.rotY ?? 0;
       root.traverse((obj) => {
         const mesh = obj as THREE.Mesh;
