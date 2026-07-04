@@ -360,3 +360,142 @@ GPU), so it reads depressed — judge draws/tris/lights (per the T19 quirk note)
 - [ ] **Overall Drop-1 feel pass** — zone-to-zone pacing off the Gate Fields hub,
       the tithe story spine (inscriptions → visions → Ash-Priest), and whether the
       one interaction (the Hag) carries the drop.
+
+---
+---
+
+# OATHBRAND — Realism pass (spec §11, `feat/realism`)
+
+The realism-phase ratification (final sweep, Task 12), driven programmatically on
+**2026-07-03** against the production `vite build` (served by `vite preview`) and
+a `vite dev` server, using headless Chromium 148
+(`--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader`) + the
+`?dev=1` `window.__oathbrand` handle and its deterministic `stepFrame()`. The
+realism diff spans lighting v2, photo-crunch textures, props, organic rigs (C1),
+undulating terrain (C2), crooked trees (C3), boulder-ized props (C4), and
+atmosphere (wind / banner sway / clutter / embers). Re-run: `npm run dev`, start
+headless Chrome on `:9222`, then `node scripts/shoot.mjs <zone> realism-<zone>-sweep 1`
+per zone (`node scripts/shoot.mjs <zone> --drawcalls` for the per-zone budget probe).
+
+**Split:** AGENT-VERIFIED items were executed now, each with an evidence pointer
+(the full unit suite, the e2e budget suite, a draw-call probe, or a checked-in
+sweep shot the agent VIEWED). OWNER PASS items are eyeball/feel gates the agent
+does **not** sign off. **P0 policy unchanged** — a P0 (broken progression / crash
+/ softlock / save corruption) is agent-fixed in `tuning.ts` / zone data only;
+feel/tuning is OWNER PASS.
+
+**Realism sweep result: unit 776/776 · typecheck clean · build clean (233 KB gz)
+· e2e 5/5 (3× no flake) · 4 exterior draw-call probes all < 100 · 7 sweep shots
+ratified · 0 P0s found.**
+
+---
+
+## AGENT-VERIFIED
+
+### Full unit suite + typecheck + build (Step 1)
+- [x] `npx vitest run` — **776/776 passed**, 49 files (every realism task + curves
+      C1–C4 + no regressions).
+- [x] `npm run typecheck` (`tsc --noEmit`) — **clean**, exit 0.
+- [x] `npm run build` — **clean**. Code bundle `dist/assets/index-*.js` =
+      **842.87 kB / 233.28 kB gzip** (budget <1.5 MB gz — well under; ~code-size
+      unchanged, textures live outside the JS). The seven crunched texture maps
+      ship as **separate hashed `dist/assets/*.png`** (bark, ground-dirt, rock,
+      hound-hide, kneeler-cloth, dungeon_texture, skeleton_texture — 2.4–8.7 kB
+      each), **NOT inlined**: zero `data:image/png;base64` in the JS bundle. The
+      4.85 MB `skeleton-warrior.glb` is an asset URL, also not in the JS.
+
+### e2e draw-call budgets (Step 2)
+- [x] `npm run e2e` (`playwright test`) — **5/5 passed, 3× consecutive no flake**,
+      executed locally **in-sandbox** (headless Chrome was NOT blocked this run).
+      Covers the smoke boot + the four `e2e/greater-vael.spec.ts` exterior
+      draw-call budgets (each asserts `<100`; Gate Fields also asserts zero
+      console errors). This is the CI gate as well.
+
+### Per-zone draw-call probe (Step 2) — the realism diff did NOT breach the ceiling
+Measured live via `scripts/shoot.mjs <zone> --drawcalls` (whole-frame count, max
+over several settled `stepFrame`s), compared against the pre-realism GV Drop-1
+sweep above.
+
+| zone | draw calls (realism) | prev (Drop-1) | Δ | budget |
+|------|---------------------:|--------------:|---:|--------|
+| gate-fields | 35 | 30 | +5 | ✅ <100 |
+| ashen-forest-n | 7 | 7 | 0 | ✅ <100 |
+| cinder-village | 20 | 16 | +4 | ✅ <100 |
+| pilgrims-descent | 9 | 7 | +2 | ✅ <100 |
+
+- [x] The new static meshes (ground, skirt, roof-wedge, clutter, gibbet,
+      standalone banner, gorge embers) added **+0…+5 draws** — under the ~8–10
+      risk estimate. Max is **35** (gate-fields), 65 short of the ceiling. No zone
+      is near budget; **no merge pass needed**.
+
+### All-zone evidence sweep (Step 3) — every shot VIEWED by the agent
+Seven `docs/shots/realism-<zone>-sweep.png`, each captured at the zone's
+deterministic spawn (yaw 0) and frozen to a clean plate, then opened and read:
+
+- [x] **gate-fields** (`realism-gate-fields-sweep.png`, 35 draws) — grounded foggy
+      field at night: dithered dirt ground, a standalone checkpoint banner pole
+      mid-frame, a rocky cliff at right, ash-fall + drifting clutter motes, brand
+      HUD. Reads as a lit, textured place.
+- [x] **ashen-forest-n** (`realism-ashen-forest-n-sweep.png`, 7 draws) — three
+      crooked/asymmetric pines (C3: seeded trunk-bend + lumpy offset cones) with
+      crunchy bark + needle maps, the forest-preset olive horizon band, embers.
+- [x] **cinder-village** (`realism-cinder-village-sweep.png`, 20 draws) — crooked
+      pines lining a winding path, a house with a procedural pitched roof-wedge +
+      textured walls, a boulder prop (C4), fog depth, `[E] READ` prompt.
+- [x] **pilgrims-descent** (`realism-pilgrims-descent-sweep.png`, 9 draws) — the
+      gorge preset: reddish-brown fog gradient + drifting **gorge embers** (the
+      new per-preset particle). The yaw-0 spawn frames the open chasm (matches the
+      Task 10 `realism-gorge-embers.png` evidence exactly); the descent's
+      terraces / boulder / archway geometry sits outside this frame but is proven
+      by the 9 draws + the e2e pass + `gv-task12-descent.png`.
+- [x] **ashen-gate** (`realism-ashen-gate-sweep.png`, 22 draws, interior) — stone
+      brickwork with a warm torch-pool glow and the faint cool key filling the
+      shadows without washing the pool out.
+- [x] **great-hall** (`realism-great-hall-sweep.png`, 42 draws, interior) —
+      hexagonal stone floor (crunch map), torch-lit pillars + wall blocks warm up
+      front, the faint cool key filling the deep hall, the hall statue visible
+      centre-back at `[1,13]`. Cool key present, torch pools intact.
+- [x] **undercroft** (`realism-undercroft-sweep.png`, 33 draws, interior) — the
+      **east half is held VOID-BLACK** (`keyLightIntensity 0`): only a faint near
+      wall + a prop silhouette at top; the rest is pure black. The guard holds —
+      the undercroft carries no key light and reads only by the player's brand.
+
+- [x] **Visual expectations met:** exteriors read as grounded / lit / textured
+      places; the undercroft east half is STILL void-black; castle interiors show
+      the faint cool key without washing out the torch pools.
+
+---
+
+## OWNER PASS (eyeball / feel — NOT signed off by the agent)
+
+### Entity scale & pose reads
+- [ ] **Hound scale** — the C1 rig Box3-solves its ridge-top to **2.3 m** (unit
+      test `hound: the heightM back-solve is preserved`, ±0.06 m), but the in-play
+      read is **~2.1 m** vs the 2.3 m directive (spec §9). Whether to nudge the
+      box/scale toward a stronger 2.3 read is the owner's call; the rig is authored
+      to the box, so retune the box, not the pose.
+- [ ] **C1 bent-leg read** — `bowM` (the `bentLimb` bow amount in
+      `src/entities/organic.ts`) is available if the kneeler/hound bent legs want
+      a stronger crooked read.
+
+### Lighting / value reads
+- [ ] **Kneeler luma vs terrain** — the kneeler reads luma **~18.8** ≈ terrain
+      **~17.8**; if it should sit darker against the ground, the remedy is
+      `TUNING.lighting` — **do NOT** double-darken (the entity already keeps the
+      tint × map multiply on purpose).
+
+### Motion feel (unit/CDP-verified smooth; the *feel* is an eyeball gate)
+- [ ] **Wind sway + banner pole-sway at 60 fps** — verified smooth analytically
+      (continuous sway; the banner pivots about its own pole, not the world origin
+      — commit `015a6f3`) and in CDP; ratify that it *reads* smooth on real
+      hardware rather than steppy.
+
+### Brief Step-4 owner playtest (verbatim)
+- [ ] All **10** Greater Vael scare beats still fire, **≥ 90 s apart**, none in
+      combat.
+- [ ] **Flicker-safe** still strips per-frame random components (held glitch
+      timelines survive).
+- [ ] The **checkpoint banner is never spoofed**.
+- [ ] A **v1 beaten-castle save** still migrates.
+- [ ] Owner walks all zones for the overall realism read (grounding, texture
+      density, the tall-entity dread bar).
