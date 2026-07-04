@@ -77,7 +77,18 @@ export const PILGRIMS_DESCENT: ZoneDef = {
   // amb-descent-wind updraft tell.
   vista: { id: 'vista-pilgrims-descent', cells: [[1, 1], [1, 2], [1, 3], [1, 4]] },
   fogCells: [{ cells: [[1, 1], [1, 2]], farM: 11 }],
-  props: [],
+  // Realism density pass (map-gaps §2 — bare trail, carried by the vista; LIGHT
+  // touch, the sparseness is partly by design): a scatter of stones + bones down
+  // the switchbacks so the descent no longer reads as an empty dirt ribbon. All on
+  // walkable trail cells (non-colliding instanced clutter — the one-cell ribbon
+  // stays fully walkable), clear of the hounds/banner/lore/door/vista cells.
+  scatter: [
+    { kind: 'stone', cells: [[4, 2], [7, 5], [10, 3]] },
+    { kind: 'bones', cells: [[7, 8]] },
+  ],
+  // One wayside-shrine cairn at the shrine lore [4,3] — a single landmark prop so
+  // the west run has a silhouette. Non-colliding; grounded on the band-2 terrace.
+  props: [{ kind: 'rubble', at: [4, 3], rotY: 0.4 }],
   // A night gorge under the gorge sky/moon backdrop, lit by the ash-grey ambient.
   // Zero dynamic lights — well inside the ≤4-light budget.
   lights: [],

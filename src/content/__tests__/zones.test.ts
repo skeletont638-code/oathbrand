@@ -429,6 +429,63 @@ describe('Great Hall statue overlap fix (realism pass, Task 9)', () => {
   });
 });
 
+// Realism density pass (map-gaps EMPTINESS §2): the owner reported the world felt
+// empty. The read-only investigator scored gate-fields as barren (~55–65% empty),
+// cinder-village as moderate/incoherent, pilgrims-descent as bare-but-vista-carried.
+// This pass raises ground clutter + landmark props (all NON-colliding — scatter is
+// instanced, props carry no collider, and `t`/`,` are both walkable floor) so the
+// dead flanks read as inhabited dead-kingdom fields. NONE of these additions move a
+// beat/anchor/banner/spawn/lore/item/enemy/crossing cell (asserted below + by the
+// per-zone contract tests above/below).
+describe('Realism density pass — inhabited dead-kingdom fields (map-gaps EMPTINESS §2)', () => {
+  const SCATTER_CAP = 40; // mirrors ZoneBuilder's clamp; density stays well under it
+  const scatterCount = (def: ZoneDef): number =>
+    (def.scatter ?? []).reduce((n, s) => n + s.cells.length, 0);
+
+  it('all ground clutter game-wide sits on walkable cells and stays within SCATTER_CAP', () => {
+    for (const [id, def] of entries) {
+      for (const clump of def.scatter ?? []) {
+        for (const cell of clump.cells) {
+          expect(isWalkable(def, cell), `${id} scatter ${clump.kind} @ ${String(cell)} is off a walkable cell`).toBe(true);
+        }
+      }
+      expect(scatterCount(def), `${id} scatter exceeds SCATTER_CAP`).toBeLessThanOrEqual(SCATTER_CAP);
+    }
+  });
+
+  it('gate-fields (worst offender) — clutter raised 8 → 19, W/SE trunks planted, sightline props added', () => {
+    const gf = zoneOrThrow('gate-fields');
+    expect(scatterCount(gf)).toBe(19);
+    // planted `,`→`t` sparse trunks for vertical relief in the NW + SE dead
+    // quadrants (both still walkable floor; away from the GF-3 eastward sightline
+    // and the GF-2 crossing spine).
+    for (const cell of [[2, 4], [4, 4], [10, 11], [11, 12]] as GridPos[]) {
+      expect(charAt(gf, cell), `gate-fields planted trunk missing @ ${String(cell)}`).toBe('t');
+    }
+    expect(gf.props.length).toBe(10); // was 6: +2 W-flank + +2 lower-centre landmarks
+    // Contract: the scarecrow-ward statue-knights survive byte-for-byte.
+    const statues = gf.props.filter((p) => p.kind === 'statue-knight').map((p) => p.at);
+    expect(statues).toContainEqual([9, 5]);
+    expect(statues).toContainEqual([8, 4]);
+  });
+
+  it('cinder-village — alley clutter raised 5 → 11, plaza/spine props added, procession intact', () => {
+    const cv = zoneOrThrow('cinder-village');
+    expect(scatterCount(cv)).toBe(11);
+    expect(cv.props.length).toBe(7); // was 2: +5 plaza/alley/spine props
+    // Contract: the frozen-procession statues stay exactly where CV-1 wakes read.
+    const statues = cv.props.filter((p) => p.kind === 'statue-knight').map((p) => p.at);
+    expect(statues).toContainEqual([4, 3]);
+    expect(statues).toContainEqual([4, 11]);
+  });
+
+  it('pilgrims-descent — light touch: switchback clutter (0 → 4) + one shrine cairn', () => {
+    const pd = zoneOrThrow('pilgrims-descent');
+    expect(scatterCount(pd)).toBe(4); // scatter was absent (sparseness is partly design)
+    expect(pd.props.length).toBe(1); // was []: a single wayside-shrine cairn
+  });
+});
+
 describe.each(entries)('zone %s', (id, def) => {
   it('registry key matches def.id', () => {
     expect(def.id).toBe(id);

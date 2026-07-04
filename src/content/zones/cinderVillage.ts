@@ -58,8 +58,12 @@ export const CINDER_VILLAGE: ZoneDef = {
   // bones in the ruined alleys — all on bare alley floor, clear of the
   // procession props/enemies/lore/item/banner. One InstancedMesh per kind.
   scatter: [
-    { kind: 'stone', cells: [[1, 13], [7, 1], [3, 12]] },
-    { kind: 'bones', cells: [[1, 1], [7, 13]] },
+    // Realism density pass (map-gaps §2 — moderate/incoherent): raised 5 → 11.
+    // Fallen masonry + bones spread into the bare alley corners (rows 1–3 / 5–7,
+    // cols 1–4 and 10–13) the investigator flagged as dead. All on walkable alley
+    // floor, clear of the procession/kneeler/archer/banner/lore/item cells.
+    { kind: 'stone', cells: [[1, 13], [7, 1], [3, 12], [1, 2], [7, 2], [2, 13], [6, 13]] },
+    { kind: 'bones', cells: [[1, 1], [7, 13], [3, 2], [5, 12]] },
   ],
   // No fogFarM override → the 16 m exterior default; the `H` house-blocks do the
   // sightline-tightening. No fogCells: the ruin corridors ARE the band, and the
@@ -72,6 +76,16 @@ export const CINDER_VILLAGE: ZoneDef = {
     // banner kneel silhouette is never used as a Hollow here.
     { kind: 'statue-knight', at: [4, 3], rotY: 1.6 },
     { kind: 'statue-knight', at: [4, 11], rotY: 1.6 },
+    // Realism density pass: masonry/crate debris in the plaza + alley corners and a
+    // hanging gibbet on the central spine, so the ruins read as a lived-in place
+    // rather than scattered pyramids on dirt. All on walkable alley floor, clear of
+    // the [4,9] kneeler + [5,11] archer lines and the row-4 beat/banner cells (props
+    // carry no collider — the corridors stay fully walkable).
+    { kind: 'rubble', at: [3, 6], rotY: 0.6 },
+    { kind: 'crate', at: [5, 8], rotY: -0.9 },
+    { kind: 'crate', at: [5, 2], rotY: 1.1 },
+    { kind: 'rubble', at: [7, 10], rotY: -0.4 },
+    { kind: 'gibbet', at: [2, 7], rotY: 0.3 },
   ],
   // A ruined village under the field sky/moon backdrop — lit by the lifted
   // ash-grey ambient, zero dynamic lights (0 of the ≤4-light budget).

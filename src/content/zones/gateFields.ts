@@ -19,7 +19,10 @@
  *
  * Grid is the authored layout from the Task-9 brief — copied VERBATIM (row 7
  * uses the corrected string so `B` sits at [7,7] beneath the oak and the `S`
- * spawn at [7,6]); do not "fix" it.
+ * spawn at [7,6]); do not "fix" it. The realism density pass (map-gaps §2) planted
+ * four `,`→`t` sparse trunks ([2,4],[4,4],[10,11],[11,12]) for vertical relief in
+ * the NW + SE dead quadrants — `t` stays walkable floor (no collision change) and
+ * sits clear of the GF-3 eastward sightline and the GF-2 crossing spine.
  */
 import type { ZoneDef } from '../../world/zoneDef';
 
@@ -28,16 +31,16 @@ export const GATE_FIELDS: ZoneDef = {
   grid: [
     '#######11#######', // 0  N gate 11 [0,7],[0,8] → ashen-gate (postern)
     '#t,,,,,pp,,,,,t#', // 1
-    '#,,,,,,pp,,,,,,#', // 2
+    '#,,,t,,pp,,,,,,#', // 2  +t NW dead-quadrant relief (realism density pass)
     '#,,,,t,pp,t,,,,#', // 3
-    '#,,,,,pppp,,,,,#', // 4
+    '#,,,t,pppp,,,,,#', // 4  +t NW dead-quadrant relief (realism density pass)
     '#,,,ppp..ppp,,,#', // 5
     '3pppp,.TT.,pppp2', // 6  W gate 3 [6,0]·E gate 2 [6,15]·TT oath-oak [6,7],[6,8]
     '#,,,ppSB.ppp,,,#', // 7  S spawn [7,6]·B banner [7,7]·[7,8] gibbet lore
     '#,,,,,pppp,,,,,#', // 8
     '#,,t,,,pp,,,t,,#', // 9
-    '#,,,,,,pp,,,,,,#', // 10
-    '#t,,,,,pp,,,,,t#', // 11
+    '#,,,,,,pp,,t,,,#', // 10  +t SE dead-quadrant relief (realism density pass)
+    '#t,,,,,pp,,,t,t#', // 11  +t SE dead-quadrant relief (realism density pass)
     '#,,,,,,pp,,,,,,#', // 12
     '#######44#######', // 13 S gate 44 [13,7],[13,8] → pilgrims-descent
   ],
@@ -51,9 +54,14 @@ export const GATE_FIELDS: ZoneDef = {
   // two felled stumps near the tree-line — all on grass floor cells, clear of the
   // props/enemies/lore/banner. One InstancedMesh per kind; well inside SCATTER_CAP.
   scatter: [
-    { kind: 'stone', cells: [[1, 2], [2, 12], [10, 3], [12, 11]] },
-    { kind: 'bones', cells: [[3, 2], [9, 10]] },
-    { kind: 'stump', cells: [[3, 13], [12, 2]] },
+    // Realism density pass (map-gaps §2 — gate-fields was the barren worst offender,
+    // ~55–65% empty): raised 8 → 19. Field-stones/bones/stumps seeded into the dead
+    // W/NW flank and the bare lower-centre so no 8 m sightline reads empty. All on
+    // walkable grass/path floor, clear of every beat/anchor/banner/spawn/lore/enemy/
+    // crossing cell (non-colliding instanced clutter; well inside SCATTER_CAP).
+    { kind: 'stone', cells: [[1, 2], [2, 12], [10, 3], [12, 11], [2, 2], [5, 4], [8, 3], [11, 5], [4, 13], [8, 12]] },
+    { kind: 'bones', cells: [[3, 2], [9, 10], [5, 10], [11, 8]] },
+    { kind: 'stump', cells: [[3, 13], [12, 2], [2, 13], [9, 2], [12, 10]] },
   ],
   // fogFarM omitted → the 16 m exterior default. No fogCells: the field reads
   // open; GF-2's dread is the false-pulse, not a fog band.
@@ -74,6 +82,16 @@ export const GATE_FIELDS: ZoneDef = {
     { kind: 'rubble', at: [3, 12], rotY: 0.7 },
     { kind: 'crate', at: [11, 2], rotY: -0.4 },
     { kind: 'crate', at: [12, 3], rotY: 0.9 },
+    // Realism density pass: two landmark clusters break the two worst dead
+    // sightlines the investigator flagged — the W flank (around [4,3]) and the bare
+    // lower-centre (around [10,7]). Masonry debris, NOT more kneelers (the scarecrow-
+    // ward's 1 real : 2 inert ratio is a teaching beat). All on walkable floor and
+    // clear of the [9,3] ward + the [4,11]/[10,4] soldier spawns; props carry no
+    // collider, so the field stays fully walkable.
+    { kind: 'rubble', at: [4, 3], rotY: 1.3 },
+    { kind: 'crate', at: [3, 4], rotY: -0.8 },
+    { kind: 'rubble', at: [10, 7], rotY: 0.5 },
+    { kind: 'crate', at: [11, 9], rotY: -1.2 },
   ],
   // No torches: an open field under the sky/moon backdrop, lit by the lifted
   // ash-grey ambient. Zero dynamic lights — well inside the ≤4 budget.
