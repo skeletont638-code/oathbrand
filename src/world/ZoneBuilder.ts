@@ -36,7 +36,7 @@ import { GridCollider } from './collision';
 import type { AssetCache } from './assets';
 import type { DoorDef, EnemySpawn, GridPos, ItemSpot, LoreSpot, TileKind, ZoneDef } from './zoneDef';
 import { grassGeometry, pineGeometry, trunkGeometry, WIND } from './exteriorForest';
-import { undulation } from './noise';
+import { undulation, UNDULATION_AMP_M } from './noise';
 import { bonePileGeometry, gibbetGeometry, roofWedgeGeometry, stoneGeometry, stumpGeometry } from './exteriorProps';
 import { buildExteriorSky } from './exteriorSky';
 import { getTexture } from './textures';
@@ -617,6 +617,11 @@ export class ZoneBuilder {
     /** Kit architecture settles slightly INTO the dirt — a block may sink a
      *  few cm on a swell but can never float on one (ruins sit, they don't hover). */
     const KIT_SETTLE_M = 0.05;
+    /** Ruin/house walls (and their roof caps) seat to the cell's FLAT base height
+     *  minus this — NOT the per-cell-centre undulated ground. So adjacent slabs in
+     *  a run share one base/top (no stepped bases, H2) and the base always embeds
+     *  under the ±UNDULATION_AMP_M swell (never floats). Deeper than KIT_SETTLE_M. */
+    const WALL_SETTLE_M = UNDULATION_AMP_M + 0.03;
     /** Set by the exterior branch to drift the ash-fall each frame. */
     let updateExterior: ((dtMs: number) => void) | undefined;
     /** Set by the exterior branch: unit direction toward the moon (key light). */
@@ -699,10 +704,23 @@ export class ZoneBuilder {
     // flush-offset onto the shared boundary (the `H` ruin block, or an unknown
     // solid exterior letter). At the cell's terrain height.
     const flush = half - (WALL_THICKNESS_M * KIT_SCALE) / 2;
+    /** The flush offset (dx,dz) a ruin/house wall cell is shoved by. An ISOLATED
+     *  wall shoves onto its open boundary (its face lands on the collider edge); a
+     *  wall that ABUTS another wall stays CENTRED so neighbouring slabs weld with
+     *  no see-through sliver (H2). Shared by the wall AND its roof-wedge cap so the
+     *  roof sits on the wall rather than floating centred over open ground (H3). */
+    const houseOffset = (row: number, col: number): [number, number] => {
+      const inRun = ORTHO.some(([dr, dc]) => kindAt(def, row + dr, col + dc) === 'wall');
+      if (inRun) return [0, 0];
+      const open = ORTHO.find(([dr, dc]) => kindAt(def, row + dr, col + dc) !== 'wall');
+      return open ? [open[1] * flush, open[0] * flush] : [0, 0];
+    };
     const addExteriorWall = (row: number, col: number, x: number, y: number, z: number, piece = 'wall'): void => {
-      const d = ORTHO.find(([dr, dc]) => kindAt(def, row + dr, col + dc) !== 'wall');
-      if (d) addPiece(piece, x + d[1] * flush, y, z + d[0] * flush, Math.atan2(d[1], d[0]), KIT_SCALE);
-      else addPiece(piece, x, y, z, 0, KIT_SCALE);
+      // Face the first open neighbour (the run direction) but offset only when
+      // ISOLATED — a run member stays centred so its slab abuts the next (H2).
+      const open = ORTHO.find(([dr, dc]) => kindAt(def, row + dr, col + dc) !== 'wall');
+      const [ox, oz] = houseOffset(row, col);
+      addPiece(piece, x + ox, y, z + oz, open ? Math.atan2(open[1], open[0]) : 0, KIT_SCALE);
     };
 
     // Architecture from the grid. Interiors place kit modules (4m module at
@@ -742,17 +760,22 @@ export class ZoneBuilder {
             floorTile();
             sparse.push(spot());
           } else if (ch === 'T' || ch === '#') {
-            dense.push(spot()); // treeline/border — a dense tree, never a wall block
+            floorTile(); // H1: ground under the treeline/border too — the dome
+            dense.push(spot()); // renders depthWrite:false, so a floorless dense
+            // cell paints sky straight through the ground (the oath-oak/checkpoint
+            // hole, every border treeline, the whole forest stand). Only `~` stays floorless.
           } else if (ch === 'H') {
             floorTile();
-            addExteriorWall(row, col, x, groundYAt(x, z) - KIT_SETTLE_M, z); // a built ruin (Cinder Village house)
+            // Seat on the cell's FLAT base (not the undulated cell-centre), so a
+            // run of houses shares one welded base/top (H2). Deep settle embeds it.
+            addExteriorWall(row, col, x, cellHeightM(row, col) - WALL_SETTLE_M, z); // a built ruin (Cinder Village house)
             houseCells.push([row, col]); // gets a charred roof-wedge cap
           } else if (ch === 'A') {
             // Door-void ruin house-block: a `wall-arch.glb` (SAME atlas → SAME
             // merge bucket as `wall`) in place of the solid wall, so the house
             // reads as a burnt home with a gaping doorway rather than castle wall.
             floorTile();
-            addExteriorWall(row, col, x, groundYAt(x, z) - KIT_SETTLE_M, z, 'wall-arch');
+            addExteriorWall(row, col, x, cellHeightM(row, col) - WALL_SETTLE_M, z, 'wall-arch'); // flat-seated like `H` (H2)
             houseCells.push([row, col]); // capped by the same roof-wedge stamp
           } else {
             const kind = cellKind(ch, def, row, col);
@@ -880,9 +903,12 @@ export class ZoneBuilder {
       // Charred roof-wedge cap over every house cell (H ruin + A door-void) — one
       // InstancedMesh (1 draw call), Cinder Village only (no H/A ⇒ nothing stamped).
       if (houseCells.length > 0) {
-        const spots: ForestSpot[] = houseCells.map(([r, c]) => ({
-          x: c * cell + half, y: groundYAt(c * cell + half, r * cell + half) - KIT_SETTLE_M, z: r * cell + half, row: r, col: c,
-        }));
+        // Seat each roof on its wall: the SAME flush offset (H3 — no floating
+        // off-centre eave) and the SAME flat base height as the welded wall (H2).
+        const spots: ForestSpot[] = houseCells.map(([r, c]) => {
+          const [ox, oz] = houseOffset(r, c);
+          return { x: c * cell + half + ox, y: cellHeightM(r, c) - WALL_SETTLE_M, z: r * cell + half + oz, row: r, col: c };
+        });
         stampForest(group, 'roof-wedge', roofWedgeGeometry(), spots);
       }
 

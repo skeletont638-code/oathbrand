@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { BoxGeometry, Group, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Quaternion, Vector3 } from 'three';
 import { gridToPlacements, planarUV, ZoneBuilder } from '../ZoneBuilder';
 import { UNDULATION_AMP_M, undulation } from '../noise';
+import { ZONES } from '../../content/zones';
 import type { AssetCache } from '../assets';
 import type { ZoneDef, TileKind } from '../zoneDef';
 
@@ -57,6 +58,39 @@ function meshNamed(group: Group, name: string): Mesh | undefined {
     if (o instanceof Mesh && o.name === name) found = o;
   });
   return found;
+}
+
+/** The InstancedMesh child with the given name (e.g. `roof-wedge`). */
+function instancedNamed(group: Group, name: string): InstancedMesh | undefined {
+  let found: InstancedMesh | undefined;
+  group.traverse((o) => {
+    if (o instanceof InstancedMesh && o.name === name) found = o;
+  });
+  return found;
+}
+
+/** Axis-aligned bounding-box centre (x/y/z) of a mesh's baked geometry. */
+function bboxCenter(mesh: Mesh): { x: number; y: number; z: number } {
+  const p = mesh.geometry.getAttribute('position');
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+    minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
+  }
+  return { x: (minX + maxX) / 2, y: (minY + maxY) / 2, z: (minZ + maxZ) / 2 };
+}
+
+/** The y-translation of each instance of an InstancedMesh. */
+function instanceYs(mesh: InstancedMesh): number[] {
+  const m = new Matrix4();
+  const ys: number[] = [];
+  for (let i = 0; i < mesh.count; i++) {
+    mesh.getMatrixAt(i, m);
+    ys.push(new Vector3().setFromMatrixPosition(m).y);
+  }
+  return ys;
 }
 
 function zone(grid: string[], tiles: Record<string, TileKind> = {}): ZoneDef {
@@ -407,6 +441,125 @@ describe('ZoneBuilder.build (exterior)', () => {
       const gap = Math.min(...ys!.map((gy) => Math.abs(gy - skirtPos.getY(i))));
       expect(gap, `skirt lip at (${key}) is ${gap} m off the ground sheet`).toBeLessThanOrEqual(1e-6);
     }
+  });
+});
+
+// --- H1: no sky-through-ground (dense-tree / border cells were floorless) -----
+
+describe('ZoneBuilder exterior ground coverage (H1)', () => {
+  const exteriors = Object.entries(ZONES).filter(([, def]) => def?.kind === 'exterior');
+
+  it('the derivation sees real exterior zones', () => {
+    expect(exteriors.length).toBeGreaterThan(0);
+  });
+
+  for (const [id, def] of exteriors) {
+    it(`${id}: EVERY non-designed-void cell emits a ground quad (dome cannot show through)`, () => {
+      // Derived over the REAL grid: the dome renders with depthWrite:false, so
+      // any cell that emits no ground paints the sky straight through the floor
+      // (the oath-oak/checkpoint hole, the border treelines, the forest stand).
+      // Only a `~` gorge (or a tile authored as 'void') is allowed to be floorless.
+      const built = new ZoneBuilder().build(def!, fakeAssets());
+      const ground = meshNamed(built.group, 'exterior-ground');
+      expect(ground, `${id}: no exterior-ground mesh`).toBeDefined();
+      const pos = ground!.geometry.getAttribute('position');
+      const keys = new Set<string>();
+      for (let i = 0; i < pos.count; i++) keys.add(`${pos.getX(i).toFixed(3)},${pos.getZ(i).toFixed(3)}`);
+      const cell = def!.cell;
+      const half = cell / 2;
+      const missing: string[] = [];
+      for (let row = 0; row < def!.grid.length; row++) {
+        const line = def!.grid[row];
+        for (let col = 0; col < line.length; col++) {
+          const ch = line[col];
+          const designedVoid = ch === '~' || def!.tiles?.[ch] === 'void';
+          if (designedVoid) continue; // the descent gorge is meant to be bottomless
+          const key = `${(col * cell + half).toFixed(3)},${(row * cell + half).toFixed(3)}`;
+          if (!keys.has(key)) missing.push(`[${row},${col}]='${ch}'`);
+        }
+      }
+      expect(missing, `${id} floorless (sky-through-ground) cells: ${missing.join(' ')}`).toEqual([]);
+    });
+  }
+
+  it('the descent gorge `~` cells stay floorless (designed bottomless void preserved)', () => {
+    const built = new ZoneBuilder().build(ZONES['pilgrims-descent']!, fakeAssets());
+    const pos = meshNamed(built.group, 'exterior-ground')!.geometry.getAttribute('position');
+    const keys = new Set<string>();
+    for (let i = 0; i < pos.count; i++) keys.add(`${pos.getX(i).toFixed(3)},${pos.getZ(i).toFixed(3)}`);
+    // [2,5] is a `~` gorge cell (row 2 = '#~~~~~~~~~p~#') → its centre must NOT be floored.
+    expect(keys.has(`${(5 * 2 + 1).toFixed(3)},${(2 * 2 + 1).toFixed(3)}`)).toBe(false);
+  });
+});
+
+// --- H2 / H3: cinder wall + roof welding --------------------------------------
+
+describe('ZoneBuilder cinder wall/roof welding (H2/H3)', () => {
+  it('H2: adjacent wall slabs share edge heights on flat terrain (no stepped bases)', () => {
+    // Flat cinder terrain: pre-H2 each slab settled to its OWN cell-centre
+    // groundYAt (base + undulation), so neighbours stepped by up to ~0.2 m. They
+    // must now seat to one shared flat base (cellHeightM − settle) → welded.
+    const built = new ZoneBuilder().build(exteriorZone(['HHH']), fakeAssets());
+    const pos = meshNamed(built.group, 'merged:wall')!.geometry.getAttribute('position');
+    // Split the merged slabs by x: cell centres 1/3/5 → boundaries at x=2, x=4.
+    const slabs = [
+      { min: Infinity, max: -Infinity },
+      { min: Infinity, max: -Infinity },
+      { min: Infinity, max: -Infinity },
+    ];
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i);
+      const s = x < 2 ? 0 : x < 4 ? 1 : 2;
+      slabs[s].min = Math.min(slabs[s].min, y);
+      slabs[s].max = Math.max(slabs[s].max, y);
+    }
+    // Every slab base AND top identical → the run reads as one weld, not steps.
+    expect(slabs[1].min).toBeCloseTo(slabs[0].min, 6);
+    expect(slabs[2].min).toBeCloseTo(slabs[0].min, 6);
+    expect(slabs[1].max).toBeCloseTo(slabs[0].max, 6);
+    expect(slabs[2].max).toBeCloseTo(slabs[0].max, 6);
+  });
+
+  it('H2: a wall abutting another wall is centred (no flush sliver between neighbours)', () => {
+    // H[0,1] abuts H[0,0] to its west and has open floor east. Pre-H2 it shoved
+    // 0.75 m east toward the open side while its neighbour shoved/centred the
+    // other way → a see-through sliver. A run member must stay CENTRED.
+    const built = new ZoneBuilder().build(exteriorZone(['HH.']), fakeAssets());
+    const pos = meshNamed(built.group, 'merged:wall')!.geometry.getAttribute('position');
+    let min = Infinity, max = -Infinity;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      if (x >= 2.5) { min = Math.min(min, x); max = Math.max(max, x); } // the east slab (col 1)
+    }
+    expect((min + max) / 2).toBeCloseTo(3, 6); // centred on cell col1 (x=3), NOT shoved to 3.75
+  });
+
+  it('H2: an isolated wall (no wall neighbour) still shoves flush onto its open boundary', () => {
+    // Regression guard: a lone ruin block should still meet the collider edge.
+    const built = new ZoneBuilder().build(exteriorZone(['...', '.H.', '...']), fakeAssets());
+    const c = bboxCenter(meshNamed(built.group, 'merged:wall')!);
+    expect(c.x).toBeCloseTo(3, 6);
+    expect(c.z).toBeCloseTo(3 - 0.75, 6); // flush 0.75 toward its first open neighbour (N)
+  });
+
+  it('H3: the roof-wedge tracks its wall — offset over an isolated (shoved) wall, not centred over open ground', () => {
+    const built = new ZoneBuilder().build(exteriorZone(['...', '.H.', '...']), fakeAssets());
+    const roof = instancedNamed(built.group, 'roof-wedge')!;
+    const m = new Matrix4();
+    roof.getMatrixAt(0, m);
+    const t = new Vector3().setFromMatrixPosition(m);
+    const wall = bboxCenter(meshNamed(built.group, 'merged:wall')!);
+    expect(t.x).toBeCloseTo(wall.x, 6);
+    expect(t.z).toBeCloseTo(wall.z, 6); // roof rides the wall's flush offset (2.25), not the cell centre (3)
+  });
+
+  it('H3: roof-wedges on flat terrain all seat at ONE height (welded to the flat wall base, not per-cell undulation)', () => {
+    // Pre-H3 the roof stamped at groundYAt(cell centre) − settle (undulated), so
+    // eaves floated at per-cell heights. They must seat at the wall's flat base.
+    const built = new ZoneBuilder().build(exteriorZone(['HHH']), fakeAssets());
+    const ys = instanceYs(instancedNamed(built.group, 'roof-wedge')!);
+    expect(ys.length).toBe(3);
+    for (const y of ys) expect(y).toBeCloseTo(ys[0], 6);
   });
 });
 
