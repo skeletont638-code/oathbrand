@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { MeshBasicMaterial } from 'three';
+import { MeshBasicMaterial, MeshStandardMaterial } from 'three';
 import type { Material, WebGLProgramParametersWithUniforms } from 'three';
 import { patchMaterial, setSnapResolution } from '../patchMaterial';
+import { WIND } from '../../world/exteriorForest';
 
 /**
  * `onBeforeCompile` is just a plain function three's renderer calls during
@@ -74,5 +75,18 @@ describe('patchMaterial snap-resolution registry', () => {
     const shader = fakeCompile(mat);
     expect(shader.uniforms.uSnapRes.value.x).toBe(480);
     expect(shader.uniforms.uSnapRes.value.y).toBe(360);
+  });
+});
+
+describe('patchMaterial wind', () => {
+  it('wind amplitude stays a few cm (smooth micro-motion, spec §6)', () => {
+    expect(WIND.ampM).toBeLessThanOrEqual(0.12);
+    expect(WIND.ampM).toBeGreaterThan(0);
+  });
+  it('a wind material gets a distinct program cache key (no cross-compile with static)', () => {
+    const a = new MeshStandardMaterial(); patchMaterial(a, { wind: WIND });
+    const b = new MeshStandardMaterial(); patchMaterial(b);
+    expect(a.customProgramCacheKey!()).toBe('ps1-patched-wind');
+    expect(b.customProgramCacheKey!()).toBe('ps1-patched');
   });
 });

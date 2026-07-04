@@ -2249,6 +2249,10 @@ async function startScene(): Promise<void> {
       // never handed to the director. It fires at most one beat/frame; main
       // routes each activation to the kit / mixer / (Tasks 5–12) presence.
       if (activeDef.kind === 'exterior') {
+        if (built.bannerMesh) {
+          // slow pendulum skew — SMOOTH (never stepped); world micro-motion rule (spec §6)
+          built.bannerMesh.rotation.z = Math.sin(now * 0.0011) * 0.05;
+        }
         const dRow = Math.floor(controller.pos.z / built.cellM);
         const dCol = Math.floor(controller.pos.x / built.cellM);
         const inCombat = enemies.some((e) => e.logic.alive && e.logic.state !== 'idle');

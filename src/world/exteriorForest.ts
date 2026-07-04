@@ -35,6 +35,9 @@ const BLADE = 0x5b6050; // was 0x4d5140
 /** Low radial resolution — a pentagon prism/cone reads perfectly at PS1 res. */
 const SEG = 5;
 
+/** Smooth wind sway params (spec §6: a few cm, world stays smooth — never stepped). */
+export const WIND = { ampM: 0.06, freqHz: 1.1, heightRefM: 3 } as const;
+
 /** Paint every vertex of `geo` one flat colour (adds a `color` attribute). */
 function paint(geo: BufferGeometry, hex: number): BufferGeometry {
   const r = ((hex >> 16) & 0xff) / 255;

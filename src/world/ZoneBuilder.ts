@@ -19,6 +19,7 @@ import {
   Euler,
   Float32BufferAttribute,
   Group,
+  InstancedBufferAttribute,
   InstancedMesh,
   Matrix4,
   Mesh,
@@ -34,9 +35,9 @@ import { patchMaterial } from '../ps1/patchMaterial';
 import { GridCollider } from './collision';
 import type { AssetCache } from './assets';
 import type { DoorDef, EnemySpawn, GridPos, ItemSpot, LoreSpot, TileKind, ZoneDef } from './zoneDef';
-import { grassGeometry, pineGeometry, trunkGeometry } from './exteriorForest';
+import { grassGeometry, pineGeometry, trunkGeometry, WIND } from './exteriorForest';
 import { undulation } from './noise';
-import { gibbetGeometry, roofWedgeGeometry } from './exteriorProps';
+import { bonePileGeometry, gibbetGeometry, roofWedgeGeometry, stoneGeometry, stumpGeometry } from './exteriorProps';
 import { buildExteriorSky } from './exteriorSky';
 import { getTexture } from './textures';
 import type { Anomaly } from '../content/anomalies';
@@ -82,6 +83,9 @@ export interface BuiltZone {
   spawns: EnemySpawn[];
   doors: PlacedDoor[];
   banner?: PlacedBanner;
+  /** The standalone (un-merged) exterior banner mesh, so `main` can sway it
+   *  smoothly (Task 10). Undefined on interiors (banner stays merged — no sway). */
+  bannerMesh?: Mesh;
   lore: PlacedLore[];
   /** Takeable world-item pickups resolved to world space. */
   items: PlacedItem[];
@@ -149,6 +153,9 @@ const GROUND_TILE_M = 2;
 const GROUND_SUB = 2;
 /** Flat ground colour when the crunched dirt map is absent (tests / fetch not run). */
 const GROUND_FLAT_HEX = 0x3a3632;
+/** Perf budget: total ground-clutter instances per zone (Task 10). Sparse by
+ *  design — a zone that scatters more than this is clamped + warns. */
+const SCATTER_CAP = 40;
 
 /** World-space planar UV for a ground point (pure; exported for the test). */
 export function planarUV(worldX: number, worldZ: number, tileM = GROUND_TILE_M): [number, number] {
@@ -378,12 +385,20 @@ function cellNoise(row: number, col: number, salt: number): number {
  * the crunched bark map is absent (tests / no fetch) `map` is undefined and
  * the material reads as the flat vertex-coloured look — never throws.
  */
-function stampForest(group: Group, name: string, geometry: BufferGeometry, spots: ForestSpot[], opts: { tilt?: boolean } = {}): void {
+function stampForest(
+  group: Group,
+  name: string,
+  geometry: BufferGeometry,
+  spots: ForestSpot[],
+  opts: { tilt?: boolean; windMats?: MeshStandardMaterial[] } = {},
+): void {
   if (spots.length === 0) {
     geometry.dispose();
     return;
   }
-  const map = getTexture('bark'); // one bark map shared by trunk + canopy (kept 1 draw/kind)
+  // Shipped kinds keep their ratified bark×tint look (T7/T9); only the NEW
+  // clutter kinds stay vertex-colour-only (a bark-wrapped stone reads wrong).
+  const map = name.startsWith('clutter-') ? undefined : getTexture('bark'); // one bark map shared by trunk + canopy (kept 1 draw/kind)
   const material = new MeshStandardMaterial({
     vertexColors: true, // per-instance BARK/NEEDLE/BLADE tint stays ON — it multiplies the map
     roughness: 1,
@@ -392,11 +407,20 @@ function stampForest(group: Group, name: string, geometry: BufferGeometry, spots
   });
   if (map) material.map = map; // set BEFORE patchMaterial/first compile so the affine warp binds (absent → flat fallback)
   forceNearest(material); // crunchy PS1 sampler when a map is present; no-op when absent
-  patchMaterial(material); // affine applies (map set); vertexColors × map = tinted crunch
+  patchMaterial(material, opts.windMats ? { wind: WIND } : {}); // SMOOTH sway on wind kinds only; affine still binds (map set)
   const mesh = new InstancedMesh(geometry, material, spots.length);
   mesh.name = name;
   mesh.castShadow = false;
   mesh.receiveShadow = false;
+  if (opts.windMats) {
+    // Per-instance wind phase so neighbouring trees desync (the sway shader
+    // reads `aWindPhase`); collect the material so the zone clock can advance
+    // its `uWindTime` each frame (SMOOTH — never stepped, spec §6).
+    const phase = new Float32Array(spots.length);
+    spots.forEach((s, i) => { phase[i] = cellNoise(s.row, s.col, 3) * Math.PI * 2; });
+    geometry.setAttribute('aWindPhase', new InstancedBufferAttribute(phase, 1));
+    opts.windMats.push(material);
+  }
   const m = new Matrix4();
   const q = new Quaternion();
   const euler = new Euler();
@@ -592,6 +616,11 @@ export class ZoneBuilder {
     let updateExterior: ((dtMs: number) => void) | undefined;
     /** Set by the exterior branch: unit direction toward the moon (key light). */
     let moonDir: Vector3 | undefined;
+    /** Forest instanced materials carrying the smooth wind sway (Task 10); the
+     *  exterior branch advances their `uWindTime` each frame. */
+    const windMats: MeshStandardMaterial[] = [];
+    /** The standalone exterior banner mesh (Task 10), so `main` can sway it. */
+    let bannerMeshRef: Mesh | undefined;
 
     // Geometry buckets keyed by material *name*: every KayKit piece embeds
     // its own copy of the same atlas material (name "texture"), so keying by
@@ -624,6 +653,36 @@ export class ZoneBuilder {
         geom.applyMatrix4(new Matrix4().multiplyMatrices(place, mesh.matrixWorld));
         bucket.geoms.push(geom);
       });
+    };
+
+    /** A standalone (un-merged) banner mesh so it can sway (exterior only). Clones
+     *  the template's mesh geometry with the placement baked in + a patched material
+     *  clone; the atlas texture stays shared with the template cache. */
+    const buildStandaloneBanner = (x: number, y: number, z: number, rotY: number, scale: number): Mesh | undefined => {
+      const template = assets.get('banner');
+      const place = new Matrix4().compose(
+        new Vector3(x, y, z), new Quaternion().setFromAxisAngle(UP, rotY), new Vector3(scale, scale, scale),
+      );
+      const geoms: BufferGeometry[] = [];
+      let srcMat: Material | undefined;
+      template.traverse((obj) => {
+        const mesh = obj as Mesh;
+        if (!mesh.isMesh || Array.isArray(mesh.material)) return;
+        srcMat = mesh.material;
+        const g = mesh.geometry.clone();
+        g.applyMatrix4(new Matrix4().multiplyMatrices(place, mesh.matrixWorld));
+        geoms.push(g);
+      });
+      if (geoms.length === 0 || !srcMat) return undefined;
+      const geometry = mergeGeometries(normalizeForMerge(geoms), false);
+      for (const g of geoms) g.dispose();
+      if (!geometry) return undefined;
+      const material = srcMat.clone();
+      forceNearest(material);
+      patchMaterial(material);
+      const mesh = new Mesh(geometry, material);
+      mesh.name = 'banner-standalone';
+      return mesh;
     };
 
     // A castle wall.glb block, oriented to face its first open neighbour and
@@ -762,7 +821,14 @@ export class ZoneBuilder {
       // field/gorge); interior banners stay at kit scale to fit the 2 m walls.
       const bScale = def.kind === 'exterior' ? BANNER_EXT_SCALE : KIT_SCALE;
       const setback = half - BANNER_BACK_M * bScale;
-      addPiece('banner', cx + dc * setback, groundYAt(cx + dc * setback, cz + dr * setback), cz + dr * setback, Math.atan2(dc, dr), bScale);
+      // Exteriors build the banner as a STANDALONE mesh so `main` can sway it
+      // smoothly (Task 10); interiors keep the merged banner (no sway indoors).
+      if (def.kind === 'exterior') {
+        bannerMeshRef = buildStandaloneBanner(cx + dc * setback, groundYAt(cx + dc * setback, cz + dr * setback), cz + dr * setback, Math.atan2(dc, dr), bScale);
+        if (bannerMeshRef) group.add(bannerMeshRef);
+      } else {
+        addPiece('banner', cx + dc * setback, groundYAt(cx + dc * setback, cz + dr * setback), cz + dr * setback, Math.atan2(dc, dr), bScale);
+      }
       banner = { name: def.banner.name, position: new Vector3(cx, 0, cz) };
     }
 
@@ -792,9 +858,11 @@ export class ZoneBuilder {
     // Each forest kind becomes ONE InstancedMesh (1 draw call); the skirt is a
     // single dark-rock mesh; the backdrop is a dome + moon + ash Points.
     if (def.kind === 'exterior') {
-      stampForest(group, GRASS_KIND, grassGeometry(), grass, { tilt: true });
-      stampForest(group, TRUNK_KIND, trunkGeometry(), sparse, { tilt: true });
-      stampForest(group, TREE_KIND, pineGeometry(), dense, { tilt: true });
+      // Trees + grass sway smoothly (windMats shared so one clock drives them
+      // all); buildings/clutter (roof-wedge below, scatter) never lean or sway.
+      stampForest(group, GRASS_KIND, grassGeometry(), grass, { tilt: true, windMats });
+      stampForest(group, TRUNK_KIND, trunkGeometry(), sparse, { tilt: true, windMats });
+      stampForest(group, TREE_KIND, pineGeometry(), dense, { tilt: true, windMats });
 
       const groundMesh = buildExteriorGround(cell, ground);
       if (groundMesh) group.add(groundMesh);
@@ -808,6 +876,31 @@ export class ZoneBuilder {
         stampForest(group, 'roof-wedge', roofWedgeGeometry(), spots);
       }
 
+      // Ground clutter (Task 10): one InstancedMesh per kind, grounded on C2's
+      // undulated dirt. Sparse by authoring — clamped to SCATTER_CAP total so a
+      // zone can never balloon the static tri count. No opts → never sways/leans.
+      const CLUTTER: Record<string, () => BufferGeometry> = {
+        stone: stoneGeometry, bones: bonePileGeometry, stump: stumpGeometry,
+      };
+      let scattered = 0;
+      for (const s of def.scatter ?? []) {
+        const room = SCATTER_CAP - scattered;
+        if (room <= 0) {
+          console.warn(`zone "${def.id}": ground clutter exceeds the cap of ${SCATTER_CAP} — extra "${s.kind}" skipped`);
+          break;
+        }
+        const cells = s.cells.length > room ? s.cells.slice(0, room) : s.cells;
+        if (cells.length < s.cells.length) {
+          console.warn(`zone "${def.id}": ground clutter exceeds the cap of ${SCATTER_CAP} — clamped "${s.kind}"`);
+        }
+        const geo = CLUTTER[s.kind]();
+        const spots: ForestSpot[] = cells.map(([r, c]) => ({
+          x: c * cell + half, y: groundYAt(c * cell + half, r * cell + half), z: r * cell + half, row: r, col: c,
+        }));
+        stampForest(group, `clutter-${s.kind}`, geo, spots); // no opts — clutter never sways or leans
+        scattered += cells.length;
+      }
+
       const skirt = buildTerrainSkirt(def, cellHeightM);
       if (skirt) group.add(skirt);
 
@@ -818,7 +911,19 @@ export class ZoneBuilder {
         spanM: Math.max(cols, rows) * cell + 12,
       });
       group.add(backdrop.dome, backdrop.moon, backdrop.ash);
-      updateExterior = backdrop.update;
+      if (backdrop.embers) group.add(backdrop.embers); // gorge only (spec §6)
+      // Advance the smooth wind clock alongside the ash-fall each frame. The
+      // world micro-motion runs at full frame rate — never stepped (spec §6).
+      let windClockMs = 0;
+      const backdropUpdate = backdrop.update;
+      updateExterior = (dtMs: number): void => {
+        backdropUpdate(dtMs);
+        windClockMs += dtMs;
+        for (const m of windMats) {
+          const u = (m.userData.ps1Shader as { uniforms?: Record<string, { value: number }> } | undefined)?.uniforms?.uWindTime;
+          if (u) u.value = windClockMs / 1000;
+        }
+      };
       moonDir = backdrop.moonDir;
     }
 
@@ -832,6 +937,7 @@ export class ZoneBuilder {
       spawns: def.enemies,
       doors: def.doors.map((d) => ({ def: d, position: toWorld(d.at) })),
       banner,
+      bannerMesh: bannerMeshRef,
       lore: def.lore.map((spot) => ({ spot, position: toWorld(spot.at) })),
       items: (def.items ?? []).map((spot) => ({ spot, position: toWorld(spot.at) })),
       lights,

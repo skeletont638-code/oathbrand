@@ -30,6 +30,17 @@ describe('buildExteriorSky', () => {
     expect(y1).not.toBe(y0); // it moved
     bg.dispose();
   });
+
+  // --- Task 10: per-preset particles + gorge embers ---------------------------
+
+  it('the gorge preset adds a warm ember Points system; field does not', () => {
+    const gorge = buildExteriorSky('gorge', { spanM: 40 });
+    expect(gorge.embers).toBeDefined();
+    gorge.dispose();
+    const field = buildExteriorSky('field', { spanM: 40 });
+    expect(field.embers).toBeUndefined();
+    field.dispose();
+  });
 });
 
 describe('moon direction', () => {

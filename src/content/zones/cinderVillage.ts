@@ -54,6 +54,13 @@ export const CINDER_VILLAGE: ZoneDef = {
   tiles: { H: 'wall', p: 'floor', w: 'floor' },
   kind: 'exterior',
   exteriorSky: 'field',
+  // Sparse ground clutter (Task 10): fallen masonry (stones) and a scatter of
+  // bones in the ruined alleys — all on bare alley floor, clear of the
+  // procession props/enemies/lore/item/banner. One InstancedMesh per kind.
+  scatter: [
+    { kind: 'stone', cells: [[1, 13], [7, 1], [3, 12]] },
+    { kind: 'bones', cells: [[1, 1], [7, 13]] },
+  ],
   // No fogFarM override → the 16 m exterior default; the `H` house-blocks do the
   // sightline-tightening. No fogCells: the ruin corridors ARE the band, and the
   // per-cell knock (amb-cinder-knock) is the audio tell that keeps the archer's

@@ -47,6 +47,14 @@ export const GATE_FIELDS: ZoneDef = {
   tiles: { ',': 'floor', p: 'floor', t: 'floor', T: 'wall' },
   kind: 'exterior',
   exteriorSky: 'field',
+  // Sparse ground clutter (Task 10): a few field-stones, a scatter of bones, and
+  // two felled stumps near the tree-line — all on grass floor cells, clear of the
+  // props/enemies/lore/banner. One InstancedMesh per kind; well inside SCATTER_CAP.
+  scatter: [
+    { kind: 'stone', cells: [[1, 2], [2, 12], [10, 3], [12, 11]] },
+    { kind: 'bones', cells: [[3, 2], [9, 10]] },
+    { kind: 'stump', cells: [[3, 13], [12, 2]] },
+  ],
   // fogFarM omitted → the 16 m exterior default. No fogCells: the field reads
   // open; GF-2's dread is the false-pulse, not a fog band.
   props: [

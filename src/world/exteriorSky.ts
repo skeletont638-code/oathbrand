@@ -50,19 +50,36 @@ export function skyFogColor(preset: ExteriorSky): number {
 
 const DOME_RADIUS = 80; // inside the 100 m camera far-plane
 const MOON_RADIUS = 70;
-const ASH_COUNT = 220;
-const ASH_FALL_MPS = 0.55; // gentle downward drift
+
+/** Per-preset ash tuning (Task 10, spec §6): the field stays as v1 (220 @ 0.55);
+ *  the dead canopy is denser + slower; the gorge is thinner ash (embers add the
+ *  warmth below). Smooth — the ash-fall drift is never stepped. */
+const ASH: Record<ExteriorSky, { count: number; fallMps: number }> = {
+  field: { count: 220, fallMps: 0.55 }, // unchanged (spec §6)
+  forest: { count: 320, fallMps: 0.38 }, // denser + slower
+  gorge: { count: 180, fallMps: 0.6 }, // thinner ash; embers add the warmth below
+};
+
+/** Gorge ember tuning: a sparse warm-fleck `Points` drifting UP from the fires
+ *  below (spec §6). Warm amber, faint, small — read against the ember-lit murk. */
+const EMBER_COUNT = 90;
+const EMBER_RISE_MPS = 0.5; // gentle upward drift
+const EMBER_COLOR = 0xff7a2c;
+const EMBER_TOP = 16; // recycle a risen ember back to the floor past this height
 
 export interface ExteriorBackdrop {
   dome: Mesh;
   moon: Mesh;
   ash: Points;
+  /** Sparse warm embers drifting UP — the gorge only (spec §6); undefined
+   *  otherwise. Added to the zone group + ticked/freed alongside the ash. */
+  embers?: Points;
   /** Unit direction from the play-space centre toward the moon disc — the key
    *  light is oriented from this so the moon reads as the scene's light source. */
   moonDir: Vector3;
-  /** Drift the ash-fall down (and wrap it), meters per `dtMs`. */
+  /** Drift the ash-fall down (and wrap it) + rise the embers, meters per `dtMs`. */
   update(dtMs: number): void;
-  /** Free the three geometries + materials (also covered by group teardown). */
+  /** Free the geometries + materials (also covered by group teardown). */
   dispose(): void;
 }
 
@@ -130,10 +147,12 @@ export function buildExteriorSky(
   moon.renderOrder = -9;
   moon.frustumCulled = false;
 
-  // --- ash-fall: a slow snow of grey motes over the footprint ---
-  const positions = new Float32Array(ASH_COUNT * 3);
+  // --- ash-fall: a slow snow of grey motes over the footprint (per-preset) ---
+  const ashCount = ASH[preset].count;
+  const ashFallMps = ASH[preset].fallMps;
+  const positions = new Float32Array(ashCount * 3);
   const top = 14; // ceiling the motes fall from (above eye level)
-  for (let i = 0; i < ASH_COUNT; i++) {
+  for (let i = 0; i < ashCount; i++) {
     positions[i * 3] = cx + (Math.random() - 0.5) * span;
     positions[i * 3 + 1] = Math.random() * top;
     positions[i * 3 + 2] = cz + (Math.random() - 0.5) * span;
@@ -147,23 +166,55 @@ export function buildExteriorSky(
   ash.name = 'exterior-ash';
   ash.frustumCulled = false;
 
+  // --- gorge embers: a sparse warm-fleck Points rising from the fires below ---
+  let embers: Points | undefined;
+  let emberGeo: BufferGeometry | undefined;
+  if (preset === 'gorge') {
+    const eArr = new Float32Array(EMBER_COUNT * 3);
+    for (let i = 0; i < EMBER_COUNT; i++) {
+      eArr[i * 3] = cx + (Math.random() - 0.5) * span;
+      eArr[i * 3 + 1] = Math.random() * EMBER_TOP;
+      eArr[i * 3 + 2] = cz + (Math.random() - 0.5) * span;
+    }
+    emberGeo = new BufferGeometry();
+    emberGeo.setAttribute('position', new Float32BufferAttribute(eArr, 3));
+    embers = new Points(
+      emberGeo,
+      new PointsMaterial({ color: EMBER_COLOR, size: 0.1, transparent: true, opacity: 0.8, fog: false, depthWrite: false }),
+    );
+    embers.name = 'exterior-embers';
+    embers.frustumCulled = false;
+  }
+
   const update = (dtMs: number): void => {
     const attr = ashGeo.getAttribute('position') as Float32BufferAttribute;
     const arr = attr.array as Float32Array;
-    const drop = (dtMs / 1000) * ASH_FALL_MPS;
+    const drop = (dtMs / 1000) * ashFallMps;
     for (let i = 1; i < arr.length; i += 3) {
       arr[i] -= drop;
       if (arr[i] < 0) arr[i] += top; // wrap: an endless fall
     }
     attr.needsUpdate = true;
+    if (emberGeo) {
+      const eAttr = emberGeo.getAttribute('position') as Float32BufferAttribute;
+      const eArr = eAttr.array as Float32Array;
+      const rise = (dtMs / 1000) * EMBER_RISE_MPS;
+      for (let i = 1; i < eArr.length; i += 3) {
+        eArr[i] += rise;
+        if (eArr[i] > EMBER_TOP) eArr[i] -= EMBER_TOP; // wrap: an endless rise
+      }
+      eAttr.needsUpdate = true;
+    }
   };
 
   const dispose = (): void => {
-    for (const o of [dome, moon, ash]) {
+    const drawables: (Mesh | Points)[] = [dome, moon, ash];
+    if (embers) drawables.push(embers);
+    for (const o of drawables) {
       o.geometry.dispose();
       (o.material as MeshBasicMaterial | PointsMaterial).dispose();
     }
   };
 
-  return { dome, moon, ash, moonDir: moonDirection(span), update, dispose };
+  return { dome, moon, ash, embers, moonDir: moonDirection(span), update, dispose };
 }

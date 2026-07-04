@@ -55,6 +55,20 @@ export function setSnapResolution(width: number, height: number): void {
 }
 
 /**
+ * A SMOOTH per-vertex wind sway (Task 10, spec §6). Injected into the vertex
+ * shader at `#include <begin_vertex>` (before projection, so vertex-snap +
+ * affine still operate on the swayed clip position). The sway weights by
+ * object-space height so trunk bases stay planted; a per-instance `aWindPhase`
+ * attribute desyncs neighbours; `uWindTime` advances continuously (full frame
+ * rate — the world micro-motion is NEVER stepped, unlike the ~12 fps entities).
+ */
+export interface WindOpts {
+  ampM: number; // sway amplitude at the crown, metres (a few cm)
+  freqHz: number; // sway frequency
+  heightRefM: number; // object-space height that reaches full sway weight
+}
+
+/**
  * Patches a three.js Material's shader (via `onBeforeCompile`) with two of
  * the PS1 pipeline's signature tricks:
  *
@@ -68,37 +82,59 @@ export function setSnapResolution(width: number, height: number): void {
  *    (non-perspective-correct) texture mapping. Only wired into the base
  *    `map` (diffuse texture) slot, since that's the common case for the
  *    kit-bashed environment art this pipeline targets.
+ *
+ * `opts.wind` (Task 10) additionally injects the smooth vertex sway above.
+ * Backward-compatible: every existing `patchMaterial(mat)` call is unaffected
+ * (no wind, and the SAME `'ps1-patched'` program cache key as before).
  */
-export function patchMaterial(mat: Material): void {
+export function patchMaterial(mat: Material, opts: { wind?: WindOpts } = {}): void {
   patchedMaterials.add(new WeakRef(mat));
+  const wind = opts.wind;
 
   mat.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
     shader.uniforms.uSnapRes = { value: new Vector2(defaultSnapResX, defaultSnapResY) };
+    if (wind) {
+      shader.uniforms.uWindTime = { value: 0 };
+      shader.uniforms.uWindAmp = { value: wind.ampM };
+      shader.uniforms.uWindFreq = { value: wind.freqHz };
+      shader.uniforms.uWindHeight = { value: wind.heightRefM };
+    }
 
-    shader.vertexShader = shader.vertexShader
-      .replace(
-        'void main() {',
+    const vHead = ['uniform vec2 uSnapRes;', 'varying vec2 vAffine;', 'varying float vW;'];
+    if (wind) vHead.push(
+      'uniform float uWindTime;', 'uniform float uWindAmp;', 'uniform float uWindFreq;',
+      'uniform float uWindHeight;', 'attribute float aWindPhase;',
+    );
+    vHead.push('void main() {');
+    shader.vertexShader = shader.vertexShader.replace('void main() {', vHead.join('\n'));
+
+    if (wind) {
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <begin_vertex>',
         [
-          'uniform vec2 uSnapRes;',
-          'varying vec2 vAffine;',
-          'varying float vW;',
-          'void main() {',
-        ].join('\n'),
-      )
-      .replace(
-        '#include <project_vertex>',
-        [
-          '#include <project_vertex>',
-          // Vertex snap: quantize clip-space xy to a coarse pixel grid.
-          '  gl_Position.xy /= gl_Position.w;',
-          '  gl_Position.xy = floor(gl_Position.xy * uSnapRes) / uSnapRes;',
-          '  gl_Position.xy *= gl_Position.w;',
-          // Affine UV setup: carry uv*w and w separately so the fragment
-          // shader can undo perspective-correct interpolation.
-          '  vAffine = uv * gl_Position.w;',
-          '  vW = gl_Position.w;',
+          '#include <begin_vertex>',
+          '  float wW = clamp(transformed.y / uWindHeight, 0.0, 1.0);',
+          '  wW *= wW;', // ease: base planted, crown sways most
+          '  transformed.x += sin(uWindTime * uWindFreq + aWindPhase) * uWindAmp * wW;',
+          '  transformed.z += cos(uWindTime * uWindFreq * 0.73 + aWindPhase) * uWindAmp * wW * 0.6;',
         ].join('\n'),
       );
+    }
+
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <project_vertex>',
+      [
+        '#include <project_vertex>',
+        // Vertex snap: quantize clip-space xy to a coarse pixel grid.
+        '  gl_Position.xy /= gl_Position.w;',
+        '  gl_Position.xy = floor(gl_Position.xy * uSnapRes) / uSnapRes;',
+        '  gl_Position.xy *= gl_Position.w;',
+        // Affine UV setup: carry uv*w and w separately so the fragment
+        // shader can undo perspective-correct interpolation.
+        '  vAffine = uv * gl_Position.w;',
+        '  vW = gl_Position.w;',
+      ].join('\n'),
+    );
 
     shader.fragmentShader = shader.fragmentShader.replace(
       'void main() {',
@@ -140,13 +176,15 @@ export function patchMaterial(mat: Material): void {
     // Standard three.js onBeforeCompile idiom: stash the compiled shader so
     // callers can reach the uniforms afterwards (e.g. `setSnapResolution`
     // above, which uses this to retroactively fix up already-compiled
-    // materials).
+    // materials; ZoneBuilder's wind clock reads `uWindTime` through it).
     mat.userData.ps1Shader = shader;
   };
 
   // onBeforeCompile's body isn't part of three's program cache key, so two
   // materials with identical parameters but different onBeforeCompile logic
-  // could otherwise wrongly share a compiled program.
-  mat.customProgramCacheKey = () => 'ps1-patched';
+  // could otherwise wrongly share a compiled program. A wind material injects
+  // a DIFFERENT vertex shader, so it needs its own key (never cross-compile a
+  // swaying material with a static one).
+  mat.customProgramCacheKey = () => (wind ? 'ps1-patched-wind' : 'ps1-patched');
   mat.needsUpdate = true;
 }

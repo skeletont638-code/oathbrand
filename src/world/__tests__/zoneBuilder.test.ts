@@ -296,6 +296,22 @@ describe('ZoneBuilder.build (exterior)', () => {
     expect(instancedNames(built.group)).toContain('roof-wedge');
   });
 
+  // --- Task 10: smooth wind sway + ground clutter -----------------------------
+
+  it('forest instanced geometry carries a per-instance aWindPhase attribute', () => {
+    const built = new ZoneBuilder().build(exteriorZone([',t', 'T#']), fakeAssets());
+    let hasPhase = false;
+    built.group.traverse((o) => {
+      if (o instanceof InstancedMesh && o.geometry.getAttribute('aWindPhase')) hasPhase = true;
+    });
+    expect(hasPhase).toBe(true);
+  });
+  it('scatter stamps one instanced mesh per kind (1 draw call each)', () => {
+    const built = new ZoneBuilder().build(
+      exteriorZone(['..', '..'], { scatter: [{ kind: 'stone', cells: [[0, 0], [1, 1]] }] }), fakeAssets());
+    expect(instancedNames(built.group)).toContain('clutter-stone');
+  });
+
   it("a prop kind inherited from Object.prototype (e.g. 'toString') stays a kit piece", () => {
     // Object.hasOwn guard: a plain index/`in` lookup on PROCEDURAL_PROPS reaches
     // the prototype chain, so a kit prop named 'toString' would false-positive

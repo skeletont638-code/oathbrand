@@ -279,6 +279,8 @@ export interface ZoneDef {
   fogCells?: FogCellBand[];
   /** Backdrop palette for an exterior zone. */
   exteriorSky?: ExteriorSky;
+  /** Realism pass (Task 10): sparse instanced ground clutter (1 draw call/kind). */
+  scatter?: { kind: 'stone' | 'bones' | 'stump'; cells: GridPos[] }[];
   /** Authored scare beats the DreadDirector may fire in this zone. */
   scares?: ScareBeat[];
   /** Watcher sighting positions (may be off-grid backdrop coordinates, and may
