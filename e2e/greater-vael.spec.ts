@@ -100,6 +100,8 @@ type WorldHandle = Handle & {
   echoScenes: { activeActors: () => unknown[] };
   openDoor: (defId: string) => boolean;
   stepFrame: (dtMs?: number) => void;
+  blackout: number;
+  built: { doors: { def: { id: string }; position: { x: number; z: number } }[] };
 };
 
 /** Boot the CI build and jump to `zone` in 'playing', returning nothing (the
@@ -117,24 +119,37 @@ async function bootInto(page: import('@playwright/test').Page, zone: string): Pr
     .toBe('playing');
 }
 
-test('opening the Tower Door transitions gate-fields → tower-ground', async ({ page }) => {
+test('the Tower Door swings open and you WALK gate-fields → tower-ground, fade-free', async ({ page }) => {
   await bootInto(page, 'gate-fields');
-  // Open the decorated Tower Door (gf-to-tower) exactly as the OPEN handler does.
-  const started = await page.evaluate(() =>
-    (window as unknown as { __oathbrand: WorldHandle }).__oathbrand.openDoor('gf-to-tower'),
-  );
-  expect(started, 'openDoor should start the transition (unlocked door)').toBe(true);
-  // The async fade + zone swap lands the player in tower-ground.
+  // OPEN the decorated Tower Door (gf-to-tower): it SWINGS open — it does NOT
+  // teleport you (seamless traversal, T12; the fade is dead).
+  const opened = await page.evaluate(() => (window as unknown as { __oathbrand: WorldHandle }).__oathbrand.openDoor('gf-to-tower'));
+  expect(opened, 'openDoor should open the unlocked door').toBe(true);
+  // E only swung the leaf — the knight is still in gate-fields.
+  expect(await page.evaluate(() => (window as unknown as { __oathbrand: WorldHandle }).__oathbrand.zones.current)).toBe('gate-fields');
+  // The far-side edge was recorded ON OPEN (persisted, additive doorsOpened).
+  const openedIds = await page.evaluate(() => (window as unknown as { __oathbrand: WorldHandle }).__oathbrand.doorsOpened);
+  expect(openedIds.some((id) => id.includes('tower-ground'))).toBe(true);
+  // WALK onto the now-passable door cell → the walk-in path carries you across.
+  // The blackout overlay must never rise while the player moves (the fade is dead).
+  const peakBlackout = await page.evaluate(() => {
+    const g = (window as unknown as { __oathbrand: WorldHandle }).__oathbrand;
+    const door = g.built.doors.find((d) => d.def.id === 'gf-to-tower')!;
+    g.controller.pos.set(door.position.x, 0, door.position.z);
+    let peak = g.blackout;
+    for (let i = 0; i < 4; i++) {
+      g.stepFrame(16);
+      peak = Math.max(peak, g.blackout);
+    }
+    return peak;
+  });
+  expect(peakBlackout, 'no blackout fade during a door crossing').toBe(0);
+  // The walk-in transition lands the player in tower-ground.
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __oathbrand: WorldHandle }).__oathbrand.zones.current), {
       timeout: 10_000,
     })
     .toBe('tower-ground');
-  // The far-side edge was recorded (persisted, additive doorsOpened).
-  const opened = await page.evaluate(() =>
-    (window as unknown as { __oathbrand: WorldHandle }).__oathbrand.doorsOpened,
-  );
-  expect(opened.some((id) => id.includes('tower-ground'))).toBe(true);
 });
 
 test('stepping onto the oath trigger cell witnesses the act1-oath echo', async ({ page }) => {

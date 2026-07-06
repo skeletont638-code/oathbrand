@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { BoxGeometry, Group, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Quaternion, Vector3 } from 'three';
+import { BoxGeometry, type BufferGeometry, Group, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Quaternion, Vector3 } from 'three';
 import {
   DOOR_PANEL_MAX_TRIS,
+  doorFrameGeometry,
+  doorLeafGeometry,
   doorPanelGeometry,
   doorPropPlacements,
   gridToPlacements,
@@ -685,11 +687,24 @@ describe('planarUV', () => {
 });
 
 describe('door prop (world-expansion v1.2, Task 1)', () => {
+  const trisOf = (geo: BufferGeometry): number =>
+    geo.index ? geo.index.count / 3 : geo.attributes.position.count / 3;
+
   it('the shared door panel is within the ≤120-tri budget', () => {
     const geo = doorPanelGeometry();
-    const tris = geo.index ? geo.index.count / 3 : geo.attributes.position.count / 3;
-    expect(tris).toBeLessThanOrEqual(DOOR_PANEL_MAX_TRIS);
+    expect(trisOf(geo)).toBeLessThanOrEqual(DOOR_PANEL_MAX_TRIS);
     expect(geo.attributes.uv).toBeDefined(); // textured through the PS1 pipeline
+  });
+
+  it('splits into a static frame + a swinging leaf that together stay in budget (T12)', () => {
+    const frame = doorFrameGeometry();
+    const leaf = doorLeafGeometry();
+    // Both are textured through the PS1 pipeline like the merged panel.
+    expect(frame.attributes.uv).toBeDefined();
+    expect(leaf.attributes.uv).toBeDefined();
+    // The two spawn separately at runtime (frame static, leaf hinged) but their
+    // combined triangle count is the whole closed door — still within budget.
+    expect(trisOf(frame) + trisOf(leaf)).toBeLessThanOrEqual(DOOR_PANEL_MAX_TRIS);
   });
 
   it('places a panel on each decorated gate cell, aligned with its wall-door frame', () => {

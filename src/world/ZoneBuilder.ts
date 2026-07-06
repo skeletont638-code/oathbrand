@@ -298,29 +298,64 @@ export function gridToPlacements(def: ZoneDef): Placement[] {
 /** Perf budget for the shared door panel (spec §1). Enforced by a unit test. */
 export const DOOR_PANEL_MAX_TRIS = 120;
 
+const DOOR_W = 1.7; // opening width (a 2 m cell)
+const DOOR_H = 2.0; // opening height
+const DOOR_T = 0.14; // panel thickness
+
 /**
- * The shared door-prop geometry: a stone frame (two jambs + a lintel) holding
- * an iron-studded plank panel, built in the canonical `+z`-facing orientation
- * (so a placement's `rotY` turns the face toward the passage, exactly like the
- * `wall-door` frame). ONE geometry, instanced per decorated door — 96 tris,
- * inside the ≤120 budget. Textured through the PS1 pipeline at spawn.
- * Origin at the sill, so a placement sits it on the floor.
+ * Local x of the leaf's hinge edge (seamless-traversal addendum): the plank is
+ * `DOOR_W - 0.3` wide, so its edge sits half that off cell-centre. `main.ts`
+ * pivots the swinging leaf about this offset (exactly as the kicked shortcut
+ * gate pivots its leaf about `cellM / 2`), so the two stay coupled.
+ */
+export const DOOR_LEAF_PIVOT_X = (DOOR_W - 0.3) / 2;
+
+const doorBox = (w: number, h: number, d: number, x: number, y: number, z: number): BufferGeometry =>
+  new BoxGeometry(w, h, d).translate(x, y, z);
+
+/**
+ * The STATIC stone frame — two jambs + a lintel — built in the canonical
+ * `+z`-facing orientation (a placement's `rotY` turns the face toward the
+ * passage, exactly like the `wall-door` frame). The frame never moves; only the
+ * leaf (below) swings. Origin at the sill, so a placement sits it on the floor.
+ */
+export function doorFrameGeometry(): BufferGeometry {
+  const parts: BufferGeometry[] = [
+    doorBox(0.18, DOOR_H, 0.22, -(DOOR_W / 2 - 0.09), DOOR_H / 2, 0), // left jamb (12)
+    doorBox(0.18, DOOR_H, 0.22, DOOR_W / 2 - 0.09, DOOR_H / 2, 0), // right jamb (12)
+    doorBox(DOOR_W, 0.2, 0.22, 0, DOOR_H - 0.1, 0), // lintel (12)
+  ];
+  const merged = mergeGeometries(parts, false);
+  if (!merged) throw new Error('doorFrameGeometry: mergeGeometries returned null');
+  merged.computeVertexNormals();
+  return merged;
+}
+
+/**
+ * The SWINGING iron-studded plank leaf, centred at its own origin (so `main.ts`
+ * hangs it off a hinge pivot at `DOOR_LEAF_PIVOT_X` and rotates it open — the
+ * seamless-traversal swing). Origin at the sill, matching the frame.
+ */
+export function doorLeafGeometry(): BufferGeometry {
+  const parts: BufferGeometry[] = [
+    doorBox(DOOR_W - 0.3, DOOR_H - 0.2, DOOR_T, 0, DOOR_H / 2, 0), // plank panel (12 tris)
+  ];
+  // Four iron studs, proud of the panel face (48 tris) → 60 total.
+  for (const yy of [0.55, 1.35]) for (const xx of [-0.35, 0.35]) parts.push(doorBox(0.12, 0.12, 0.1, xx, yy, DOOR_T / 2 + 0.03));
+  const merged = mergeGeometries(parts, false);
+  if (!merged) throw new Error('doorLeafGeometry: mergeGeometries returned null');
+  merged.computeVertexNormals();
+  return merged;
+}
+
+/**
+ * The full closed door — frame + leaf merged, in the canonical `+z`-facing
+ * orientation, 96 tris inside the ≤120 budget. Kept as the budget-check target;
+ * at runtime `main.ts` spawns the frame and the swinging leaf separately (the
+ * seamless-traversal swing) from `doorFrameGeometry` / `doorLeafGeometry`.
  */
 export function doorPanelGeometry(): BufferGeometry {
-  const W = 1.7; // opening width (a 2 m cell)
-  const H = 2.0; // opening height
-  const T = 0.14; // panel thickness
-  const box = (w: number, h: number, d: number, x: number, y: number, z: number): BufferGeometry =>
-    new BoxGeometry(w, h, d).translate(x, y, z);
-  const parts: BufferGeometry[] = [
-    box(W - 0.3, H - 0.2, T, 0, H / 2, 0), // iron-studded plank panel (12 tris)
-    box(0.18, H, 0.22, -(W / 2 - 0.09), H / 2, 0), // left jamb (12)
-    box(0.18, H, 0.22, W / 2 - 0.09, H / 2, 0), // right jamb (12)
-    box(W, 0.2, 0.22, 0, H - 0.1, 0), // lintel (12)
-  ];
-  // Four iron studs, proud of the panel face (48 tris) → 96 total.
-  for (const yy of [0.55, 1.35]) for (const xx of [-0.35, 0.35]) parts.push(box(0.12, 0.12, 0.1, xx, yy, T / 2 + 0.03));
-  const merged = mergeGeometries(parts, false);
+  const merged = mergeGeometries([doorFrameGeometry(), doorLeafGeometry()], false);
   if (!merged) throw new Error('doorPanelGeometry: mergeGeometries returned null');
   merged.computeVertexNormals();
   return merged;

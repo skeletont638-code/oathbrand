@@ -52,8 +52,8 @@ import { flashDenied, hidePrompt, showPrompt } from './ui/prompt';
 import { AshPriest, ashPriestsIn } from './entities/AshPriest';
 import { dialogueSequence } from './content/dialogue';
 import type { BuiltZone, PlacedDoor } from './world/ZoneBuilder';
-import { doorPanelGeometry, doorPropPlacements } from './world/ZoneBuilder';
-import { isBarred, resolveDoorInstances } from './world/doors';
+import { doorFrameGeometry, doorLeafGeometry, doorPropPlacements, DOOR_LEAF_PIVOT_X } from './world/ZoneBuilder';
+import { doorCellState, isBarred, resolveDoorInstances, type DoorInstance } from './world/doors';
 import { getTexture } from './world/textures';
 import { resolveZoneLighting } from './world/lighting';
 import { ZoneManager } from './world/ZoneManager';
@@ -66,7 +66,7 @@ import type { Dragon } from './world/dragon';
 import { selectEnding, EndingDirector } from './engine/endings';
 import type { EndingId } from './content/types';
 import { showTitleCard, hideTitleCard } from './ui/titleCard';
-import { setBlackout, rollCredits, showVigilContinues } from './ui/credits';
+import { setBlackout, getBlackout, rollCredits, showVigilContinues } from './ui/credits';
 import { AudioManager } from './audio/AudioManager';
 import { TitleScreen } from './ui/title';
 import { PauseScreen } from './ui/pause';
@@ -110,12 +110,10 @@ const INTERIOR_FOG_HEX = 0x1a1a1d;
 const GROUND_EASE_MS = 120;
 /** Ambient-light floor when a zone doesn't set its own `ambientFloor`. */
 const DEFAULT_AMBIENT = 0.35;
-/** Shortcut gate: how far it swings open (rad) and how fast (rad/s). */
+/** Shortcut gate + decorated doors: how far a leaf swings open (rad) and how
+ *  fast (rad/s). Doors reuse the kicked-gate tuning (seamless traversal, T12). */
 const GATE_OPEN_ANGLE = -1.4;
 const GATE_SWING_SPEED = 3.2;
-/** Total black-fade through a decorated door (world-expansion v1.2, Task 1):
- *  half out to black (covering the zone load) + half back in. */
-const DOOR_FADE_MS = 400;
 /** Landing-dip on the undercroft drop: start crouch (m) + recovery (m/s). */
 const FALL_DIP_M = 1.3;
 const FALL_DIP_RECOVER = 2.4;
@@ -1043,12 +1041,14 @@ async function startScene(): Promise<void> {
   /** Door-span trigger cells of the current zone, "row,col" → placed door. */
   let doorCells = new Map<string, PlacedDoor>();
 
-  // --- Decorated-door panels (world-expansion v1.2, Task 1) ----------------
-  // ONE shared geometry + material for every door panel game-wide (instanced
-  // per door → a couple of draw calls at most, well inside the ≤100/zone cap).
-  // Textured through the PS1 pipeline (`rock`, crunched); flat colour in tests
-  // where getTexture is undefined. Never disposed (shared for the session).
-  const doorPanelGeo = doorPanelGeometry();
+  // --- Decorated-door panels (world-expansion v1.2, Task 1; swing = Task 12) ---
+  // ONE shared frame + leaf geometry + material for every door game-wide
+  // (instanced per door → a couple of draw calls at most, well inside the
+  // ≤100/zone cap). Textured through the PS1 pipeline (`rock`, crunched); flat
+  // colour in tests where getTexture is undefined. Never disposed (shared for
+  // the session). The stone frame stays put; only the iron leaf swings.
+  const doorFrameGeo = doorFrameGeometry();
+  const doorLeafGeo = doorLeafGeometry();
   const doorPanelMat = new THREE.MeshStandardMaterial({
     color: 0x3b3b40, // dark iron-in-stone
     map: getTexture('rock') ?? null,
@@ -1056,8 +1056,21 @@ async function startScene(): Promise<void> {
     metalness: 0,
     flatShading: true,
   });
-  /** The current zone's door-panel meshes (rebuilt per zone). */
-  let doorProps: THREE.Mesh[] = [];
+  /** A decorated door's physical panel: a static stone frame + a hinged iron
+   *  leaf that swings open on OPEN (seamless traversal, T12). The `pivot` group
+   *  hangs the leaf off the hinge edge and carries the swing angle. */
+  interface DoorPanel {
+    frame: THREE.Mesh;
+    hinge: THREE.Group;
+    pivot: THREE.Group;
+    row: number;
+    col: number;
+    door: PlacedDoor;
+    angle: number;
+    opening: boolean;
+  }
+  /** The current zone's door panels (rebuilt per zone). */
+  let doorPanels: DoorPanel[] = [];
 
   /** Glint meshes for the current zone's un-taken items, by item id. */
   let itemMeshes: { id: string; mesh: THREE.Mesh }[] = [];
@@ -1500,24 +1513,75 @@ async function startScene(): Promise<void> {
 
   /** Drop the current zone's door panels (geometry/material are shared → kept). */
   function clearDoorProps(): void {
-    for (const m of doorProps) scene.remove(m);
-    doorProps = [];
+    for (const p of doorPanels) {
+      scene.remove(p.frame);
+      scene.remove(p.hinge);
+    }
+    doorPanels = [];
   }
 
   /**
-   * Place an iron door panel on every decorated gate cell (Task 1), oriented
-   * with its wall-door frame, and SOLIDIFY the cell so the panel collides —
-   * a decorated gate is a closed door you must OPEN, not a walk-through border.
-   * No-op when the zone decorates no gate (every v1 zone → byte-identical).
+   * Place a physical door on every decorated gate cell (Task 1): a static stone
+   * frame + a hinged iron leaf, oriented with its wall-door frame. A CLOSED door
+   * (not yet opened this run) starts flush and SOLIDIFIES the cell — you must
+   * OPEN it. An OPENED door (its edge in `doorsOpened`) spawns already swung and
+   * leaves the cell passable, so re-entering the zone finds it open + walk-in
+   * (seamless traversal, T12). No-op when the zone decorates no gate (every v1
+   * zone → byte-identical).
    */
-  function spawnDoorProps(decoratedGates: ReadonlySet<string>): void {
-    for (const p of doorPropPlacements(activeDef, decoratedGates)) {
-      const mesh = new THREE.Mesh(doorPanelGeo, doorPanelMat);
-      mesh.position.set(p.x, built.groundYAt(p.x, p.z), p.z);
-      mesh.rotation.y = p.rotY;
-      scene.add(mesh);
-      doorProps.push(mesh);
-      built.collider.setSolid(p.row, p.col, true); // the panel blocks the cell
+  function spawnDoorProps(decoratedCells: ReadonlyMap<string, { door: PlacedDoor; open: boolean }>): void {
+    if (decoratedCells.size === 0) return;
+    const chars = new Set<string>();
+    for (const key of decoratedCells.keys()) {
+      const [r, c] = key.split(',').map(Number);
+      const ch = activeDef.grid[r]?.[c];
+      if (ch) chars.add(ch);
+    }
+    for (const p of doorPropPlacements(activeDef, chars)) {
+      const cell = decoratedCells.get(`${p.row},${p.col}`);
+      if (!cell) continue;
+      const y = built.groundYAt(p.x, p.z);
+      // Static stone frame.
+      const frame = new THREE.Mesh(doorFrameGeo, doorPanelMat);
+      frame.position.set(p.x, y, p.z);
+      frame.rotation.y = p.rotY;
+      scene.add(frame);
+      // Hinged leaf: `hinge` sits at the cell centre facing the passage; `pivot`
+      // hangs the leaf off the hinge edge and carries the swing (exactly like the
+      // kicked shortcut gate — hinge at the edge, leaf offset back over the cell).
+      const hinge = new THREE.Group();
+      hinge.position.set(p.x, y, p.z);
+      hinge.rotation.y = p.rotY;
+      const pivot = new THREE.Group();
+      pivot.position.set(-DOOR_LEAF_PIVOT_X, 0, 0);
+      const leaf = new THREE.Mesh(doorLeafGeo, doorPanelMat);
+      leaf.position.set(DOOR_LEAF_PIVOT_X, 0, 0); // recentres the leaf over the cell when flush
+      pivot.add(leaf);
+      hinge.add(pivot);
+      scene.add(hinge);
+      const angle = cell.open ? GATE_OPEN_ANGLE : 0;
+      pivot.rotation.y = angle;
+      doorPanels.push({ frame, hinge, pivot, row: p.row, col: p.col, door: cell.door, angle, opening: false });
+      if (!cell.open) built.collider.setSolid(p.row, p.col, true); // a closed leaf blocks the cell
+    }
+  }
+
+  /**
+   * OPEN a decorated door (seamless traversal, T12): groan + swing the leaf, then
+   * the cell reverts to a v1 walk-in border — un-solidify + rejoin `doorCells` so
+   * the player WALKS through fade-free — and the edge is recorded open for the
+   * run (persisted; unbars a far-side lock for good). NO transition fires here.
+   */
+  function openDecoratedDoor(door: PlacedDoor, inst: DoorInstance): void {
+    game.bus.emit({ type: 'door-opened', doorId: door.def.id }); // hinge groan
+    for (const p of doorPanels) if (p.door.def.id === door.def.id) p.opening = true;
+    for (const [row, col] of doorSpan(activeDef, door.def)) {
+      built.collider.setSolid(row, col, false); // the leaf no longer blocks
+      doorCells.set(`${row},${col}`, door); // walk in, exactly like every v1 gate
+    }
+    if (!doorsOpened.has(inst.edgeId)) {
+      doorsOpened.add(inst.edgeId);
+      persistProgress();
     }
   }
 
@@ -1954,23 +2018,30 @@ async function startScene(): Promise<void> {
     ambient.color.setHex(gardenHere ? 0x6f9c62 : 0x8a8a92);
     if (gardenHere) ambient.intensity = 0.5;
     enemyCtx.collider = built.collider;
-    // Walk-in transitions target these cells. A DECORATED gate (Task 1) is
-    // excluded — its iron panel collides (below) and it opens only on E, never
-    // by walking in — so it never lands in `doorCells`.
+    // Walk-in transitions target these cells. A CLOSED decorated gate (T1) is
+    // excluded — its iron leaf collides (below) and it opens on E — so it does
+    // not land in `doorCells`. But an ALREADY-OPENED decorated gate (its edge in
+    // `doorsOpened`) has swung for good this run: it rejoins `doorCells` and its
+    // leaf spawns open + the cell stays passable, so you walk through it exactly
+    // like any v1 gate (seamless traversal, T12).
     doorCells = new Map();
-    const decoratedGates = new Set<string>();
+    const decoratedCells = new Map<string, { door: PlacedDoor; open: boolean }>();
     for (const door of built.doors) {
-      if (doorInstancesByDefId.has(door.def.id)) {
-        const ch = activeDef.grid[door.def.at[0]]?.[door.def.at[1]];
-        if (ch) decoratedGates.add(ch);
-        continue; // decorated: opens on OPEN only, panel blocks the cell
+      const inst = doorInstancesByDefId.get(door.def.id);
+      if (inst) {
+        const open = doorCellState(inst, zones.current, doorsOpened) === 'walk-in';
+        for (const [row, col] of doorSpan(activeDef, door.def)) {
+          decoratedCells.set(`${row},${col}`, { door, open });
+          if (open) doorCells.set(`${row},${col}`, door);
+        }
+        continue;
       }
       for (const [row, col] of doorSpan(activeDef, door.def)) {
         doorCells.set(`${row},${col}`, door);
       }
     }
     clearDoorProps();
-    spawnDoorProps(decoratedGates); // panels + solidified cells (no-op if none)
+    spawnDoorProps(decoratedCells); // frames + leaves (swung if opened) + solid closed cells
     clearWisps();
     clearItemMeshes();
     clearGate();
@@ -2024,37 +2095,20 @@ async function startScene(): Promise<void> {
   // door (see DoorDef pairing docs in zoneDef.ts), facing into the room —
   // never on a door cell, so arrivals cannot chain-transition.
   let transitioning = false;
-  /** Ease the full-screen blackout to `to` (0..1) over `ms`, from wherever it
-   *  is now. Reuses the endings' blackout overlay (`ui/credits`). */
-  let blackoutAlpha = 0;
-  function rampBlackout(to: number, ms: number): Promise<void> {
-    return new Promise((resolve) => {
-      const from = blackoutAlpha;
-      const start = performance.now();
-      const step = (now: number): void => {
-        const t = ms <= 0 ? 1 : Math.min(1, (now - start) / ms);
-        blackoutAlpha = from + (to - from) * t;
-        setBlackout(blackoutAlpha);
-        if (t >= 1) resolve();
-        else requestAnimationFrame(step);
-      };
-      requestAnimationFrame(step);
-    });
-  }
 
-  // A decorated door (Task 1) passes `edgeToOpen`: it fades through black and
-  // records the edge as unbarred-for-good on arrival. A plain gate omits it and
-  // transitions instantly (v1 behavior, byte-identical).
-  function goThrough(door: PlacedDoor, edgeToOpen?: string): void {
+  // Seamless traversal (T12): EVERY door — plain gate or a decorated door already
+  // swung open — transitions with the ONE uniform, fade-free walk-in treatment.
+  // The screen never blacks out where the player moves; the only blackout left is
+  // the endings/credits overlay (`ui/credits`). A far-side lock is unbarred at the
+  // moment it SWINGS (openDecoratedDoor), never here, so goThrough is lock-agnostic.
+  function goThrough(door: PlacedDoor): void {
     if (transitioning) return;
     transitioning = true; // freezes simulation until the new zone is live
     hidePrompt();
-    const fade = edgeToOpen !== undefined;
     const from = zones.current;
     game.bus.emit({ type: 'door-opened', doorId: door.def.id }); // hinge groan
     void (async () => {
       try {
-        if (fade) await rampBlackout(1, DOOR_FADE_MS / 2); // to black, then load
         built = await zones.transition(door);
         const def = resolveZone(zones.current);
         // Task 5: the door OUT of Greater Vael restores the Hag-tithed ember cap
@@ -2082,15 +2136,9 @@ async function startScene(): Promise<void> {
         }
         controller.pitch = 0;
         enterZone();
-        // A far-side door, once walked, is unbarred for good — record + persist.
-        if (edgeToOpen !== undefined && !doorsOpened.has(edgeToOpen)) {
-          doorsOpened.add(edgeToOpen);
-          persistProgress();
-        }
         // The undercroft is entered by DROPPING in from the hall — a brief
         // landing crouch that eases back up (spec's "one-way drop").
         if (zones.current === 'undercroft' && from === 'great-hall') fallDip = FALL_DIP_M;
-        if (fade) await rampBlackout(0, DOOR_FADE_MS / 2); // back in
       } finally {
         transitioning = false;
       }
@@ -2288,10 +2336,18 @@ async function startScene(): Promise<void> {
       get doorsOpened() {
         return [...doorsOpened];
       },
-      // Drive a gate-door transition by DoorDef id, replaying the exact OPEN
-      // handler (bar check → passability → the far-side unbar record). Returns
-      // whether the transition started (barred / unbuilt targets return false).
-      // Dev/CI-only — gated with the whole handle, never in the shipped bundle.
+      // The endings/credits blackout overlay alpha (0 when none) — the seamless-
+      // traversal e2e asserts this stays 0 through a door crossing (the fade is
+      // dead). Dev/CI-only — gated with the whole handle.
+      get blackout() {
+        return getBlackout();
+      },
+      // OPEN a gate-door by DoorDef id, replaying the exact OPEN handler
+      // (seamless traversal T12): a decorated leaf SWINGS open (records the edge,
+      // un-solidifies the cell, rejoins the walk-in path) — it does NOT teleport;
+      // walking through is a separate act (the frame loop / stepFrame carries the
+      // player across). Returns whether the door is now open/passable (barred or
+      // unbuilt targets return false). Dev/CI-only — never in the shipped bundle.
       openDoor: (defId: string): boolean => {
         const door = built.doors.find((d) => d.def.id === defId);
         if (!door || transitioning) return false;
@@ -2299,12 +2355,12 @@ async function startScene(): Promise<void> {
         if (inst) {
           if (isBarred(inst, zones.current, doorsOpened)) return false;
           if (!(canPass(door.def, flags) && hasZone(door.def.to))) return false;
-          goThrough(door, inst.edgeId);
+          if (!doorsOpened.has(inst.edgeId)) openDecoratedDoor(door, inst); // swing (no transition)
           return true;
         }
-        if (!(canPass(door.def, flags) && hasZone(door.def.to))) return false;
-        goThrough(door);
-        return true;
+        // A plain gate is already a walk-in border — report passability; the
+        // player crosses it by walking (no separate "open").
+        return canPass(door.def, flags) && hasZone(door.def.to);
       },
     };
     // Dev-only brand test keys: H burns an ember, R kneels at a phantom
@@ -2764,6 +2820,14 @@ async function startScene(): Promise<void> {
         );
         shortcutGate.hinge.rotation.y = shortcutGate.angle;
       }
+      // Decorated-door leaves swing open on OPEN (seamless traversal, T12) — the
+      // same kicked-gate tuning, applied to each opening leaf's hinge pivot.
+      for (const panel of doorPanels) {
+        if (panel.opening && panel.angle > GATE_OPEN_ANGLE) {
+          panel.angle = Math.max(GATE_OPEN_ANGLE, panel.angle - (GATE_SWING_SPEED * dt) / 1000);
+          panel.pivot.rotation.y = panel.angle;
+        }
+      }
       if (fallDip > 0) fallDip = Math.max(0, fallDip - (FALL_DIP_RECOVER * dt) / 1000);
 
       // Composite the false-pulse spoof (finding 4b) over the real pulse via
@@ -2850,14 +2914,19 @@ async function startScene(): Promise<void> {
           const inst = doorInstancesByDefId.get(door.def.id);
           // At the summit, the stair down is the KEEP choice, not a transition.
           if (inst) {
-            // A decorated gate (world-expansion v1.2). Barred from the far side
-            // until first opened from within; otherwise hinge-groan + black
-            // fade + transition, and the far-side lock lifts for good.
+            // A decorated gate (world-expansion v1.2; seamless traversal T12).
+            // Barred from the far side until first opened from within. Otherwise:
+            // an unopened leaf SWINGS open (groan) — no transition, you walk
+            // through; an already-open leaf transitions on E like any v1 gate.
             if (isBarred(inst, zones.current, doorsOpened)) {
               showCard('Barred from the other side.');
-            } else if (canPass(door.def, flags) && hasZone(door.def.to)) {
-              goThrough(door, inst.edgeId);
-            } else flashDenied();
+            } else if (!(canPass(door.def, flags) && hasZone(door.def.to))) {
+              flashDenied();
+            } else if (doorsOpened.has(inst.edgeId)) {
+              goThrough(door); // already swung this run → walk-in on E, fade-free
+            } else {
+              openDecoratedDoor(door, inst); // swing it open; the fade is dead
+            }
           } else if (zones.current === 'summit' && door.def.to === 'throne' && !endingId) {
             handleKeepPress();
           } else if (

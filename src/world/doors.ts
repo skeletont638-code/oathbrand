@@ -103,6 +103,33 @@ export function isBarred(
 }
 
 /**
+ * The cell disposition of a decorated door for the CURRENT run (seamless
+ * traversal, Task 12 — the fade is dead; doors swing open and you walk through):
+ *
+ *   'walk-in' — the edge has been opened this run: the panel is swung, the cell
+ *               un-solidifies and rejoins the walk-in `doorCells`, and the
+ *               player crosses instantly mid-stride, exactly like any v1 gate.
+ *               (Both ends of an opened edge report 'walk-in' — one `edgeId`.)
+ *   'barred'  — a far-side lock, approached from the far side, not yet opened:
+ *               the panel stays solid and E answers 'Barred from the other side.'
+ *   'closed'  — decorated and openable from here: the panel is solid and E
+ *               swings it open (recording the edge, un-barring the far side).
+ *
+ * Pure — `main.ts` turns the state into meshes + collider bits.
+ */
+export type DoorCellState = 'walk-in' | 'barred' | 'closed';
+
+export function doorCellState(
+  door: DoorInstance,
+  approachingFrom: string,
+  opened: ReadonlySet<string>,
+): DoorCellState {
+  if (opened.has(door.edgeId)) return 'walk-in';
+  if (isBarred(door, approachingFrom, opened)) return 'barred';
+  return 'closed';
+}
+
+/**
  * Index every `DoorDef` that lies on a decorated edge — BOTH ends — to its
  * `DoorInstance`, keyed by `DoorDef.id` (unique game-wide). The defining side's
  * door is found directly; the far side is resolved through `pairedDoor`, so a

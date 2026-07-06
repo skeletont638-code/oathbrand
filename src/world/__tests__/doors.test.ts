@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   collectDoors,
+  doorCellState,
   doorEdgeId,
   isBarred,
   resolveDoorInstances,
@@ -150,6 +151,46 @@ describe('isBarred (truth table)', () => {
   it('the FAR side passes once the edge has been opened', () => {
     const d = instance({ lockedFarSide: true, definedIn: 'undercroft', edgeId: 'gate-fields-undercroft:2' });
     expect(isBarred(d, 'gate-fields', new Set(['gate-fields-undercroft:2']))).toBe(false);
+  });
+});
+
+describe('doorCellState (seamless traversal, Task 12 — swing then walk through)', () => {
+  const farSide = instance({
+    lockedFarSide: true,
+    definedIn: 'undercroft',
+    edgeId: 'gate-fields-undercroft:2',
+  });
+  const plain = instance({ lockedFarSide: false, definedIn: 'undercroft', edgeId: 'a-b:1' });
+
+  it('an unopened, unlocked door is CLOSED (solid; E swings it open)', () => {
+    expect(doorCellState(plain, 'undercroft', new Set())).toBe('closed');
+    expect(doorCellState(plain, 'gate-fields', new Set())).toBe('closed');
+  });
+
+  it('an OPENED edge is WALK-IN — the cell rejoins doorCells + un-solidifies', () => {
+    const opened = new Set(['a-b:1']);
+    // First-open on an unlocked door adds its edgeId → from then on it is walk-in.
+    expect(doorCellState(plain, 'undercroft', opened)).toBe('walk-in');
+  });
+
+  it('re-entering a zone with the edge already opened spawns it WALK-IN (both sides)', () => {
+    const opened = new Set(['gate-fields-undercroft:2']);
+    expect(doorCellState(farSide, 'undercroft', opened)).toBe('walk-in'); // defining side
+    expect(doorCellState(farSide, 'gate-fields', opened)).toBe('walk-in'); // far side, one edgeId
+  });
+
+  it('a far-side lock is BARRED from the far side until opened (E refuses)', () => {
+    expect(doorCellState(farSide, 'gate-fields', new Set())).toBe('barred');
+  });
+
+  it('a far-side lock is CLOSED (openable) from the DEFINING side', () => {
+    expect(doorCellState(farSide, 'undercroft', new Set())).toBe('closed');
+  });
+
+  it('opening a far-side lock from within makes BOTH sides walk-in for good', () => {
+    // The defining side opens it → edgeId recorded → the far side is no longer barred.
+    const opened = new Set([farSide.edgeId]);
+    expect(doorCellState(farSide, 'gate-fields', opened)).toBe('walk-in');
   });
 });
 

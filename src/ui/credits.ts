@@ -32,6 +32,15 @@ export function setBlackout(alpha: number): void {
   ensureBlackout().style.opacity = String(Math.min(1, Math.max(0, alpha)));
 }
 
+/**
+ * The current blackout overlay alpha (0 when never raised). Dev/CI observability
+ * only — the seamless-traversal e2e asserts this stays 0 through a door crossing
+ * (Task 12: the fade is dead; only endings/credits ever black the screen).
+ */
+export function getBlackout(): number {
+  return blackoutEl ? Number(blackoutEl.style.opacity || '0') : 0;
+}
+
 // ─── the credits crawl ──────────────────────────────────────────────────────
 
 let creditsEl: HTMLDivElement | null = null;
