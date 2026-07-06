@@ -81,6 +81,11 @@ export const LORE: Record<string, LoreEntry> = {
     title: 'The Barred Approach',
     body: 'The throne road was sealed from within. Only the first knight held the right to bar it so — Ser Callun, sworn before all others, who that night unswore before all others. He locked the dark in with the crown. Or the crown in with the dark.',
   },
+  // Forward-dread (P4): the feast hall does not only mourn — it warns.
+  'hall-set-places': {
+    title: 'The Set Places',
+    body: 'The long table is laid for a feast no one ate — bowls, knives, a cup at every place. But the benches are pushed back all on one side, in one motion, the way men stand when a door opens that they did not expect. The door they watched is the one you are about to use.',
+  },
 
   // ─── THE UNDERCROFT ────────────────────────────────────────────────────
   'maren-litany': {
@@ -142,6 +147,18 @@ export const LORE: Record<string, LoreEntry> = {
     body: 'From here the whole vigil watched the last host form up and ride for the cliff of embers, banners like a second, redder dawn. Every brand in that column has since gone out. One brand was not in the column. Yours.',
   },
 
+  // ─── THE THRONE & THE SUMMIT (P4 forward-dread) ────────────────────────
+  // The last two rooms held `lore: []` — no inscription warned of what waits
+  // ahead. These two do: the threat is not only behind you.
+  'throne-doors-scored': {
+    title: 'The Scored Doors',
+    body: 'The doors to the throne hang scored from the inside — long, patient grooves at the height of a kneeling man, worn smooth as the oath-stone. Whatever asked to be let out did not shout. It knelt, and it scratched, and it waited to be heard. It is quieter now than it has ever been.',
+  },
+  'summit-climbers-cairn': {
+    title: 'A Cairn of Helms',
+    body: 'Seven helms stacked beside the stair, each older than the last, polished by wind where hands once polished them. Seven knights climbed past this stone to ask the Flame for more time. The stair remembers no one coming down. Count the helms again before you climb.',
+  },
+
   // ─── GREATER VAEL DROP 1 — THE GATE FIELDS (Task 9) ────────────────────
   'gv-field-boundary-stone': {
     title: 'The Boundary-Stone',
@@ -162,6 +179,11 @@ export const LORE: Record<string, LoreEntry> = {
   'gv-field-tithe-post': {
     title: 'The Tithe-Post',
     body: 'A toll-post at the crossing, its ledger-slot worn smooth by cold coin. Here a traveller bought back an hour of warmth against the fog, hearth-fire measured out by the finger-length. The Flame lent a kingdom its fire; the kingdom sold it on by the ember. None of the debt ran the other way.',
+  },
+  // Forward-dread (P4): the waystone at the threshold of the Fields.
+  'gv-fields-standing-stone': {
+    title: 'The Standing Stone',
+    body: 'A waystone for pilgrims, its distances chiselled and sure: THE VILLAGE, ONE MILE. THE FORGE-ROAD, TWO. Beneath, in newer cuts that wander like a man walking backward: it stands where the fog begins. it was nearer when i finished this line than when i began it.',
   },
 
   // ─── GREATER VAEL DROP 1 — THE ASHEN FOREST N (Task 10) ────────────────
@@ -197,6 +219,9 @@ export const LORE: Record<string, LoreEntry> = {
     body: 'The water has gone still and wrong, a skin on it the colour of a bruise. Cut into the coping, in a hand that shook: SHE POISONED IT. And lower, later, smaller, as if the hand had thought again: or the flame died, and the water died with it, and we needed a name that could hear us.' },
   'gv-village-procession': { title: 'The Kneeling Line',
     body: 'A line worn into the street by knees that never rose. When the tithe could not be paid in embers, Cinder paid it in the hollowed — walked its own dead out and set them kneeling toward the fog, a penance-column. Count them as you pass. One of them is counting you.' },
+  // Forward-dread (P4): the tally on the last lit house, facing the fog.
+  'gv-village-shutter-tally': { title: 'A Tally on the Shutter',
+    body: 'Someone kept count on the shutter of the last lit house: four days, eleven marks. The marks are not of days. The last one is cut deeper, dragged, as if the counter looked up mid-stroke and did not look down again. The shutter faces the fog.' },
 
   // ─── GREATER VAEL DROP 1 — THE PILGRIM'S DESCENT (Task 12) ─────────────
   'gv-descent-shrine': { title: 'The Wayside Shrine',
@@ -207,6 +232,9 @@ export const LORE: Record<string, LoreEntry> = {
     body: 'The gate at the bottom is barred and swollen shut, and beyond it the sound of water where no water should be. The Salt Road ran on from here once, down to the sea-marches. It runs under them now. Something still tolls, far below the surface, keeping a count no one is left to owe.' },
   'gv-descent-ash-priest': { title: 'The Ash-Priest, at the Gate',
     body: 'He has come down ahead of you, as he always has, and set his back to the sealed gate. "A kingdom given fire," he says, not turning, "and it learned to sell the warmth and keep the ash. I carried the first ember up a road much like this one. I never asked what it would cost." He will not say who he heralded, or when.' },
+  // Forward-dread (P4): the knotted rail, worn from the underside.
+  'gv-descent-hold-the-rail': { title: "The Pilgrim's Rail",
+    body: "The rope rail is knotted every arm's length, each knot worn black by a hundred descending hands. Some knots are worn from the underside. Something has climbed this descent from below, hand over hand, more than once. If the rail trembles, it is not the wind. Do not look down to check." },
 
   // ─── NG+ (T16): the recontextualisations. Defined now, placed later. ────
   'ng-queen-knew': {

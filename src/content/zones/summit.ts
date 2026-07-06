@@ -45,7 +45,10 @@ export const SUMMIT: ZoneDef = {
   ],
   enemies: [],
   banner: { at: [6, 1], name: 'Banner of the Summit' },
-  lore: [],
+  // Forward-dread (P4): the cairn of helms beside the stair-head [6,4] (directly
+  // above the entry door 1 [7,4]) — read as you climb from the throne toward the
+  // offering-flame. On the main path, clear of the west-side banner/Ash-Priest.
+  lore: [{ id: 'summit-climbers-cairn', at: [6, 5] }],
   doors: [
     // The stair back down to the throne (free — you fought your way up).
     { id: 'summit-to-throne', at: [7, 4], to: 'throne', pair: 'throne-summit' },

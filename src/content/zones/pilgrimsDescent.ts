@@ -105,6 +105,10 @@ export const PILGRIMS_DESCENT: ZoneDef = {
     { id: 'gv-descent-pilgrim-marker', at: [1, 5] }, // at the head of the switchbacks (top ledge)
     { id: 'gv-descent-sealed-gate', at: [10, 4] }, // at the sealed gate (bottom, one cell west of the `44`)
     { id: 'gv-descent-ash-priest', at: [7, 3] }, // his Drop-1 final line (the priest stands one cell west at [7,2])
+    // Forward-dread (P4): the rope-rail at [2,10] — a lone `p` trail cell flanked
+    // by void on both sides, the first descending step off the top ledge after the
+    // vista. The one-cell-wide ribbon makes it unavoidable on the descent.
+    { id: 'gv-descent-hold-the-rail', at: [2, 10] },
   ],
   doors: [
     // N road back up to the Gate Fields hub — the paired other end of `gf-descent`.

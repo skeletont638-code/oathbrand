@@ -108,6 +108,10 @@ export const CINDER_VILLAGE: ZoneDef = {
     { id: 'gv-village-collector-house', at: [3, 11] }, // ward-marks scraped off the collector's door
     { id: 'gv-village-well', at: [1, 8] }, // the curdled well (`w`→floor)
     { id: 'gv-village-procession', at: [4, 5] }, // the kneeling line worn into the street
+    // Forward-dread (P4): the shutter-tally at [4,10] — dead-centre on the
+    // exposure-street spine (row 4) the player must walk, between the live
+    // kneeler [4,9] and an inert statue [4,11], by the east houses facing the fog.
+    { id: 'gv-village-shutter-tally', at: [4, 10] },
   ],
   items: [
     // The surrenderable tithe-ledger, in the same burned hearth-room alley as its

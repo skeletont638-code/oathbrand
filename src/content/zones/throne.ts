@@ -61,7 +61,10 @@ export const THRONE: ZoneDef = {
     { kind: 'forsworn', at: [3, 4] },
   ],
   banner: { at: [8, 3], name: 'Banner of the Throne' },
-  lore: [],
+  // Forward-dread (P4): the scored doors, read one cell south of the arena-gate
+  // doorway (row 7, cols 4–5) the player must funnel through from the antechamber
+  // into the Forsworn arena. On the main path; one cell east of the banner [8,3].
+  lore: [{ id: 'throne-doors-scored', at: [8, 5] }],
   doors: [
     // Entry from the Great Hall — the far end of the Gatekey-locked throne road.
     { id: 'throne-to-hall', at: [11, 4], to: 'great-hall', pair: 'hall-throne' },

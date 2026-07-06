@@ -72,6 +72,10 @@ export const GREAT_HALL: ZoneDef = {
     { id: 'oath-spoken', at: [5, 5] }, // the oath-stone by the banner
     { id: 'feast-roster', at: [8, 12] }, // the vigil's roster down the nave
     { id: 'throne-bar', at: [8, 6] }, // at the sealed throne approach
+    // Forward-dread (P4): the set feast-table at [4,10], inside the feast chamber
+    // on the N–S crossing corridor to the checkpoint banner [5,8] the player walks
+    // to kneel — between the banner post [4,8] and the dead feast-hearth [4,12].
+    { id: 'hall-set-places', at: [4, 10] },
   ],
   doors: [
     { id: 'hall-to-gate', at: [9, 9], to: 'ashen-gate', pair: 'gate-hall' },

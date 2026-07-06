@@ -112,6 +112,10 @@ export const GATE_FIELDS: ZoneDef = {
     { id: 'gv-field-childs-shoe', at: [1, 1] }, // NW secret
     { id: 'gv-field-gibbet', at: [7, 8] }, // under the oak
     { id: 'gv-field-tithe-post', at: [12, 7] }, // SE breadcrumb toward the descent
+    // Forward-dread (P4): the pilgrim waystone at [4,7], dead-centre on the N
+    // entry road (col 7) every player walks in from the castle — 'p' worn path,
+    // 2 cells north of the oath-oak, on the main path and clear of every beat.
+    { id: 'gv-fields-standing-stone', at: [4, 7] },
   ],
   doors: [
     { id: 'gf-to-gate', at: [0, 7], to: 'ashen-gate', lock: 'greatervael', pair: 'gate-fields-postern' },
