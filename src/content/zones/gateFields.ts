@@ -3,7 +3,9 @@
  * FIRST real exterior zone. Reached through the Ashen Gate postern once the
  * castle is beaten (`greater-vael-open`); from here four roads leave — back to
  * the gate (N), the Cinder Village (W), the Ashen Forest (E), and down the
- * Pilgrim's Descent (S). The oath-oak stands dead-center (`TT`), the one tall
+ * Pilgrim's Descent (S) — and a ruined WATCHTOWER stands in the western treeline
+ * (Task 6: the `Tower Door` '6' at [3,0], its shell prop rising behind it into
+ * towerGround/towerUpper). The oath-oak stands dead-center (`TT`), the one tall
  * silhouette from every cell, the banner hung on its trunk (orbit archetype —
  * the oak is the single safe eye), an empty gibbet swinging under it.
  *
@@ -32,7 +34,7 @@ export const GATE_FIELDS: ZoneDef = {
     '####5##11#######', // 0  N gate 11 [0,7],[0,8] → ashen-gate · gate 5 [0,4] → undercroft (the Postern, far-side barred)
     '#t,,,,,pp,,,,,t#', // 1
     '#,,,t,,pp,,,,,,#', // 2  +t NW dead-quadrant relief (realism density pass)
-    '#,,,,t,pp,t,,,,#', // 3
+    '6,,,,t,pp,t,,,,#', // 3  W gate 6 [3,0] → tower-ground ('Tower Door', unlocked); the watchtower stands behind it in the treeline
     '#,,,t,pppp,,,,,#', // 4  +t NW dead-quadrant relief (realism density pass)
     '#,,,ppp..ppp,,,#', // 5
     '3pppp,.TT.,pppp2', // 6  W gate 3 [6,0]·E gate 2 [6,15]·TT oath-oak [6,7],[6,8]
@@ -92,6 +94,14 @@ export const GATE_FIELDS: ZoneDef = {
     { kind: 'crate', at: [3, 4], rotY: -0.8 },
     { kind: 'rubble', at: [10, 7], rotY: 0.5 },
     { kind: 'crate', at: [11, 9], rotY: -1.2 },
+    // World Expansion v1.2 (Task 6): the WATCHTOWER silhouette. An OFF-GRID
+    // backdrop prop ([3,-1], one cell west of the Tower Door '6' at [3,0], in the
+    // treeline) so the tower reads from the fields WITHOUT being an enterable
+    // structure in the exterior grid — its interior is towerGround/towerUpper.
+    // A single ~84-tri procedural masonry shell (1 draw call; PROCEDURAL_PROPS),
+    // rising above the treeline. Off-grid ⇒ unreachable set-dressing (the collider
+    // treats out-of-bounds as solid), like the Ashen Gate's ruined skyline.
+    { kind: 'tower-shell', at: [3, -1] },
   ],
   // No torches: an open field under the sky/moon backdrop, lit by the lifted
   // ash-grey ambient. Zero dynamic lights — well inside the ≤4 budget.
@@ -125,6 +135,10 @@ export const GATE_FIELDS: ZoneDef = {
     // opens it from inside the crypt, then reads as an open sally-port in the
     // tree-line near the castle. Not a route the reachability guard needs.
     { id: 'gf-to-undercroft', at: [0, 4], to: 'undercroft', pair: 'undercroft-postern' },
+    // World Expansion v1.2 (Task 6). The Tower Door into the watchtower guardroom
+    // (towerGround). Unlocked; the 'Tower Door' decoration is declared on the
+    // tower-ground side (one side per edge), so this end renders the same door.
+    { id: 'gf-to-tower', at: [3, 0], to: 'tower-ground', pair: 'tower-door' },
     { id: 'gf-to-village', at: [6, 0], to: 'cinder-village', pair: 'gf-village' },
     { id: 'gf-to-forest', at: [6, 15], to: 'ashen-forest-n', pair: 'gf-forest' },
     { id: 'gf-to-descent', at: [13, 7], to: 'pilgrims-descent', pair: 'gf-descent' },

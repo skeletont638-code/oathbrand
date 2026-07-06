@@ -15,6 +15,7 @@
  * `stumpGeometry` — is ADDED here, consumed by Task 10's scatter `CLUTTER` map.
  */
 import {
+  BoxGeometry,
   BufferGeometry,
   ConeGeometry,
   CylinderGeometry,
@@ -31,6 +32,7 @@ import { displaceRadial, seededAt } from './noise';
 const IRON = 0x2a2724; // rusted dark iron
 const BONE = 0x6b6252; // the occupant bundle
 const ROOF = 0x2e2622; // charred timber
+const STONE = 0x3a3733; // weathered watchtower masonry
 
 /** Paint every vertex of `geo` one flat colour (adds a `color` attribute). */
 function paint(geo: BufferGeometry, hex: number): BufferGeometry {
@@ -124,6 +126,38 @@ export function stumpGeometry(): BufferGeometry {
   );
   displaceRadial(g, 0.03, 0x7a2);
   return paint(g, 0x3b322a);
+}
+
+/**
+ * THE WATCHTOWER SHELL (World Expansion v1.2, Task 6) — the exterior SILHOUETTE
+ * of the Gate Fields watchtower: a tapered octagonal masonry shaft rising to an
+ * open, crenellated crown (a roof-WALK, not a spire — one merlon is missing for
+ * the ruined read). Placed as an OFF-GRID backdrop prop behind the Tower Door in
+ * the fields' treeline, so the tower READS from every field cell without being an
+ * enterable structure in the exterior grid (the real interior is towerGround /
+ * towerUpper). Cheap: ~84 tris, one draw call, vertex-coloured for the flat PS1
+ * look; base at y0 (never floats). Declared CC0 in assets/LICENSES.md. */
+export function towerShellGeometry(): BufferGeometry {
+  const parts: BufferGeometry[] = [];
+  const shaftH = 6.5;
+  // Tapered octagonal shaft, base seated at y0.
+  const shaft = new CylinderGeometry(1.0, 1.25, shaftH, 8, 1);
+  shaft.translate(0, shaftH / 2, 0);
+  parts.push(paint(shaft, STONE));
+  // The parapet crown — an open-topped ring (the roof-walk you climb to inside).
+  const crownH = 0.7;
+  const crown = new CylinderGeometry(1.15, 1.15, crownH, 8, 1, true);
+  crown.translate(0, shaftH + crownH / 2, 0);
+  parts.push(paint(crown, STONE));
+  // Battlement merlons on the crown; the north-east one is fallen (ruined gap).
+  const merlonY = shaftH + crownH + 0.3;
+  const r = 1.05;
+  for (const [x, z] of [[r, 0], [-r, 0], [0, r]] as const) {
+    const m = new BoxGeometry(0.5, 0.6, 0.5);
+    m.translate(x, merlonY, z);
+    parts.push(paint(m, STONE));
+  }
+  return merge(parts);
 }
 
 /** A pitched, charred roof wedge capping an H/A house cell (~2 m footprint). */

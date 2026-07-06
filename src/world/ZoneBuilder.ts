@@ -38,7 +38,7 @@ import type { AssetCache } from './assets';
 import type { DoorDef, EnemySpawn, GridPos, ItemSpot, LoreSpot, TileKind, ZoneDef } from './zoneDef';
 import { grassGeometry, pineGeometry, trunkGeometry, WIND } from './exteriorForest';
 import { undulation, UNDULATION_AMP_M } from './noise';
-import { bonePileGeometry, gibbetGeometry, roofWedgeGeometry, stoneGeometry, stumpGeometry } from './exteriorProps';
+import { bonePileGeometry, gibbetGeometry, roofWedgeGeometry, stoneGeometry, stumpGeometry, towerShellGeometry } from './exteriorProps';
 import { buildExteriorSky } from './exteriorSky';
 import { getTexture } from './textures';
 import type { Anomaly } from '../content/anomalies';
@@ -139,7 +139,10 @@ const BANNER_EXT_SCALE = 0.65;
  * merged into a material bucket. `ZoneManager.neededPieces` reads this so it
  * never asks the GLB loader for a `gibbet.glb` (there is none).
  */
-export const PROCEDURAL_PROPS: Record<string, () => BufferGeometry> = { gibbet: gibbetGeometry };
+export const PROCEDURAL_PROPS: Record<string, () => BufferGeometry> = {
+  gibbet: gibbetGeometry,
+  'tower-shell': towerShellGeometry, // the Gate Fields watchtower silhouette (Task 6)
+};
 /** Merge only these attributes; anything else (tangents…) is dropped. */
 const MERGE_ATTRS = ['position', 'normal', 'uv'] as const;
 

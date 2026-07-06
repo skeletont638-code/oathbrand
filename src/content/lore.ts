@@ -275,6 +275,19 @@ export const LORE: Record<string, LoreEntry> = {
     body: "Cut into the floor before the altar, in the Queen's own hand: I asked the flame for a mercy, and was granted a colder one. She set down nowhere which mercy she meant, nor which she was given — only that the two were not the same. The difference walks the halls above you now, wearing the faces of men who once knelt where you kneel.",
   },
 
+  // ─── WORLD EXPANSION v1.2 — THE WATCHTOWER (Task 6, Act I) ─────────────
+  // The Gate Fields watchtower: the ruined guardroom below, the wind-exposed
+  // roof-walk above. Act I's muster/watch voice — the field-guard who kept the
+  // road, and the last man who counted the fires — turned forward-dread.
+  'act1-tower-a': {
+    title: 'The Watch-Roster',
+    body: 'From this room the field-watch kept the road, two to a shift, every hour the gate stood open. Their spears are racked yet and their helms hung in a row by the stair, taken down in order — the way men arm when the horn calls them out. The horn still hangs beside them, its cord uncut. It was never sounded. Whatever came for them came without a sound, and found them already climbing to look.',
+  },
+  'act1-tower-b': {
+    title: 'The Tally-Stone',
+    body: 'The highest watch in the fields kept this walk, where the wind never falls and the whole plain lies open to the moon. On a clear night you could count every fire on the muster-ground below and know the host by them. The last man to stand here counted too, and cut the number into the stone at your feet — and beside it, smaller: fewer than the night before. He never set down who was gone. He had begun to fear it was himself.',
+  },
+
   // ─── NG+ (T16): the recontextualisations. Defined now, placed later. ────
   'ng-queen-knew': {
     ngOnly: true,

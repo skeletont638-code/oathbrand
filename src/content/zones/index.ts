@@ -22,6 +22,8 @@ import { PILGRIMS_DESCENT } from './pilgrimsDescent';
 import { HALL_GALLERY } from './hallGallery';
 import { HALL_BARRACKS } from './hallBarracks';
 import { KEEP_CHAPEL } from './keepChapel';
+import { TOWER_GROUND } from './towerGround';
+import { TOWER_UPPER } from './towerUpper';
 
 /** Every built zone, by id. The seven-zone castle campaign (T11–T16) plus the
  *  first Greater Vael exteriors — the Gate Fields hub (Task 9), the Ashen
@@ -46,6 +48,10 @@ export const ZONES: Partial<Record<ZoneId, ZoneDef>> = {
   'hall-barracks': HALL_BARRACKS,
   // World Expansion v1.2 (Task 5) — the keep's chapel, off the Ramparts.
   'keep-chapel': KEEP_CHAPEL,
+  // World Expansion v1.2 (Task 6) — the Gate Fields watchtower: the ruined
+  // guardroom and the open roof-walk over the fields.
+  'tower-ground': TOWER_GROUND,
+  'tower-upper': TOWER_UPPER,
 };
 
 /**

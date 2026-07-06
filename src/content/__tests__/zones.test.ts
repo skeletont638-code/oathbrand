@@ -13,6 +13,7 @@ import type { ZoneId } from '../types';
 import type { GridPos, ZoneDef } from '../../world/zoneDef';
 import { buildHeightRamps, gridToPlacements } from '../../world/ZoneBuilder';
 import { doorEntry, doorSpan, pairedDoor } from '../../world/zoneGraph';
+import { resolveDoorInstances } from '../../world/doors';
 import { FUTURE_ZONE_IDS, ZONES, hasZone, zoneOrThrow } from '../zones';
 import { UNDERCROFT } from '../zones/undercroft';
 import { GREAT_HALL } from '../zones/greatHall';
@@ -96,9 +97,16 @@ describe('zone registry', () => {
 
   it('registers the keep chapel (Task 5), the phase\'s postern-payoff room', () => {
     // World Expansion v1.2: the chapel off the Ramparts (the raised altar + the
-    // kneeler). Eleven prior zones + the two keep floors + the chapel = 14.
+    // kneeler).
     expect(ZONES['keep-chapel']).toBeDefined();
-    expect(Object.keys(ZONES)).toHaveLength(14);
+  });
+
+  it('registers the Gate Fields watchtower — ground + roof-walk (Task 6)', () => {
+    // World Expansion v1.2: the first landscape ruin. Eleven prior zones + the two
+    // keep floors + the chapel + the two tower floors = 16.
+    expect(ZONES['tower-ground']).toBeDefined();
+    expect(ZONES['tower-upper']).toBeDefined();
+    expect(Object.keys(ZONES)).toHaveLength(16);
   });
 
   it('zoneOrThrow returns every registered zone (the campaign is complete)', () => {
@@ -427,6 +435,100 @@ describe('Greater Vael Watcher sightings (finding 2)', () => {
   });
 });
 
+describe('The Watchtower (Task 6) — entry, stair, and roof-walk', () => {
+  const fields = zoneOrThrow('gate-fields');
+  const ground = zoneOrThrow('tower-ground');
+  const upper = zoneOrThrow('tower-upper');
+
+  it('the Tower Door pairs both ways between the Gate Fields and the guardroom', () => {
+    const gfToTower = fields.doors.find((d) => d.id === 'gf-to-tower');
+    const towerToFields = ground.doors.find((d) => d.id === 'tower-ground-to-fields');
+    expect(gfToTower, 'gate-fields is missing the gf-to-tower door').toBeDefined();
+    expect(towerToFields, 'tower-ground is missing the tower-ground-to-fields door').toBeDefined();
+    expect(gfToTower!.pair).toBe('tower-door');
+    expect(towerToFields!.pair).toBe('tower-door');
+    expect(gfToTower!.lock, 'the Tower Door is unlocked').toBeUndefined();
+    // The new gate cell '6' sits on the fields grid, not on any prior gate digit.
+    expect(charAt(fields, [3, 0])).toBe('6');
+    expect(pairedDoor('gate-fields', gfToTower!, ground)?.to).toBe('gate-fields');
+    expect(pairedDoor('tower-ground', towerToFields!, fields)?.to).toBe('tower-ground');
+  });
+
+  it('the new Tower Door gate does not disturb any Gate Fields contract cell', () => {
+    // The postern gate '5' (T5) and every other gate/spawn/banner keep their cells.
+    expect(charAt(fields, [0, 4])).toBe('5'); // T5 postern, untouched
+    expect(charAt(fields, [0, 7])).toBe('1'); // ashen-gate gate 11
+    expect(charAt(fields, [13, 7])).toBe('4'); // pilgrims-descent gate 44
+    expect(fields.banner?.at).toEqual([7, 7]);
+    // Every fields lore/enemy/beat/scatter/planted-trunk id is unchanged, and the
+    // Tower Door's inward entry cell is clean floor (not a scatter/lore/enemy cell).
+    const entry = doorEntry(fields, fields.doors.find((d) => d.id === 'gf-to-tower')!);
+    const [er, ec] = [Math.floor(entry.z / fields.cell), Math.floor(entry.x / fields.cell)];
+    expect([er, ec]).toEqual([3, 1]);
+    expect(isPlainFloor(fields, [3, 1])).toBe(true);
+  });
+
+  it('the Stair Door pairs both ways between the two tower floors', () => {
+    const groundUp = ground.doors.find((d) => d.id === 'tower-ground-to-upper');
+    const upperDown = upper.doors.find((d) => d.id === 'tower-upper-to-ground');
+    expect(groundUp?.pair).toBe('tower-stair');
+    expect(upperDown?.pair).toBe('tower-stair');
+    expect(pairedDoor('tower-ground', groundUp!, upper)?.to).toBe('tower-ground');
+    expect(pairedDoor('tower-upper', upperDown!, ground)?.to).toBe('tower-upper');
+  });
+
+  it('the guardroom is a dread interior with 3 torches, 1 soldier, 1 Act-I inscription', () => {
+    expect(ground.dreadInterior).toBe(true);
+    expect(ground.kind ?? 'interior').toBe('interior');
+    expect(ground.torches?.length).toBe(3);
+    expect(ground.enemies.filter((e) => e.kind === 'soldier')).toHaveLength(1);
+    expect(ground.lore.map((l) => l.id)).toContain('act1-tower-a');
+    expect(LORE['act1-tower-a']).toBeDefined();
+  });
+
+  it('the roof-walk is an exterior (sky/moon) with a flat-band heightGrid rising to the parapet', () => {
+    // Roof-kind choice (see towerUpper docstring): exterior for the open-air
+    // sky/moon + dread default; FLAT heightGrid bands (PD precedent) so the
+    // undulation never fights the tower floor.
+    expect(upper.kind).toBe('exterior');
+    expect(upper.exteriorSky).toBe('field');
+    expect(upper.heightGrid, 'tower-upper needs a heightGrid').toBeDefined();
+    expect(upper.heightGrid!.length).toBe(upper.grid.length);
+    for (let r = 0; r < upper.heightGrid!.length; r++) {
+      expect(upper.heightGrid![r].length).toBe(upper.grid[r].length);
+    }
+    // The room→roof rise auto-generates walkable ramps on the Δ1 seam, and the
+    // roof's band-2 lip drops to the surrounding `~` void as cliff faces.
+    const seams = buildHeightRamps(upper);
+    expect(seams.some((s) => s.kind === 'ramp'), 'the roof-walk step is a ramp').toBe(true);
+    expect(seams.some((s) => s.kind === 'cliff'), 'the parapet lip drops to void as a cliff').toBe(true);
+    // One archer holds the roof; one Act-I inscription reads the watcher's tally.
+    expect(upper.enemies.filter((e) => e.kind === 'archer')).toHaveLength(1);
+    expect(upper.lore.map((l) => l.id)).toContain('act1-tower-b');
+  });
+
+  it('reserves the 2×2 muster-echo roof block prop-free (Task 9)', () => {
+    const reserved: GridPos[] = [[2, 2], [2, 3], [3, 2], [3, 3]];
+    const occupied = new Set<string>([
+      ...upper.props.map((p) => String(p.at)),
+      ...upper.enemies.map((e) => String(e.at)),
+      ...upper.lore.map((l) => String(l.at)),
+    ]);
+    for (const cell of reserved) {
+      expect(isWalkable(upper, cell), `echo cell ${String(cell)} must be walkable roof`).toBe(true);
+      expect(occupied.has(String(cell)), `echo cell ${String(cell)} must stay prop-free`).toBe(false);
+    }
+  });
+
+  it('both Tower doors resolve to labelled DoorInstances (Tower Door + Stair Door)', () => {
+    const byId = resolveDoorInstances(entries.map(([, d]) => d));
+    expect(byId.get('gf-to-tower')?.label).toBe('Tower Door');
+    expect(byId.get('tower-ground-to-fields')?.label).toBe('Tower Door');
+    expect(byId.get('tower-ground-to-upper')?.label).toBe('Stair Door');
+    expect(byId.get('tower-upper-to-ground')?.label).toBe('Stair Door');
+  });
+});
+
 describe('Undercroft wraith-showcase guard (realism pass)', () => {
   it('the undercroft zeroes its realism-pass key light (wraith showcase guard)', () => {
     expect(UNDERCROFT.keyLightIntensity).toBe(0);
@@ -473,7 +575,7 @@ describe('Realism density pass — inhabited dead-kingdom fields (map-gaps EMPTI
     for (const cell of [[2, 4], [4, 4], [10, 11], [11, 12]] as GridPos[]) {
       expect(charAt(gf, cell), `gate-fields planted trunk missing @ ${String(cell)}`).toBe('t');
     }
-    expect(gf.props.length).toBe(10); // was 6: +2 W-flank + +2 lower-centre landmarks
+    expect(gf.props.length).toBe(11); // 6 base + 4 density landmarks + 1 Task-6 tower-shell silhouette
     // Contract: the scarecrow-ward statue-knights survive byte-for-byte.
     const statues = gf.props.filter((p) => p.kind === 'statue-knight').map((p) => p.at);
     expect(statues).toContainEqual([9, 5]);

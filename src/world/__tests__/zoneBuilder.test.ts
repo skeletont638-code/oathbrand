@@ -499,6 +499,28 @@ describe('ZoneBuilder exterior ground coverage (H1)', () => {
   });
 });
 
+describe('The Watchtower builds through the full path (Task 6)', () => {
+  it('the guardroom (interior) and roof-walk (exterior) both build without throwing', () => {
+    const ground = new ZoneBuilder().build(ZONES['tower-ground']!, fakeAssets());
+    const upper = new ZoneBuilder().build(ZONES['tower-upper']!, fakeAssets());
+    expect(ground.group.children.length).toBeGreaterThan(0);
+    expect(upper.group.children.length).toBeGreaterThan(0);
+    // The exterior roof-walk gets a ground mesh (sky/moon path); the interior does not.
+    expect(meshNamed(upper.group, 'exterior-ground')).toBeDefined();
+    expect(meshNamed(ground.group, 'exterior-ground')).toBeUndefined();
+  });
+
+  it('the off-grid tower-shell silhouette lands behind the Gate Fields Tower Door', () => {
+    const built = new ZoneBuilder().build(ZONES['gate-fields']!, fakeAssets());
+    const shell = meshNamed(built.group, 'prop:tower-shell');
+    expect(shell, 'gate-fields is missing the tower-shell backdrop prop').toBeDefined();
+    // Placed at grid [3,-1] → world x = -1 (one cell WEST of the Tower Door cell
+    // [3,0], whose centre is x=1): a treeline backdrop, off the walkable grid.
+    expect(shell!.position.x).toBeCloseTo(-1, 3);
+    expect(shell!.position.z).toBeCloseTo(7, 3); // row 3 → z = 3*2 + 1
+  });
+});
+
 // --- H2 / H3: cinder wall + roof welding --------------------------------------
 
 describe('ZoneBuilder cinder wall/roof welding (H2/H3)', () => {

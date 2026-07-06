@@ -17,7 +17,10 @@ export type ZoneId =
   | 'hall-gallery'
   | 'hall-barracks'
   // --- World Expansion v1.2 — the keep's chapel (Task 5) ---
-  | 'keep-chapel';
+  | 'keep-chapel'
+  // --- World Expansion v1.2 — the Gate Fields watchtower (Task 6) ---
+  | 'tower-ground'
+  | 'tower-upper';
 
 export type EnemyKind = 'soldier' | 'archer' | 'wraith' | 'forsworn' | 'hound' | 'kneeler';
 

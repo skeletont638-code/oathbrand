@@ -61,6 +61,12 @@ standalone mesh (1 draw); the roof wedges are one InstancedMesh across all house
 cells (1 draw). The Cinder door-void houses reuse the existing `wall-arch.glb`
 (same KayKit atlas → same merge bucket, no new asset).
 
+The **watchtower shell** (`tower-shell`, ~84 tris, World Expansion v1.2 Task 6 —
+the Gate Fields watchtower silhouette: a tapered octagonal masonry shaft with an
+open crenellated crown, one merlon fallen for the ruin) is likewise **original
+CC0 geometry generated in code** (`src/world/exteriorProps.ts`), vertex-coloured,
+no download and no texture — one standalone off-grid backdrop mesh (1 draw).
+
 ## Processing applied (all repeatable via `bash scripts/fetch-assets.sh`)
 
 - Texture atlases downsampled to 128 px, darkened toward the OATHBRAND palette

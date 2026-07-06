@@ -6,7 +6,7 @@
  * tri-cap assertion, never just "defined".
  */
 import { describe, it, expect } from 'vitest';
-import { bonePileGeometry, gibbetGeometry, roofWedgeGeometry, stoneGeometry, stumpGeometry } from '../exteriorProps';
+import { bonePileGeometry, gibbetGeometry, roofWedgeGeometry, stoneGeometry, stumpGeometry, towerShellGeometry } from '../exteriorProps';
 import type { BufferGeometry } from 'three';
 
 function tris(g: BufferGeometry): number {
@@ -72,6 +72,22 @@ describe('C4 boulder-ized props', () => {
       g.dispose();
     });
   }
+  it('the watchtower shell is a cheap (≤200 tri), grounded, vertex-coloured, UV\'d silhouette', () => {
+    // Task 6: the Gate Fields watchtower silhouette — an off-grid backdrop prop.
+    // Must stay cheap (≤200 tris per the brief), keep its base on the ground
+    // (minY ≥ 0, never floats), and — going through mergeGeometries — keep every
+    // vertex UV'd (uv.count === position.count proves no attribute was dropped).
+    const g = towerShellGeometry();
+    expect(g.getAttribute('color')).toBeDefined();
+    expect(tris(g)).toBeGreaterThan(0);
+    expect(tris(g)).toBeLessThanOrEqual(200);
+    expect(minY(g)).toBeGreaterThanOrEqual(-0.001);
+    const uv = g.getAttribute('uv');
+    expect(uv).toBeDefined();
+    expect(uv.count).toBe(g.getAttribute('position').count);
+    g.dispose();
+  });
+
   it('clutter is deterministic (seeded, never Math.random)', () => {
     for (const build of [stoneGeometry, bonePileGeometry, stumpGeometry, gibbetGeometry]) {
       const a = build().getAttribute('position');
