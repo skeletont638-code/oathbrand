@@ -322,6 +322,17 @@ export const LORE: Record<string, LoreEntry> = {
     body: "The fire ate the gallery floor first, so the hall where they chose shows through the gaps at your feet. The last of them climbed here — not to flee the flame but to find the nerve to walk down into it — and stood at this rail deciding while the boards charred beneath. Those who chose in time burned, and did not hollow. Those who only stood and weighed it are the ones still here, thin as smoke at the rail's edge. Do not stop to decide as they did: the weighing is the hollowing, and yours is already well begun.",
   },
 
+  // ─── WORLD EXPANSION v1.2 — THE UNDERCROFT (Task 9, Act III) ───────────
+  // Act III's second carrier (the Hall Gallery being the first): the crown-down
+  // echo (scene #7) stages in the crypt, and this stone carries the same beat —
+  // a knight given the crown to bear UP to the flame who forgot there was ever an
+  // up, and carried it DOWN among the dead instead. Turned forward-dread: the
+  // forgetting is a road you are already on.
+  'act3-undercroft-a': {
+    title: 'The Wrong Way Down',
+    body: 'One of the sworn was given the crown to bear, and the single command that went with it: up, to the flame that forged it. He carried it down instead — here, to the branded dead — and could not say, after, that he had ever been told an up at all. The stair at your back climbs. Be certain, each time you turn to it, that you still know which way that is.',
+  },
+
   // ─── NG+ (T16): the recontextualisations. Defined now, placed later. ────
   'ng-queen-knew': {
     ngOnly: true,

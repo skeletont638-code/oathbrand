@@ -42,7 +42,7 @@ import type { SaveData } from './save/save';
 import { VisionPlayer } from './engine/VisionPlayer';
 import type { GhostSprite } from './engine/VisionPlayer';
 import { EchoSceneSystem } from './engine/EchoScene';
-import { ECHOES } from './content/echoes';
+import { ECHOES, bannerMemoryLine } from './content/echoes';
 import { visionForZone, GV_VISION_HAG } from './content/visions';
 import { kitPieceUrl, loadKitPieces } from './world/assets';
 import { createBrandHud } from './ui/brandHud';
@@ -2771,7 +2771,20 @@ async function startScene(): Promise<void> {
         // The checkpoint ritual (Task 14): rekindle + save + motif cue + enemy
         // respawn, and — on the FIRST kneel here — this banner's memory. Locks
         // input (enters 'vision') for its ~4s (longer while the memory plays).
-        if (kneel.start(zones.current, visionForZone(zones.current))) hidePrompt();
+        if (kneel.start(zones.current, visionForZone(zones.current))) {
+          hidePrompt();
+          // Banner-kneel memory (Task 9): a one-line whisper of the zone's act,
+          // shown on kneels where the full banner-vision is NOT (re)playing — so
+          // once the memory has been witnessed, the story lingers at the banner
+          // as a whisper. Rotates by the banner zone's act (Gate Fields = I,
+          // Ashen Gate = II, Undercroft = III); silent at act-less banners.
+          const vis = visionForZone(zones.current);
+          const visionPlaying = vis !== undefined && !visionPlayer.hasSeen(vis.id);
+          if (!visionPlaying) {
+            const whisper = bannerMemoryLine(zones.current);
+            if (whisper) showCard(whisper);
+          }
+        }
       } else if (pressedE && target?.verb === 'OFFER') {
         // The Hag's cairn (Task 5): arm the silent, carved bargain (digit keys
         // select). No damage, no fight — a bargain, not a battle.

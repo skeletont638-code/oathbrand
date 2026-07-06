@@ -76,6 +76,11 @@ export const UNDERCROFT: ZoneDef = {
     { id: 'lending-rite', at: [4, 4] }, // the rite of the borrowed fire (west)
     { id: 'hollow-marker', at: [4, 11] }, // a named hollow's fresh grave (east)
     { id: 'garden-seal', at: [2, 1] }, // beside the sealed Queen's Garden wall
+    // World Expansion v1.2 (Task 9, Act III): the crown-down beat in stone — the
+    // second act-III carrier (with the Hall Gallery), by the maren-litany wall
+    // where the forgetting is already written. Clear of the crown-down echo's
+    // west-half staging (rows 3–6) and every prop/wraith.
+    { id: 'act3-undercroft-a', at: [1, 2] }, // NW wall, beside the litany
   ],
   items: [
     {
