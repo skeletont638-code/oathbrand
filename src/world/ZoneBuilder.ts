@@ -93,8 +93,10 @@ export interface BuiltZone {
   items: PlacedItem[];
   /** Torch PointLights (children of `group`), exposed for flicker updates. */
   lights: PointLight[];
-  /** Visual floor height (m) of a cell — the exterior height layer; always 0
-   *  for interior zones (no `heightGrid`), so `main` can lerp it uniformly. */
+  /** Visual floor height (m) of a cell — the heightGrid band layer. 0 for any
+   *  zone without a `heightGrid` (all v1 interiors), so `main` lerps uniformly;
+   *  Task 2b: interior zones MAY carry a heightGrid (mezzanines/altars) and
+   *  their kit tiles seat on it, so this is no longer exterior-only. */
   cellHeightM(row: number, col: number): number;
   /** Surface height (m) at a world point: cell base + the C2 undulation on
    *  exteriors; flat `cellHeightM` on interiors. THE one function every static
@@ -621,26 +623,35 @@ function buildExteriorGround(cell: number, spots: ForestSpot[]): Mesh | null {
  * tile. World-planar UV'd so the crunched rock map tiles across the risers
  * (vertical faces map by x/z footprint — acceptable at PS1 crunch). Returns
  * null when the zone is flat.
+ *
+ * Task 2b: shared with INTERIOR heightGrid zones (named `interior-riser`
+ * there) — the face under a stair slope / mezzanine lip. Interiors displace
+ * nothing (flat lips at exact band heights); only exteriors undulate.
  */
 function buildTerrainSkirt(def: ZoneDef, cellHeightM: (r: number, c: number) => number): Mesh | null {
   const seams = buildHeightRamps(def);
   if (seams.length === 0) return null;
   const cell = def.cell;
+  // Task 2b: the seam-fill core is shared with INTERIOR heightGrid zones (the
+  // riser under a stair slope / mezzanine lip). Only the exterior displaces its
+  // lips by the terrain undulation — interior floors are dressed stone at exact
+  // band heights, so the riser is flat and meets the tiles to the bit.
+  const displace = def.kind === 'exterior' ? undulation : (): number => 0;
   const v: number[] = [];
   for (const { a, b } of seams) {
     const [ra, ca] = a;
     const [rb, cb] = b;
     const ylo = Math.min(cellHeightM(ra, ca), cellHeightM(rb, cb));
     const yhi = Math.max(cellHeightM(ra, ca), cellHeightM(rb, cb));
-    // Both edges sample the SAME undulation as the ground at the shared world
+    // Both edges sample the SAME displacement as the ground at the shared world
     // positions (ends + midpoint) — the riser meets the displaced ground
     // watertight on both its lips (ground verts sit at 1 m spacing too). A
     // midpoint splits each seam into two sub-quads, killing the razor-straight step.
     const pushQuad = (x0: number, z0: number, x1: number, z1: number): void => {
-      const lo0 = ylo + undulation(x0, z0);
-      const lo1 = ylo + undulation(x1, z1);
-      const hi0 = yhi + undulation(x0, z0);
-      const hi1 = yhi + undulation(x1, z1);
+      const lo0 = ylo + displace(x0, z0);
+      const lo1 = ylo + displace(x1, z1);
+      const hi0 = yhi + displace(x0, z0);
+      const hi1 = yhi + displace(x1, z1);
       v.push(x0, lo0, z0, x1, lo1, z1, x1, hi1, z1, x0, lo0, z0, x1, hi1, z1, x0, hi0, z0);
     };
     if (cb !== ca) {
@@ -682,7 +693,7 @@ function buildTerrainSkirt(def: ZoneDef, cellHeightM: (r: number, c: number) => 
   forceNearest(material);
   patchMaterial(material);
   const mesh = new Mesh(geo, material);
-  mesh.name = 'exterior-terrain';
+  mesh.name = def.kind === 'exterior' ? 'exterior-terrain' : 'interior-riser';
   return mesh;
 }
 
@@ -702,9 +713,10 @@ export class ZoneBuilder {
     const group = new Group();
     group.name = `zone:${def.id}`;
 
-    // Visual floor height (m) of a cell — the exterior height layer. Always 0
-    // for interior zones (no heightGrid), so props/torches/camera lerp uniformly
-    // and a v1 interior builds byte-for-byte identical.
+    // Visual floor height (m) of a cell — the heightGrid band layer. 0 without
+    // a heightGrid (all v1 interiors — byte-for-byte identical builds); Task 2b
+    // lets interiors carry one too, so props/torches/camera lerp uniformly on
+    // raised interior floors exactly as they do on exterior terraces.
     const cellHeightM = (row: number, col: number): number =>
       Number(heightDigit(def, row, col)) * HEIGHT_LEVEL_M;
     /** Surface height at a world point: cell base + the C2 undulation
@@ -891,7 +903,22 @@ export class ZoneBuilder {
         }
       }
     } else {
-      for (const p of gridToPlacements(def)) addPiece(p.piece, p.x, 0, p.z, p.rotY, KIT_SCALE);
+      // Interior kit pieces seat on their cell's heightGrid band (Task 2b —
+      // stair convention, mechanism A): mezzanines/altars/landings physically
+      // rise. Without a heightGrid every cell reads band 0 ⇒ y = 0 exactly, so
+      // every v1 interior builds byte-identical. Unlike the exterior path there
+      // is NO undulation and NO settle indoors (dressed stone, not dirt) — tile
+      // seat, `cellHeightM` and `groundYAt` agree to the bit, which is what the
+      // camera/enemy/prop consumers already sample.
+      for (const p of gridToPlacements(def)) {
+        const y = cellHeightM(Math.floor(p.z / cell), Math.floor(p.x / cell));
+        addPiece(p.piece, p.x, y, p.z, p.rotY, KIT_SCALE);
+      }
+      // Risers between interior bands (the vertical face under a stair slope /
+      // mezzanine lip): reuse the exterior seam-fill core — flat (zero
+      // displacement) indoors. Null without a heightGrid ⇒ v1 zones add nothing.
+      const riser = buildTerrainSkirt(def, cellHeightM);
+      if (riser) group.add(riser);
     }
 
     // Props are life-sized (KIT.md): scale 1 at their cell center, on the terrain.

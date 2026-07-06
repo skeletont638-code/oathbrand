@@ -26,7 +26,10 @@
  *    full HEIGHT_LEVEL_M (1.5 m) step, so a single-digit seam reads as a LEDGE,
  *    not a stair: spread a storey's worth of climb across several cells (as
  *    Pilgrim's Descent terraces do) to stay under the per-cell target. Collision
- *    stays flat, so the slope is a look, not a barrier.
+ *    stays flat, so the slope is a look, not a barrier. Interior kit pieces
+ *    (walls included) seat on their OWN cell's band (Task 2b), and a flat riser
+ *    auto-fills every floor↔floor band seam — so give a WALL cell the same
+ *    digit as the floor it bounds, or its base will step away from that floor.
  *  • BETWEEN floors (floor-over-floor — spec §2 mechanism B): rooms cannot stack
  *    on one heightfield, so an upper floor is its OWN zone. Climb the real steps
  *    to a LANDING — a FLAT cell (equal `heightGrid` to its neighbours) that

@@ -5,6 +5,7 @@
  * these tests exercise it through synthetic zones + a structural sweep over the
  * real registry (which guards Tasks 4–8 the moment they author interiors).
  */
+import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import { BoxGeometry, Group, InstancedMesh, Mesh, MeshStandardMaterial, PointLight, Points, Sprite } from 'three';
 import { MAX_POINT_LIGHTS, ZoneBuilder } from '../ZoneBuilder';
@@ -153,5 +154,152 @@ describe('interior kit — draw-call budget', () => {
     const built = new ZoneBuilder().build(
       interiorZone(SIX_TORCH_GRID, { torches: SIX_TORCHES }), fakeAssets());
     expect(drawCalls(built.group)).toBeLessThanOrEqual(100);
+  });
+});
+
+// --- Task 2b · FIX 1: firing and manifestation share ONE dread gate ---------
+// `spawnPresenceViews` / the scare gather live in main's private render closure
+// (needs a live scene + GLBs — not exercisable headlessly), so this asserts the
+// seam in the source directly, the same pattern visionGhostGrounding.test.ts
+// uses for `buildGhosts`. The invariant: a `dreadInterior` zone that FIRES a
+// presence beat (gather + dread.update both dreadEligible-gated) must also get
+// its presence VIEWS spawned + its watcherAnchors set — or the beat silently
+// no-ops into null views (all ?.-guarded: no crash, just a vanishing scare).
+
+describe('main.ts dread gates route through dreadEligible (Task 2b seam)', () => {
+  const src = readFileSync(new URL('../../main.ts', import.meta.url), 'utf8');
+
+  it('spawnPresenceViews (manifestation: views + anchors) gates on dreadEligible', () => {
+    const start = src.indexOf('function spawnPresenceViews');
+    expect(start).toBeGreaterThan(0);
+    const body = src.slice(start, src.indexOf('\n  }', start));
+    expect(body).toContain('dreadEligible(');
+    expect(body).not.toContain("kind !== 'exterior'"); // the pre-2b raw gate
+    // The anchors re-scope lives INSIDE the gated body, so a dreadInterior
+    // zone's watcherAnchors are set exactly when its beats may fire.
+    expect(body).toContain('setAnchors(activeDef.watcherAnchors');
+  });
+
+  it('the scare/anchor gather (dreadScareData) filters by the same predicate', () => {
+    const start = src.indexOf('function dreadScareData');
+    expect(start).toBeGreaterThan(0);
+    const body = src.slice(start, src.indexOf('return { scares', start));
+    expect(body).toContain('dreadEligible(');
+    expect(body).not.toContain("kind !== 'exterior'");
+  });
+
+  it('the per-frame dread.update gate uses dreadEligible too', () => {
+    const start = src.indexOf('dread.update({');
+    expect(start).toBeGreaterThan(0);
+    // The nearest `if (...)` above the update call is the gate.
+    const gate = src.lastIndexOf('if (dreadEligible(activeDef))', start);
+    expect(gate).toBeGreaterThan(0);
+    expect(start - gate).toBeLessThan(900); // same block, not a distant stray match
+  });
+
+  it('the GV physical boundaries STAY keyed to kind === exterior (deliberate)', () => {
+    // Conscious decision (Task 2b): the ember-cap restore on leaving Greater
+    // Vael and the boot/resume cap restore are PHYSICAL-boundary rules — a
+    // dreadInterior castle room is still inside the castle, so they must NOT
+    // follow the dread gate. Pin both so a later sweep can't "fix" them.
+    expect(src).toContain("resolveZone(from).kind === 'exterior' && def.kind !== 'exterior'");
+    expect(src.includes('bootEmberCap')).toBe(true);
+  });
+});
+
+// --- Task 2b · FIX 2: interior zones render heightGrid elevation ------------
+
+/** 3×5 interior room: cell [1,2] raised one band (1.5 m), the rest flat. */
+const RAISED_GRID = ['#####', '#...#', '#####'];
+const RAISED_HEIGHTS = ['00000', '00100', '00000'];
+
+/** Vertex ys of `mesh` whose baked x/z fall inside the given cell footprint. */
+function tileYsInCell(mesh: Mesh, row: number, col: number, cellM = 2): number[] {
+  const p = mesh.geometry.getAttribute('position');
+  const ys: number[] = [];
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), z = p.getZ(i);
+    if (x > col * cellM && x < (col + 1) * cellM && z > row * cellM && z < (row + 1) * cellM) {
+      ys.push(p.getY(i));
+    }
+  }
+  return ys;
+}
+
+function meshNamed(group: Group, name: string): Mesh | undefined {
+  let found: Mesh | undefined;
+  group.traverse((o) => { if (o instanceof Mesh && o.name === name) found = o; });
+  return found;
+}
+
+describe('interior heightGrid elevation (Task 2b)', () => {
+  it('(a) raised cell: tile y, cellHeightM and groundYAt agree; flat cell stays 0; slope stays walkable', () => {
+    const built = new ZoneBuilder().build(
+      interiorZone(RAISED_GRID, { heightGrid: RAISED_HEIGHTS }), fakeAssets());
+    // The kit floor piece (fake: unit box at 0.5 scale → ±0.25 about its seat)
+    // seats at the cell's height: raised cell [1,2] mid-y ≈ 1.5, flat [1,1] ≈ 0.
+    const floor = meshNamed(built.group, 'merged:floor');
+    expect(floor).toBeDefined();
+    const raised = tileYsInCell(floor!, 1, 2);
+    const flat = tileYsInCell(floor!, 1, 1);
+    expect(raised.length).toBeGreaterThan(0);
+    expect(flat.length).toBeGreaterThan(0);
+    const mid = (ys: number[]): number => (Math.min(...ys) + Math.max(...ys)) / 2;
+    expect(mid(raised)).toBeCloseTo(1.5, 6);
+    expect(mid(flat)).toBeCloseTo(0, 6);
+    // The THREE height authorities agree exactly (no undulation indoors):
+    expect(built.cellHeightM(1, 2)).toBeCloseTo(1.5, 6);
+    expect(built.groundYAt(5, 3)).toBeCloseTo(1.5, 6); // raised cell centre
+    expect(built.groundYAt(3, 3)).toBeCloseTo(0, 6); // flat cell centre
+    // Collision is the flat 2D grid: the band step is a slope, not a barrier.
+    expect(built.collider.raycastWall({ x: 3, z: 3 }, { x: 5, z: 3 })).toBe(false);
+  });
+
+  it('(a2) an interior riser fills the band seam, with NO undulation (exact 0 / 1.5 ys)', () => {
+    const built = new ZoneBuilder().build(
+      interiorZone(RAISED_GRID, { heightGrid: RAISED_HEIGHTS }), fakeAssets());
+    const riser = meshNamed(built.group, 'interior-riser');
+    expect(riser).toBeDefined();
+    const p = riser!.geometry.getAttribute('position');
+    expect(p.count).toBeGreaterThan(0);
+    for (let i = 0; i < p.count; i++) {
+      const y = p.getY(i);
+      // Every riser vertex sits EXACTLY on a band level — dressed stone, no
+      // terrain noise (the exterior skirt's undulation stays exterior-only).
+      expect(Math.abs(y) < 1e-9 || Math.abs(y - 1.5) < 1e-9, `riser y ${y}`).toBe(true);
+    }
+  });
+
+  it('(b) dormancy: an interior WITHOUT heightGrid builds flat with no riser (v1-exact)', () => {
+    const built = new ZoneBuilder().build(interiorZone(RAISED_GRID), fakeAssets());
+    const floor = meshNamed(built.group, 'merged:floor')!;
+    const p = floor.geometry.getAttribute('position');
+    for (let i = 0; i < p.count; i++) {
+      expect(Math.abs(p.getY(i))).toBeLessThanOrEqual(0.25 + 1e-9); // ±half tile, seat 0
+    }
+    expect(meshNamed(built.group, 'interior-riser')).toBeUndefined();
+    expect(built.groundYAt(3, 3)).toBe(0);
+  });
+
+  it('(c) the exterior skirt keeps its name and its undulation (unchanged path)', () => {
+    const built = new ZoneBuilder().build(
+      {
+        ...interiorZone(['..', '..'], { heightGrid: ['01', '00'] }),
+        kind: 'exterior',
+        exteriorSky: 'field',
+        tiles: {},
+      } as ZoneDef,
+      fakeAssets());
+    const skirt = meshNamed(built.group, 'exterior-terrain');
+    expect(skirt).toBeDefined();
+    expect(meshNamed(built.group, 'interior-riser')).toBeUndefined();
+    // Undulated: at least one vertex is OFF the exact band levels.
+    const p = skirt!.geometry.getAttribute('position');
+    let off = false;
+    for (let i = 0; i < p.count; i++) {
+      const y = p.getY(i);
+      if (Math.abs(y) > 1e-9 && Math.abs(y - 1.5) > 1e-9) off = true;
+    }
+    expect(off).toBe(true);
   });
 });

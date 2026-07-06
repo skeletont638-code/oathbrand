@@ -376,6 +376,9 @@ async function startScene(): Promise<void> {
   // zone — restores the full brand, or a tithe → quit-in-castle → reload leaves
   // the castle capped forever. The GV boundary is `kind === 'exterior'` (pinned
   // in bootEmberCap). Unknown/absent zone ⇒ undefined kind ⇒ restore (fail safe).
+  // Task 2b, DELIBERATE: this stays keyed to the PHYSICAL `kind === 'exterior'`
+  // Greater-Vael boundary, NOT `dreadEligible` — a dreadInterior room is still
+  // inside the castle, so resuming there must restore the tithed cap.
   let emberCap = bootEmberCap({
     savedCap: save?.greaterVael?.maxEmberCap,
     resumeZoneKind: save && hasZone(save.zone) ? resolveZone(save.zone).kind : undefined,
@@ -1456,21 +1459,26 @@ async function startScene(): Promise<void> {
     hagPresence = null;
   }
 
-  /** Build the Watcher/Hag silhouettes for an EXTERIOR zone only (castle zones
-   *  get no view, so they can never see either — a binding rule). The Hag is
-   *  zone-scoped: built from THIS zone's `hagThreshold` + cell size, so her
-   *  silhouette, `atThreshold`, and the OFFER prompt always agree. */
+  /** Build the Watcher/Hag silhouettes for a DREAD-ELIGIBLE zone only (plain
+   *  castle zones get no view, so they can never see either — a binding rule).
+   *  Task 2b: gated by the SAME `dreadEligible` predicate as the scare gather
+   *  and the per-frame `dread.update`, so a `dreadInterior` zone that can FIRE
+   *  a presence beat (watcher / hag-glimpse / crossing) always has the views
+   *  to MANIFEST it — firing and manifestation can never disagree (pre-2b, an
+   *  opt-in interior's presence beats no-opped into null ?.-guarded views).
+   *  The Hag is zone-scoped: built from THIS zone's `hagThreshold` + cell
+   *  size, so her silhouette, `atThreshold`, and the OFFER prompt always agree. */
   function spawnPresenceViews(): void {
-    if (activeDef.kind !== 'exterior') return;
+    if (!dreadEligible(activeDef)) return;
     // Re-scope the run-scoped Watcher to THIS zone's anchors (T5 review): the
     // director picks its manifest anchor by beat.zone, and the presence may only
     // reposition among the active zone's anchors — never another zone's.
     watcherPresence.setAnchors(activeDef.watcherAnchors ?? []);
     watcherView = new WatcherView(watcherPresence);
     scene.add(watcherView.root);
-    // AF-1's crossing silhouette (finding 4a) — one per exterior zone, armed by
-    // routeScare when a pure-visual beat carries a `crossing`. Idle + invisible
-    // until then; a zone with no such beat simply never arms it.
+    // AF-1's crossing silhouette (finding 4a) — one per dread-eligible zone,
+    // armed by routeScare when a pure-visual beat carries a `crossing`. Idle +
+    // invisible until then; a zone with no such beat simply never arms it.
     crossingSilhouette = new CrossingSilhouette();
     scene.add(crossingSilhouette.root);
     if (activeDef.hagThreshold) {
@@ -1938,6 +1946,9 @@ async function startScene(): Promise<void> {
         // bargains persist; only the brand's ceiling is lifted back to full —
         // and the restore is PERSISTED at once, or a reload before the next
         // kneel would resurrect the tithed cap inside the castle.
+        // Task 2b, DELIBERATE: keyed to the PHYSICAL `kind === 'exterior'` GV
+        // boundary, NOT `dreadEligible` — entering a dreadInterior castle room
+        // is not leaving Greater Vael and must not lift the tithe.
         if (resolveZone(from).kind === 'exterior' && def.kind !== 'exterior') {
           emberCap = restoreEmberCap({ maxEmberCap: emberCap, bargains: hagBargains }).maxEmberCap;
           forestFogBoost = 0;
@@ -2726,10 +2737,11 @@ async function startScene(): Promise<void> {
 
     camera.rotation.y = controller.yaw;
     camera.rotation.x = controller.pitch;
-    // Exterior height layer (Task 2): the eye eases onto the current cell's
-    // terrain height (visual only — collision xz is unchanged, so no jump).
-    // Interiors report 0 everywhere, so `groundY` stays 0 and the camera math
-    // is byte-identical to v1.
+    // Height layer: the eye eases onto the current cell's band height (visual
+    // only — collision xz is unchanged, so no jump). Zones without a heightGrid
+    // (all v1 interiors) report 0 everywhere, so `groundY` stays 0 and the
+    // camera math is byte-identical to v1; Task 2b interiors with a heightGrid
+    // ride it exactly like exterior terraces.
     const gRow = Math.floor(controller.pos.z / built.cellM);
     const gCol = Math.floor(controller.pos.x / built.cellM);
     groundY += (built.groundYAt(controller.pos.x, controller.pos.z) - groundY) * Math.min(1, dt / GROUND_EASE_MS);
