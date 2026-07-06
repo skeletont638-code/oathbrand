@@ -4,6 +4,7 @@ import { TUNING } from './content/tuning';
 import type { GameFlag, ZoneId } from './content/types';
 import { hasZone, zoneOrThrow, ZONES } from './content/zones';
 import { skyFogColor } from './world/exteriorSky';
+import { scatterSpawns } from './world/spawnScatter';
 import { preloadTextures } from './world/textures';
 import { Game } from './engine/Game';
 import { DreadDirector } from './engine/DreadDirector';
@@ -553,6 +554,12 @@ async function startScene(): Promise<void> {
   // A separate seeded stream for Ash-Hound flank/duration rolls, so their
   // randomness is deterministic per run without perturbing the director's.
   const houndRng = mulberry32((runSeed ^ 0x5bd1e995) >>> 0);
+
+  // P1: every spawn wave (zone entry AND kneel respawn) deals from a fresh
+  // stream so a retry never replays the roster the player just memorized.
+  let spawnWave = 0;
+  const nextScatterRng = (): (() => number) =>
+    mulberry32((runSeed ^ (++spawnWave * 0x9e3779b9)) >>> 0);
 
   // --- Task 5: the never-killable presences (the Watcher + the Hag) ---------
   // The WATCHER is run-scoped (its sighting budget spans the drop, like the
@@ -1563,7 +1570,14 @@ async function startScene(): Promise<void> {
   function spawnEnemies(): void {
     const soldierAttack = TUNING.enemies.soldier.attack;
     const lunge = TUNING.enemies.wraith.lunge;
-    built.spawns.forEach((spawn, i) => {
+    // P1: re-deal the common roster onto plain-floor neighbours each wave so a
+    // retry never replays the memorized layout. Scatter the BUILT roster, not
+    // `activeDef.enemies`: in NG+ the Second Vigil's remixed enemies live on the
+    // built def (built.spawns), while `activeDef` stays the base def — its
+    // grid/tiles are identical (never varied in NG+), so borrow those and swap in
+    // the built enemies as scatter's owning def.
+    const spawns = scatterSpawns({ ...activeDef, enemies: built.spawns }, nextScatterRng());
+    spawns.forEach((spawn, i) => {
       // The Forsworn stays dead once felled (flag 'forsworn-dead') — re-entering
       // the throne must not raise a fresh boss in a room already won. The mercy
       // reset (rekindle mid-fight) happens while he still lives, so it is unaffected.
