@@ -128,5 +128,19 @@ export const TUNING = {
     // geometry FORM instead of void. The Undercroft zeroes it (keyLightIntensity: 0
     // in its zone def, Task 2) so the wraith showcase's void-black east half survives.
     interior: { directional: { color: 0xa8b4c8, intensity: 0.12 } },
+    // Interior wall-torch kit (world-expansion v1.2, Task 2). Warm "pools of
+    // safety" in near-void-black interiors: the emissive flame reads on EVERY
+    // torch, while the cast PointLight is drawn from a SHARED pool capped at
+    // `poolCap` (≤ ZoneBuilder MAX_POINT_LIGHTS, the per-zone dynamic-light /
+    // flicker-safe cap) so a 6-torch room never exceeds it. None of these lift
+    // the general ambient — the darkness is the interior dread layer (spec §2).
+    torch: {
+      poolCap: 4, // pooled cast-lights per zone; must stay ≤ MAX_POINT_LIGHTS
+      color: 0xffa050, // warm sodium-orange cast light
+      intensity: 8,
+      distanceM: 11, // pool-light falloff radius
+      flameColor: 0xffb257, // emissive flame quad tint
+      flameEmissive: 2.4, // emissiveIntensity — glows independent of scene lights
+    },
   } as const,
 } as const;

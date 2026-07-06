@@ -38,7 +38,7 @@
  */
 import { TUNING } from '../content/tuning';
 import type { ZoneId } from '../content/types';
-import type { GridPos, HagThresholdDef, ScareBeat, WatcherAnchor } from '../world/zoneDef';
+import type { GridPos, HagThresholdDef, ScareBeat, WatcherAnchor, ZoneDef } from '../world/zoneDef';
 
 const D = TUNING.greaterVael.dread;
 const W = TUNING.greaterVael.watcher;
@@ -97,6 +97,19 @@ export type ScareActivation =
  */
 export function isQuietSighting(beat: ScareBeat): boolean {
   return beat.gimmick === null && beat.showsWatcher === true && beat.crossing === undefined;
+}
+
+/**
+ * The dread gate (world-expansion v1.2, Task 2). A zone participates in the
+ * dread layer — the DreadDirector may fire its authored scares, main pulses the
+ * brand for it, etc. — when it is an exterior (Greater Vael) OR an interior that
+ * has explicitly opted in via `dreadInterior`. Extracted from main.ts's former
+ * inline `kind === 'exterior'` check so the six new interiors (castle floors,
+ * ruins) can opt in without flipping the global gate, and so the truth table is
+ * unit-testable. Interiors that omit the flag stay exactly as in v1.
+ */
+export function dreadEligible(def: Pick<ZoneDef, 'kind' | 'dreadInterior'>): boolean {
+  return def.kind === 'exterior' || def.dreadInterior === true;
 }
 
 /** Distance in meters between two grid cells (2 m grid). */

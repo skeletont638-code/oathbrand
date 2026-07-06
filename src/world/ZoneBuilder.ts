@@ -42,6 +42,7 @@ import { bonePileGeometry, gibbetGeometry, roofWedgeGeometry, stoneGeometry, stu
 import { buildExteriorSky } from './exteriorSky';
 import { getTexture } from './textures';
 import type { Anomaly } from '../content/anomalies';
+import { TUNING } from '../content/tuning';
 
 /** One kit piece placed on the grid. `x`/`z` are world meters, `rotY` yaw. */
 export interface Placement {
@@ -115,8 +116,10 @@ const KIT_SCALE = 0.5;
 const WALL_THICKNESS_M = 1;
 /** Perf budget: at most this many merged static meshes per zone. */
 const MAX_MERGED_MESHES = 6;
-/** Perf budget: at most this many dynamic PointLights per zone. */
-const MAX_POINT_LIGHTS = 4;
+/** Perf budget: at most this many dynamic PointLights per zone. The interior
+ *  torch pool (Task 2) shares this budget — its `TUNING.lighting.torch.poolCap`
+ *  must stay ≤ this. Exported so the interior-kit test pins the relationship. */
+export const MAX_POINT_LIGHTS = 4;
 /** Torch bracket height on a 2m wall. */
 const TORCH_MOUNT_Y = 1.1;
 const TORCH_LIGHT_COLOR = 0xffa050;
@@ -434,6 +437,29 @@ function normalizeForMerge(geoms: BufferGeometry[]): BufferGeometry[] {
     g.morphAttributes = {};
     return g;
   });
+}
+
+/**
+ * A single interior-torch flame (world-expansion v1.2, Task 2): two crossed,
+ * upward-tapering quads (a bicone tongue) centred on the origin so a translate
+ * seats it at the flame cup. Non-indexed with normals, so many flames merge
+ * into ONE emissive mesh (1 draw call). No billboard — the crossed quads read
+ * as a flame from any yaw, which suits the PS1 look and stays static-mergeable.
+ */
+function torchFlameGeometry(): BufferGeometry {
+  const w0 = 0.13; // base half-width
+  const w1 = 0.03; // tip half-width
+  const h = 0.21; // half-height
+  // One tapered quad (two tris) in a plane; `axis` picks XY (0) or ZY (1).
+  const quad = (axis: 0 | 1): number[] => {
+    const p = (wx: number, y: number): number[] => (axis === 0 ? [wx, y, 0] : [0, y, wx]);
+    const bl = p(-w0, -h), br = p(w0, -h), tr = p(w1, h), tl = p(-w1, h);
+    return [...bl, ...br, ...tr, ...bl, ...tr, ...tl];
+  };
+  const geo = new BufferGeometry();
+  geo.setAttribute('position', new Float32BufferAttribute([...quad(0), ...quad(1)], 3));
+  geo.computeVertexNormals();
+  return geo;
 }
 
 // --- exterior forest + terrain skirt (Task 2) -------------------------------
@@ -914,6 +940,67 @@ export class ZoneBuilder {
       light.castShadow = false; // shadow maps are never enabled in OATHBRAND
       group.add(light);
       lights.push(light);
+    }
+
+    // Interior wall-torch kit (world-expansion v1.2, Task 2). EVERY torch gets a
+    // bracket + an emissive flame quad — the flame carries the torch's read in a
+    // near-void-black interior with no scene light on it at all. The warm CAST
+    // light is drawn from a SHARED pool capped so the per-zone dynamic-light
+    // budget (`MAX_POINT_LIGHTS`, shared with `def.lights` above) is never
+    // exceeded, even with 6 torches. When there are more torches than pool
+    // slots, the surplus read via their emissive flame (nearest-N reassignment
+    // of the pool to the player is the reserved upgrade — kept out so the
+    // flicker tick stays player-agnostic; the kit is dormant until Tasks 4–8).
+    if (def.torches && def.torches.length > 0) {
+      const T = TUNING.lighting.torch;
+      const poolCap = Math.min(MAX_POINT_LIGHTS, T.poolCap);
+      const flameGeoms: BufferGeometry[] = [];
+      for (const torch of def.torches) {
+        const [row, col] = torch.at;
+        const cx = col * cell + half;
+        const cz = row * cell + half;
+        // Mount direction: an explicit rotY hangs the torch on a chosen wall (or
+        // a free-standing brazier); omitted ⇒ auto-scan for the nearest wall (as
+        // the v1 `lights` torch does). Reuses the v1 bracket-yaw math exactly.
+        const [dr, dc] = torch.rotY !== undefined
+          ? [-Math.cos(torch.rotY), -Math.sin(torch.rotY)]
+          : (wallDirFrom(def, row, col) ?? [-1, 0]);
+        const ty = groundYAt(cx, cz);
+        addPiece('torch', cx + dc * half, TORCH_MOUNT_Y + ty, cz + dr * half, Math.atan2(-dc, -dr), 1);
+        // Flame cup: off the wall toward the room, above the bracket.
+        const fx = cx + dc * (half - 0.45);
+        const fy = TORCH_MOUNT_Y + 0.55 + ty;
+        const fz = cz + dr * (half - 0.45);
+        const g = torchFlameGeometry();
+        g.translate(fx, fy, fz);
+        flameGeoms.push(g);
+        if (lights.length < poolCap) {
+          const light = new PointLight(T.color, T.intensity, T.distanceM);
+          light.position.set(fx, fy, fz);
+          light.castShadow = false;
+          group.add(light);
+          lights.push(light);
+        }
+      }
+      // All flame quads → ONE emissive mesh (1 draw call). Emissive so the pool
+      // of warmth reads without lifting the general ambient (spec §2).
+      const flameGeom = mergeGeometries(normalizeForMerge(flameGeoms), false);
+      for (const g of flameGeoms) g.dispose();
+      if (flameGeom) {
+        const flameMat = new MeshStandardMaterial({
+          color: T.flameColor,
+          emissive: T.flameColor,
+          emissiveIntensity: T.flameEmissive,
+          roughness: 1,
+          metalness: 0,
+          flatShading: true,
+          side: DoubleSide,
+        });
+        patchMaterial(flameMat);
+        const flames = new Mesh(flameGeom, flameMat);
+        flames.name = 'torch-flames';
+        group.add(flames);
+      }
     }
 
     // Banner checkpoint: hung flush on an adjacent wall face, at kit scale so

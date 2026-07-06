@@ -36,7 +36,7 @@ function neededPieces(def: ZoneDef): Set<string> {
   // `A` door-void house-blocks render as `wall-arch.glb` in the exterior build
   // (gridToPlacements only knows the interior 'wall' path), so request it here.
   if (def.grid.some((row) => row.includes('A'))) pieces.add('wall-arch');
-  if (def.lights.length > 0) pieces.add('torch');
+  if (def.lights.length > 0 || (def.torches?.length ?? 0) > 0) pieces.add('torch');
   if (def.banner) pieces.add('banner');
   return pieces;
 }

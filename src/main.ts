@@ -7,7 +7,7 @@ import { skyFogColor } from './world/exteriorSky';
 import { scatterSpawns } from './world/spawnScatter';
 import { preloadTextures } from './world/textures';
 import { Game } from './engine/Game';
-import { DreadDirector } from './engine/DreadDirector';
+import { DreadDirector, dreadEligible } from './engine/DreadDirector';
 import type { DreadCtx, ScareActivation } from './engine/DreadDirector';
 import { ScreenScareKit, hdScareRider } from './engine/ScreenScareKit';
 import { setSnapResolution } from './ps1/patchMaterial';
@@ -216,17 +216,20 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-/** Gather every EXTERIOR zone's scare authoring for one run-scoped DreadDirector
- *  (the per-drop caps — 10 beats, 2×/gimmick, 6 Watchers — must span the whole
- *  drop, so there is ONE director, not one per zone). Castle/interior zones
- *  contribute nothing, which is exactly why they never get scares.
+/** Gather every DREAD-ELIGIBLE zone's scare authoring for one run-scoped
+ *  DreadDirector (the per-drop caps — 10 beats, 2×/gimmick, 6 Watchers — must
+ *  span the whole drop, so there is ONE director, not one per zone). Exteriors
+ *  plus the world-expansion interiors that opt in via `dreadInterior` (Task 2)
+ *  contribute; plain castle/interior zones contribute nothing, which is exactly
+ *  why they never get scares. The SAME `dreadEligible` predicate gates the
+ *  per-frame `dread.update` below, so the two can never disagree.
  *
  *  Watcher anchors are kept KEYED BY ZONE (T5 review fix): the single run-scoped
- *  director spans every exterior zone, so a flat anchor list would let a beat in
+ *  director spans every dread zone, so a flat anchor list would let a beat in
  *  zone A manifest the Watcher at zone B's anchor. `anchorsByZone` scopes the
  *  pick to `beat.zone`; the WatcherPresence is re-scoped per entry (setAnchors)
  *  so an off-screen reposition can never wander into another zone's anchor. */
-function exteriorScareData(): {
+function dreadScareData(): {
   scares: ScareBeat[];
   anchorsByZone: Partial<Record<ZoneId, WatcherAnchor[]>>;
   hag: HagThresholdDef | undefined;
@@ -236,7 +239,7 @@ function exteriorScareData(): {
   let hag: HagThresholdDef | undefined;
   const defs: ZoneDef[] = Object.values(ZONES).filter((d): d is ZoneDef => d !== undefined);
   for (const def of defs) {
-    if (def.kind !== 'exterior') continue;
+    if (!dreadEligible(def)) continue;
     if (def.scares) scares.push(...def.scares);
     if (def.watcherAnchors && def.watcherAnchors.length > 0) {
       anchorsByZone[def.id] = [...(anchorsByZone[def.id] ?? []), ...def.watcherAnchors];
@@ -559,7 +562,7 @@ async function startScene(): Promise<void> {
   // (glitchSeen / watcherSightings) is seeded from the save so fidelity scarcity
   // and the Watcher budget persist across reloads.
   const runSeed = (Date.now() ^ 0x9e3779b9) >>> 0;
-  const dreadData = exteriorScareData();
+  const dreadData = dreadScareData();
   const dread = new DreadDirector(
     dreadData.scares,
     dreadData.anchorsByZone,
@@ -2395,10 +2398,12 @@ async function startScene(): Promise<void> {
       }
 
       // --- Task 3: the DreadDirector ------------------------------------
-      // Only exterior (Greater Vael) zones ever get scares — castle zones are
-      // never handed to the director. It fires at most one beat/frame; main
-      // routes each activation to the kit / mixer / (Tasks 5–12) presence.
-      if (activeDef.kind === 'exterior') {
+      // Dread-eligible zones get scares: exteriors (Greater Vael) and the
+      // world-expansion interiors that opt in via `dreadInterior` (Task 2).
+      // Plain castle interiors are never handed to the director. It fires at
+      // most one beat/frame; main routes each activation to the kit / mixer /
+      // (Tasks 5–12) presence. Same predicate as `dreadScareData` above.
+      if (dreadEligible(activeDef)) {
         if (built.bannerMesh) {
           // slow pendulum skew — SMOOTH (never stepped); world micro-motion rule (spec §6)
           built.bannerMesh.rotation.z = Math.sin(now * 0.0011) * 0.05;

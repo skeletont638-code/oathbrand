@@ -13,6 +13,27 @@
  *   others   zone-specific letters (`K`, `W`, `V`, …) resolved via
  *            `ZoneDef.tiles`; an unmapped unknown char is treated as wall
  *            (fail closed — typos block instead of leaking players out).
+ *
+ * ── STAIR CONVENTION (world-expansion v1.2, Task 2 — doc, not engine) ────────
+ * OATHBRAND has no jump and collision is the flat 2D grid; `heightGrid` is a
+ * VISUAL y-lerp only (see ZoneBuilder.cellHeightM / groundYAt). Real, climbable
+ * stairs are therefore an AUTHORING convention, not a new mechanic:
+ *
+ *  • WITHIN a zone (mezzanine / wall-walk / raised altar — spec §2 mechanism A):
+ *    author a gentle `heightGrid` slope and rest the decorative `stairs` prop on
+ *    top as the visible treads. Keep the rise WALKABLE — target ≤ 0.45 m per
+ *    cell so the camera glides rather than lurches. One `heightGrid` digit is a
+ *    full HEIGHT_LEVEL_M (1.5 m) step, so a single-digit seam reads as a LEDGE,
+ *    not a stair: spread a storey's worth of climb across several cells (as
+ *    Pilgrim's Descent terraces do) to stay under the per-cell target. Collision
+ *    stays flat, so the slope is a look, not a barrier.
+ *  • BETWEEN floors (floor-over-floor — spec §2 mechanism B): rooms cannot stack
+ *    on one heightfield, so an upper floor is its OWN zone. Climb the real steps
+ *    to a LANDING — a FLAT cell (equal `heightGrid` to its neighbours) that
+ *    carries a stairwell door gate (a `doors` DoorDef + a `gateDoors` "Stair
+ *    Door" decoration). `OPEN` → arrive mid-staircase in the upper zone and keep
+ *    climbing, so the transition reads continuous. Never sit a door on a sloped
+ *    cell — a landing is always flat.
  */
 import type { ZoneId, EnemyKind, GameFlag } from '../content/types';
 
@@ -46,6 +67,25 @@ export interface Torch {
   /** 0xRRGGBB; renderer default if omitted. */
   color?: number;
   intensity?: number;
+}
+
+/**
+ * A wall-torch from the interior kit (world-expansion v1.2, Task 2): a bracket
+ * mesh + an emissive flame quad + a warm cast-light drawn from a SHARED, capped
+ * pool (`TUNING.lighting.torch`). Distinct from `lights` (the v1 Torch above):
+ * `torches` are authored by the new interior zones (castle floors, ruins) as
+ * "pools of safety" in otherwise near-void-black rooms — the emissive flame
+ * reads on EVERY torch, while the pooled PointLight (≤ poolCap per zone) carries
+ * the cast warmth without lifting the general ambient.
+ *
+ * `rotY` (radians) sets the bracket's facing explicitly; when omitted the
+ * builder auto-orients it against the nearest wall (as the v1 torch does).
+ * Content review bounds a zone to 3–6 torches (a hard ≤6 is test-enforced).
+ */
+export interface TorchProp {
+  at: GridPos;
+  /** Bracket yaw in radians; omitted ⇒ auto-orient to the nearest wall. */
+  rotY?: number;
 }
 
 /** An enemy placement. */
@@ -315,6 +355,21 @@ export interface ZoneDef {
   /** 'interior' (default) keeps v1 behavior; 'exterior' opts into the outdoor
    * zone engine — height layer, instanced forest, sky/moon/ash, DreadDirector. */
   kind?: 'interior' | 'exterior';
+  /**
+   * World-expansion v1.2 (Task 2): opt an INTERIOR zone into the dread layer
+   * without flipping it to `kind: 'exterior'`. The dread gate (main.ts) is
+   * `dreadEligible(def)` = `kind === 'exterior' || dreadInterior` — the six new
+   * interiors (castle floors, ruins) set this true so the DreadDirector fires
+   * their authored scares; every existing interior omits it and is untouched.
+   */
+  dreadInterior?: boolean;
+  /**
+   * Interior wall-torches (Task 2 kit): bracket + emissive flame + pooled warm
+   * PointLight. Absent ⇒ no torches (v1 interiors, byte-identical builds). The
+   * cast-light pool is capped at `TUNING.lighting.torch.poolCap`; a zone author
+   * places 3–6 (test-enforced ≤6). See `TorchProp`.
+   */
+  torches?: TorchProp[];
   /** Per-cell terrain step, same dims as `grid`; one digit '0'–'3' per cell.
    * A visual y-lerp only — collision stays the flat v1 2D grid (no jump). */
   heightGrid?: string[];
