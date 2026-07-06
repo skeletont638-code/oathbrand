@@ -67,6 +67,13 @@ open crenellated crown, one merlon fallen for the ruin) is likewise **original
 CC0 geometry generated in code** (`src/world/exteriorProps.ts`), vertex-coloured,
 no download and no texture — one standalone off-grid backdrop mesh (1 draw).
 
+The **sunken-chapel shell** (`chapel-shell`, ~46 tris, World Expansion v1.2 Task 7
+— the Ashen Forest chapel silhouette: a tall stone nave with its south half
+roofless, a pitched gable over the tended north end, and a leaning cross at the
+peak) is likewise **original CC0 geometry generated in code**
+(`src/world/exteriorProps.ts`), vertex-coloured, no download and no texture — one
+standalone off-grid backdrop mesh (1 draw).
+
 ## Processing applied (all repeatable via `bash scripts/fetch-assets.sh`)
 
 - Texture atlases downsampled to 128 px, darkened toward the OATHBRAND palette

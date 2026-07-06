@@ -1,8 +1,10 @@
 /**
  * ASHEN FOREST N (Greater Vael Drop 1, Task 10) — the "audio-leads" forest and
  * the Ash-Hound's showcase. Reached from the Gate Fields hub down the E road
- * (`gf-forest`); the forest DEAD-ENDS at the fog-line, so this single spoke
- * door is the only way in or out. A sparse west road (cols 1–6, `t`/`.`) ramps
+ * (`gf-forest`); the road-end fog-line is a DEAD-END, so the forest has just two
+ * doors — the spoke back to the fields (`gf-forest`), and, off the west road, the
+ * `Chapel Door` (Task 7) into the Sunken Chapel's nave (its half-collapsed
+ * silhouette rising off-grid behind the door). A sparse west road (cols 1–6, `t`/`.`) ramps
  * into a dense stand (cols 8–13, `T`) whose occlusion converges the sightline
  * toward ~13 m — where the 12 m brand pulse and the Hounds' 13 m aggro meet, so
  * the pant you HEAR circling arrives before the shape you SEE (no `fogCells`:
@@ -28,7 +30,7 @@ import type { ZoneDef } from '../../world/zoneDef';
 export const ASHEN_FOREST_N: ZoneDef = {
   id: 'ashen-forest-n',
   grid: [
-    '###############', // 0
+    '###4###########', // 0  N wall — Chapel Door '4' [0,3] → chapel-nave (Task 7, unlocked)
     '3ppt..t..tTtTT#', // 1  W door 3 [1,0] → gate-fields (pair 'gf-forest')
     '#.Spt.t.tTTTTT#', // 2  S spawn [2,2] (plain floor, the west road)
     '#t.pp.t.T.tTTT#', // 3
@@ -50,7 +52,17 @@ export const ASHEN_FOREST_N: ZoneDef = {
   // No fogFarM override → the 16 m exterior default; the dense-column occlusion
   // does the tightening (Step 2). No fogCells: the treeline IS the band, and its
   // per-cell muffle is the audio tell that keeps the 13 m Hound aggro fair.
-  props: [],
+  props: [
+    // World Expansion v1.2 (Task 7): the SUNKEN CHAPEL silhouette. An OFF-GRID
+    // backdrop prop ([-1,3], one cell north of the Chapel Door '4' at [0,3], in
+    // the treeline) so the half-collapsed chapel READS from the road WITHOUT
+    // being an enterable structure in the exterior grid — its interior is
+    // chapelNave / chapelCrypt. A single ~46-tri procedural masonry shell (1 draw
+    // call; PROCEDURAL_PROPS 'chapel-shell') — a roofless nave under a leaning
+    // cross. Off-grid ⇒ unreachable set-dressing (the collider treats
+    // out-of-bounds as solid), like the Gate Fields watchtower shell.
+    { kind: 'chapel-shell', at: [-1, 3] },
+  ],
   // A forest under the sky/moon backdrop — lit by the lifted ash-grey ambient,
   // zero dynamic lights (the instancing stress zone stays at 0 of the ≤4 budget).
   lights: [],
@@ -69,8 +81,16 @@ export const ASHEN_FOREST_N: ZoneDef = {
     { id: 'gv-forest-watcher-note', at: [3, 1] }, // the scratched line (off-path secret)
   ],
   doors: [
-    // The single spoke door — the forest dead-ends at the fog-line / Hag cairn.
+    // The spoke door — the road-end at the fog-line / Hag cairn is a dead-end,
+    // so this is the only way back to the fields.
     { id: 'af-to-fields', at: [1, 0], to: 'gate-fields', pair: 'gf-forest' },
+    // World Expansion v1.2 (Task 7). The Chapel Door off the west road into the
+    // Sunken Chapel's nave (chapelNave). Unlocked; the 'Chapel Door' decoration is
+    // declared on the nave side (one side per edge), so this end renders the same
+    // door. New gate cell '4' on the N wall — no contract cell (spawn/banner/
+    // hounds/lore/beats/hag-glimpse) is disturbed; its inward entry [1,3] is clean
+    // road floor.
+    { id: 'af-to-chapel', at: [0, 3], to: 'chapel-nave', pair: 'chapel-door' },
   ],
   ambience: ['amb-forest-hush', 'amb-forest-wrong'],
   scares: [

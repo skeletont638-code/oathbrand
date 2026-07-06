@@ -6,7 +6,7 @@
  * tri-cap assertion, never just "defined".
  */
 import { describe, it, expect } from 'vitest';
-import { bonePileGeometry, gibbetGeometry, roofWedgeGeometry, stoneGeometry, stumpGeometry, towerShellGeometry } from '../exteriorProps';
+import { bonePileGeometry, chapelShellGeometry, gibbetGeometry, roofWedgeGeometry, stoneGeometry, stumpGeometry, towerShellGeometry } from '../exteriorProps';
 import type { BufferGeometry } from 'three';
 
 function tris(g: BufferGeometry): number {
@@ -102,6 +102,31 @@ describe('the watchtower shell (Task 6)', () => {
   it('is deterministic (no Math.random)', () => {
     const a = towerShellGeometry().getAttribute('position');
     const b = towerShellGeometry().getAttribute('position');
+    expect(a.count).toBe(b.count);
+    for (let i = 0; i < a.count; i++) expect(a.getY(i)).toBe(b.getY(i));
+  });
+});
+
+describe('the sunken chapel shell (Task 7)', () => {
+  it('is a cheap (≤200 tri), grounded, vertex-coloured, UV\'d silhouette', () => {
+    // The Ashen Forest sunken-chapel silhouette — an off-grid backdrop prop.
+    // Cheap (≤200 tris), base on the ground (minY ≥ 0, never floats), and — going
+    // through mergeGeometries — every vertex UV'd (uv.count === position.count
+    // proves no attribute was dropped).
+    const g = chapelShellGeometry();
+    expect(g.getAttribute('color')).toBeDefined();
+    expect(tris(g)).toBeGreaterThan(0);
+    expect(tris(g)).toBeLessThanOrEqual(200);
+    expect(minY(g)).toBeGreaterThanOrEqual(-0.001);
+    const uv = g.getAttribute('uv');
+    expect(uv).toBeDefined();
+    expect(uv.count).toBe(g.getAttribute('position').count);
+    g.dispose();
+  });
+
+  it('is deterministic (no Math.random)', () => {
+    const a = chapelShellGeometry().getAttribute('position');
+    const b = chapelShellGeometry().getAttribute('position');
     expect(a.count).toBe(b.count);
     for (let i = 0; i < a.count; i++) expect(a.getY(i)).toBe(b.getY(i));
   });

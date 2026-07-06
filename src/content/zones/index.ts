@@ -24,6 +24,8 @@ import { HALL_BARRACKS } from './hallBarracks';
 import { KEEP_CHAPEL } from './keepChapel';
 import { TOWER_GROUND } from './towerGround';
 import { TOWER_UPPER } from './towerUpper';
+import { CHAPEL_NAVE } from './chapelNave';
+import { CHAPEL_CRYPT } from './chapelCrypt';
 
 /** Every built zone, by id. The seven-zone castle campaign (T11–T16) plus the
  *  first Greater Vael exteriors — the Gate Fields hub (Task 9), the Ashen
@@ -52,6 +54,10 @@ export const ZONES: Partial<Record<ZoneId, ZoneDef>> = {
   // guardroom and the open roof-walk over the fields.
   'tower-ground': TOWER_GROUND,
   'tower-upper': TOWER_UPPER,
+  // World Expansion v1.2 (Task 7) — the Sunken Chapel off the Ashen Forest road:
+  // the half-collapsed nave (the queen's-walk echo room) and the crypt beneath.
+  'chapel-nave': CHAPEL_NAVE,
+  'chapel-crypt': CHAPEL_CRYPT,
 };
 
 /**

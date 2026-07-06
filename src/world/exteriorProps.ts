@@ -161,6 +161,48 @@ export function towerShellGeometry(): BufferGeometry {
   return merge(parts);
 }
 
+/**
+ * THE SUNKEN CHAPEL SHELL (World Expansion v1.2, Task 7) — the exterior
+ * SILHOUETTE of the half-collapsed chapel in the Ashen Forest: a tall stone
+ * nave box whose SOUTH half has lost its roof (the collapse), a pitched gable
+ * over the tended NORTH end, and a leaning cross at the peak — the one shape
+ * that reads "chapel" across a dark treeline where a bare box would not. Placed
+ * as an OFF-GRID backdrop prop behind the Chapel Door in the forest, so the ruin
+ * READS from the road without being an enterable structure in the exterior grid
+ * (the real interior is chapelNave / chapelCrypt, the tower-shell pattern). Cheap:
+ * ~46 tris, one draw call, vertex-coloured for the flat PS1 look; base at y0
+ * (never floats). Declared CC0 in assets/LICENSES.md. */
+export function chapelShellGeometry(): BufferGeometry {
+  const parts: BufferGeometry[] = [];
+  const naveW = 3.0, naveD = 5.2, wallH = 4.2;
+  // The nave walls — a tall weathered-stone box, base seated at y0.
+  const body = new BoxGeometry(naveW, wallH, naveD);
+  body.translate(0, wallH / 2, 0);
+  parts.push(paint(body, STONE));
+  // A pitched gable capping the NORTH half only (the tended end); the south
+  // half stays roofless — the collapse. A squashed 4-sided pyramid reads as a
+  // ridge from a distance, elongated along z over that half.
+  const roofH = 1.5;
+  const roof = new ConeGeometry(naveW * 0.72, roofH, 4, 1);
+  roof.rotateY(Math.PI / 4);
+  roof.scale(1, 1, (naveD * 0.5) / (naveW * 0.72)); // elongate into a ridge over the north half
+  roof.translate(0, wallH + roofH / 2, -naveD * 0.25);
+  parts.push(paint(roof, ROOF));
+  // The leaning cross at the gable peak — the chapel signifier, tilted for the
+  // ruined read. Two thin stone members, built about the origin so the lean is
+  // compact, then seated above the north gable.
+  const crossY = wallH + roofH + 0.7;
+  const crossZ = -naveD * 0.25;
+  const post = new BoxGeometry(0.16, 1.3, 0.16);
+  const arm = new BoxGeometry(0.86, 0.16, 0.16);
+  arm.translate(0, 0.22, 0); // the crossbar, high on the upright
+  const cross = merge([paint(post, STONE), paint(arm, STONE)]);
+  cross.rotateZ(0.12); // the lean, about the cross's own centre
+  cross.translate(0, crossY, crossZ);
+  parts.push(cross);
+  return merge(parts);
+}
+
 /** A pitched, charred roof wedge capping an H/A house cell (~2 m footprint). */
 export function roofWedgeGeometry(): BufferGeometry {
   const g = new ConeGeometry(1.5, 1.1, 4, 1, false); // a 4-sided pyramid reads as a pitched roof

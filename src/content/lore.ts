@@ -288,6 +288,25 @@ export const LORE: Record<string, LoreEntry> = {
     body: 'The highest watch in the fields kept this walk, where the wind never falls and the whole plain lies open to the moon. On a clear night you could count every fire on the muster-ground below and know the host by them. The last man to stand here counted too, and cut the number into the stone at your feet — and beside it, smaller: fewer than the night before. He never set down who was gone. He had begun to fear it was himself.',
   },
 
+  // ─── WORLD EXPANSION v1.2 — THE SUNKEN CHAPEL (Task 7, Act II) ─────────
+  // The half-collapsed chapel in the Ashen Forest, and the crypt beneath it.
+  // Act II's voice — Queen Maren's last vigil met from a third side: not the
+  // keep's chapel where she knelt, but the wayside nave she WALKED to, and the
+  // dark below where the uncounted were laid. The queen's-walk echo stages in
+  // the nave (Task 9); these are stone only, turned forward-dread.
+  'act2-nave-a': {
+    title: 'The Worn Aisle',
+    body: 'Down this nave Queen Maren walked the night the sworn rode out — the length of it, altar to door and back, and back again, until the stone of the aisle was polished pale by one pair of feet. She was not pacing for their sake; the lending-rite had already shown her the road they would not return by. She walked to wear the fear down to a thing she could kneel with. Walk it slowly. Something walks it still, at the hour she did, and turns before it reaches the door.',
+  },
+  'act2-nave-b': {
+    title: 'The Fallen Roof',
+    body: 'The roof gave way over the south half in the empty years, so half her walk lies open to the ash-sky now and half still under stone. She would not be grieved by the ruin — she foretold a worse one, and this is only rafters. Cut into the threshold where the walk ended, in a hand gone unsteady: I went until I could let them go, and then I went a little further. She did not carve what she found in the further part. The echo does not carve it either. It only walks.',
+  },
+  'act2-crypt-a': {
+    title: 'What the Queen Left',
+    body: 'Beneath the chapel the vigil laid its own — the ones who guttered before the ride, and were kept off the roll of the fallen because they had never left to fall. Queen Maren came down here once, at the very end, and set a thing on the lowest slab: not a body, the keeper wrote, but a weight she would not carry up again. The dark has taken the shape of it since. Do not bring your brand near what stirs in the corner — it has waited a long time to be counted, and cannot tell your fire from hers.',
+  },
+
   // ─── NG+ (T16): the recontextualisations. Defined now, placed later. ────
   'ng-queen-knew': {
     ngOnly: true,

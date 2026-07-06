@@ -102,11 +102,18 @@ describe('zone registry', () => {
   });
 
   it('registers the Gate Fields watchtower — ground + roof-walk (Task 6)', () => {
-    // World Expansion v1.2: the first landscape ruin. Eleven prior zones + the two
-    // keep floors + the chapel + the two tower floors = 16.
+    // World Expansion v1.2: the first landscape ruin.
     expect(ZONES['tower-ground']).toBeDefined();
     expect(ZONES['tower-upper']).toBeDefined();
-    expect(Object.keys(ZONES)).toHaveLength(16);
+  });
+
+  it('registers the Sunken Chapel — nave + crypt (Task 7)', () => {
+    // World Expansion v1.2: the second landscape ruin. Eleven prior zones + the
+    // two keep floors + the keep chapel + the two tower floors + the chapel's
+    // nave & crypt = 18.
+    expect(ZONES['chapel-nave']).toBeDefined();
+    expect(ZONES['chapel-crypt']).toBeDefined();
+    expect(Object.keys(ZONES)).toHaveLength(18);
   });
 
   it('zoneOrThrow returns every registered zone (the campaign is complete)', () => {
@@ -245,10 +252,12 @@ describe('zone registry', () => {
     const afToFields = forest.doors.find((d) => d.id === 'af-to-fields');
     expect(gfToForest, 'gate-fields is missing the gf-to-forest road').toBeDefined();
     expect(afToFields, 'ashen-forest-n is missing the af-to-fields road').toBeDefined();
-    // Both ends share the single passage edge — the forest's only door.
+    // Both ends share the fields spoke passage edge.
     expect(gfToForest!.pair).toBe('gf-forest');
     expect(afToFields!.pair).toBe('gf-forest');
-    expect(forest.doors).toHaveLength(1); // the forest dead-ends at the fog-line
+    // The forest now carries TWO doors: the fields spoke (this) + the Chapel Door
+    // (Task 7). The road-end fog-line is still the dead-end.
+    expect(forest.doors).toHaveLength(2);
     // Walking the road lands the player at the OTHER zone's paired door.
     expect(pairedDoor('gate-fields', gfToForest!, forest)?.to).toBe('gate-fields');
     expect(pairedDoor('ashen-forest-n', afToFields!, fields)?.to).toBe('ashen-forest-n');
@@ -526,6 +535,105 @@ describe('The Watchtower (Task 6) — entry, stair, and roof-walk', () => {
     expect(byId.get('tower-ground-to-fields')?.label).toBe('Tower Door');
     expect(byId.get('tower-ground-to-upper')?.label).toBe('Stair Door');
     expect(byId.get('tower-upper-to-ground')?.label).toBe('Stair Door');
+  });
+});
+
+describe('The Sunken Chapel (Task 7) — entry, echo aisle, and crypt', () => {
+  const forest = zoneOrThrow('ashen-forest-n');
+  const nave = zoneOrThrow('chapel-nave');
+  const crypt = zoneOrThrow('chapel-crypt');
+
+  it('the Chapel Door pairs both ways between the Ashen Forest and the nave', () => {
+    const afToChapel = forest.doors.find((d) => d.id === 'af-to-chapel');
+    const naveToForest = nave.doors.find((d) => d.id === 'nave-to-forest');
+    expect(afToChapel, 'ashen-forest-n is missing the af-to-chapel door').toBeDefined();
+    expect(naveToForest, 'chapel-nave is missing the nave-to-forest door').toBeDefined();
+    expect(afToChapel!.pair).toBe('chapel-door');
+    expect(naveToForest!.pair).toBe('chapel-door');
+    expect(afToChapel!.lock, 'the Chapel Door is unlocked').toBeUndefined();
+    // The new gate cell '4' sits on the forest N wall, not on any prior gate digit.
+    expect(charAt(forest, [0, 3])).toBe('4');
+    expect(pairedDoor('ashen-forest-n', afToChapel!, nave)?.to).toBe('ashen-forest-n');
+    expect(pairedDoor('chapel-nave', naveToForest!, forest)?.to).toBe('chapel-nave');
+  });
+
+  it('the new Chapel Door gate does not disturb any Ashen Forest contract cell', () => {
+    // The forest's spawn/spoke-door/banner and every beat/threshold cell keep theirs.
+    expect(charAt(forest, [2, 2])).toBe('S'); // spawn, untouched
+    expect(charAt(forest, [1, 0])).toBe('3'); // the fields spoke door
+    expect(forest.banner?.at).toEqual([5, 6]); // banner at the fog-line
+    // The hounds, the Hag cairn/threshold and every AF beat trigger keep their cells.
+    expect(forest.enemies.map((e) => String(e.at)).sort()).toEqual(['6,8', '9,10']);
+    expect(forest.hagThreshold?.at).toEqual([8, 9]);
+    expect(forest.lore.map((l) => l.id)).toContain('gv-forest-hag-cairn');
+    // The Chapel Door's inward entry cell is clean road floor (not a lore/beat cell).
+    const entry = doorEntry(forest, forest.doors.find((d) => d.id === 'af-to-chapel')!);
+    const [er, ec] = [Math.floor(entry.z / forest.cell), Math.floor(entry.x / forest.cell)];
+    expect([er, ec]).toEqual([1, 3]);
+    expect(isWalkable(forest, [1, 3])).toBe(true);
+  });
+
+  it('the Crypt Stair pairs both ways between the nave and the crypt', () => {
+    const naveDown = nave.doors.find((d) => d.id === 'nave-to-crypt');
+    const cryptUp = crypt.doors.find((d) => d.id === 'crypt-to-nave');
+    expect(naveDown?.pair).toBe('chapel-crypt-stair');
+    expect(cryptUp?.pair).toBe('chapel-crypt-stair');
+    expect(pairedDoor('chapel-nave', naveDown!, crypt)?.to).toBe('chapel-nave');
+    expect(pairedDoor('chapel-crypt', cryptUp!, nave)?.to).toBe('chapel-crypt');
+  });
+
+  it('the nave is a dread interior with a raised altar, 2 lit torches, 2 Act-II inscriptions', () => {
+    expect(nave.dreadInterior).toBe(true);
+    expect(nave.kind ?? 'interior').toBe('interior');
+    // The raised altar dais rides one band above the nave; the row2↔row3 seam is
+    // the walkable ramp (mechanism A), the `stairs` prop the visible treads.
+    expect(nave.heightGrid, 'chapel-nave needs a heightGrid').toBeDefined();
+    expect(nave.heightGrid!.length).toBe(nave.grid.length);
+    for (let r = 0; r < nave.heightGrid!.length; r++) {
+      expect(nave.heightGrid![r].length).toBe(nave.grid[r].length);
+    }
+    expect(buildHeightRamps(nave).some((s) => s.kind === 'ramp'), 'the altar step is a ramp').toBe(true);
+    // Two LIT torches (the kit's `torches`) flank the altar; the unlit read is a
+    // bare `torch` bracket in `props` (no kit extension), at the collapsed south end.
+    expect(nave.torches?.length).toBe(2);
+    expect(nave.props.filter((p) => p.kind === 'torch')).toHaveLength(1);
+    expect(nave.lore.map((l) => l.id).sort()).toEqual(['act2-nave-a', 'act2-nave-b']);
+    expect(LORE['act2-nave-a']).toBeDefined();
+    expect(LORE['act2-nave-b']).toBeDefined();
+  });
+
+  it('reserves the 4 contiguous aisle cells prop/enemy-free for the queen\'s-walk echo (Task 9)', () => {
+    const reserved: GridPos[] = [[4, 3], [5, 3], [6, 3], [7, 3]];
+    const occupied = new Set<string>([
+      ...nave.props.map((p) => String(p.at)),
+      ...nave.enemies.map((e) => String(e.at)),
+      ...(nave.ngPlus?.enemies ?? []).map((e) => String(e.at)),
+      ...nave.lore.map((l) => String(l.at)),
+    ]);
+    for (const cell of reserved) {
+      expect(isWalkable(nave, cell), `echo cell ${String(cell)} must be walkable aisle`).toBe(true);
+      expect(occupied.has(String(cell)), `echo cell ${String(cell)} must stay clear`).toBe(false);
+    }
+  });
+
+  it('the crypt is a near-black dread interior with 2 torches, 1 wraith, bones, 1 inscription', () => {
+    expect(crypt.dreadInterior).toBe(true);
+    expect(crypt.kind ?? 'interior').toBe('interior');
+    expect(crypt.ambientFloor).toBe(0.06); // the Undercroft's darkest precedent
+    expect(crypt.keyLightIntensity).toBe(0); // never defeat the wraith showcase
+    expect(crypt.torches?.length).toBe(2);
+    expect(crypt.enemies.filter((e) => e.kind === 'wraith')).toHaveLength(1);
+    expect((crypt.scatter ?? []).some((s) => s.kind === 'bones')).toBe(true);
+    expect(crypt.lore.map((l) => l.id)).toEqual(['act2-crypt-a']);
+    expect(LORE['act2-crypt-a']).toBeDefined();
+  });
+
+  it('both chapel doors resolve to labelled DoorInstances (Chapel Door + Crypt Stair)', () => {
+    const byId = resolveDoorInstances(entries.map(([, d]) => d));
+    expect(byId.get('af-to-chapel')?.label).toBe('Chapel Door');
+    expect(byId.get('nave-to-forest')?.label).toBe('Chapel Door');
+    expect(byId.get('nave-to-crypt')?.label).toBe('Crypt Stair');
+    expect(byId.get('crypt-to-nave')?.label).toBe('Crypt Stair');
   });
 });
 

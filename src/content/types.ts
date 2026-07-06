@@ -20,7 +20,10 @@ export type ZoneId =
   | 'keep-chapel'
   // --- World Expansion v1.2 — the Gate Fields watchtower (Task 6) ---
   | 'tower-ground'
-  | 'tower-upper';
+  | 'tower-upper'
+  // --- World Expansion v1.2 — the Sunken Chapel, Ashen Forest N (Task 7) ---
+  | 'chapel-nave'
+  | 'chapel-crypt';
 
 export type EnemyKind = 'soldier' | 'archer' | 'wraith' | 'forsworn' | 'hound' | 'kneeler';
 
