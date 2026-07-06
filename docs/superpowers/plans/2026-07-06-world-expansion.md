@@ -19,7 +19,7 @@
 - No nav UI, no quest markers, no fast travel, no new enemy kinds, no combat changes.
 - Interior ambient stays near void-black — torches are pools, not general lighting.
 - Zone ids in spec §3/§4 are canonical: `hallGallery`, `hallBarracks`, `keepChapel`, `towerGround`, `towerUpper`, `chapelNave`, `chapelCrypt`, `manorGround`, `manorUpper`.
-- Named cast (provisional, owner may veto at playtest): King **Osric**, Queen **Maelis**, **Carrow, the First Sworn** (= Forsworn). Player-knight nameless.
+- Named cast (provisional, owner may veto at playtest): King **Osric**, Queen **Maren** (canon, corrected T5), **Carrow, the First Sworn** (= Forsworn). Player-knight nameless.
 - Commit style: existing conventional-commit voice (see `git log`); every task ends green: `npx tsc --noEmit && npx vitest run` before commit.
 
 ---
