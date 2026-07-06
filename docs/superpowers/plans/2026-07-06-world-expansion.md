@@ -40,7 +40,7 @@ export interface ZoneDoorDef {
   label: string;             // "Iron Door" | "Postern Gate" | "Stair Door" | ...
   locked?: 'far-side';       // passable ONLY from the defining zone until first passage
 }
-// ZoneDef gains: doors?: ZoneDoorDef[];
+// ZoneDef gains: gateDoors?: ZoneDoorDef[] // NOTE: renamed from doors — that name was taken by the existing transition table (T1 deviation, approved);
 
 // doors.ts
 export function doorEdgeId(zoneA: string, zoneB: string, gate: string): string;
