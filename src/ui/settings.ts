@@ -363,6 +363,16 @@ export class SettingsPanel {
     return g;
   }
 
+  /** One-line in-fiction caption under a control (first use: Graphics). Dimmed
+   *  parchment in the panel's spoken face, so it reads as a whisper not a row. */
+  private caption(text: string): HTMLDivElement {
+    const el = document.createElement('div');
+    el.textContent = text;
+    el.style.cssText =
+      'font-family:var(--font-spoken);font-size:11px;line-height:1.5;color:var(--parchment);opacity:.55;letter-spacing:.04em;margin:-4px 0 10px;';
+    return el;
+  }
+
   private ensure(): HTMLDivElement {
     if (this.root) return this.root;
     const root = document.createElement('div');
@@ -422,6 +432,7 @@ export class SettingsPanel {
           pick: () => this.commit('graphics', 'hd', () => this.sinks.setGraphics('hd')),
         },
       ]),
+      this.caption('The fog thins in HD, and so does the dread. The Vigil burns truest on PS1.'),
       this.segRow('Render scale', [
         {
           text: '320',

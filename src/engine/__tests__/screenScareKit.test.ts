@@ -18,6 +18,7 @@ import {
   ScreenScareKit,
   SNAP_COARSE, SNAP_MS, RESDROP_MS, DESAT_PEAK, DESAT_STAB_MS, DESAT_EASE_MS, EVER_SEEN_HOLD_MUL,
   SPOOF_PULSE_MS, SPOOF_RISE_MS, SPOOF_SAFE_PEAK,
+  hdScareRider, HD_SNAP_FOG_FAR, HD_DROP_FOG_FAR, HD_SNAP_DESAT, HD_DROP_DESAT,
 } from '../ScreenScareKit';
 
 describe('ScreenScareKit — vertex-snap spike', () => {
@@ -154,5 +155,22 @@ describe('ScreenScareKit — flicker-safe determinism', () => {
     kit.update(SNAP_MS); // snap ends here; desat still easing
     expect(kit.snapRes()).toBeNull();
     expect(kit.desatBoost()).toBeGreaterThan(0);
+  });
+});
+
+describe('hdScareRider (P5)', () => {
+  it('is inert when no scare holds', () => {
+    expect(hdScareRider(false, false)).toEqual({ fogFar: null, desatFloor: 0 });
+  });
+  it('res-drop rides on fog and desat', () => {
+    expect(hdScareRider(false, true)).toEqual({ fogFar: HD_DROP_FOG_FAR, desatFloor: HD_DROP_DESAT });
+  });
+  it('snap rides harder than the drop', () => {
+    expect(hdScareRider(true, false)).toEqual({ fogFar: HD_SNAP_FOG_FAR, desatFloor: HD_SNAP_DESAT });
+    expect(HD_SNAP_FOG_FAR).toBeLessThan(HD_DROP_FOG_FAR);
+    expect(HD_SNAP_DESAT).toBeGreaterThan(HD_DROP_DESAT);
+  });
+  it('overlapping holds take the harder of each channel', () => {
+    expect(hdScareRider(true, true)).toEqual({ fogFar: HD_SNAP_FOG_FAR, desatFloor: HD_SNAP_DESAT });
   });
 });

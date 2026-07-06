@@ -48,6 +48,28 @@ export const SPOOF_RISE_MS = 90;
  *  when reduced-flicker is engaged (spec §11 — GF-2 respects the flash cap). */
 export const SPOOF_SAFE_PEAK = 0.5;
 
+/** P5 — HD riders. In HD the snap/res-drop PS1 artifice cannot render, so the
+ *  beat leans on what survives HD: scene fog and the desaturation uniform.
+ *  Held envelopes (the kit's ≥500 ms holds), never strobed — flicker-safe by
+ *  construction. Baseline (non-scare) HD frames are untouched. */
+export const HD_SNAP_FOG_FAR = 7;   // m — hard pull-in while the snap holds
+export const HD_DROP_FOG_FAR = 9;   // m — softer pull-in for the res-drop beat
+export const HD_SNAP_DESAT = 0.35;
+export const HD_DROP_DESAT = 0.25;
+
+export interface HdScareRider { fogFar: number | null; desatFloor: number }
+
+export function hdScareRider(snapActive: boolean, dropActive: boolean): HdScareRider {
+  let fogFar: number | null = null;
+  let desatFloor = 0;
+  if (dropActive) { fogFar = HD_DROP_FOG_FAR; desatFloor = HD_DROP_DESAT; }
+  if (snapActive) {
+    fogFar = fogFar === null ? HD_SNAP_FOG_FAR : Math.min(fogFar, HD_SNAP_FOG_FAR);
+    desatFloor = Math.max(desatFloor, HD_SNAP_DESAT);
+  }
+  return { fogFar, desatFloor };
+}
+
 export class ScreenScareKit implements Subsystem {
   /** Elapsed since the last snap()/resDrop()/desatStab(); Infinity ⇒ inactive. */
   private snapT = Infinity;

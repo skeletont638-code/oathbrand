@@ -9,7 +9,7 @@ import { preloadTextures } from './world/textures';
 import { Game } from './engine/Game';
 import { DreadDirector } from './engine/DreadDirector';
 import type { DreadCtx, ScareActivation } from './engine/DreadDirector';
-import { ScreenScareKit } from './engine/ScreenScareKit';
+import { ScreenScareKit, hdScareRider } from './engine/ScreenScareKit';
 import { setSnapResolution } from './ps1/patchMaterial';
 import { installScreenshotKey } from './engine/screenshot';
 import { ARCHER_CLIPS, EnemyView, ForswornView, WraithView, loadSkeleton } from './entities/animator';
@@ -2617,6 +2617,9 @@ async function startScene(): Promise<void> {
     // Keep the audio listener on the camera every rendered frame (even in
     // endings/menus) so positional panning + occlusion stay true (Task 17).
     audio.setListener(controller.pos.x, camera.position.y, controller.pos.z, controller.yaw);
+    // Hoisted for the P5 HD-scare rider below (also read by the PS1 snap/drop
+    // branches further down): whether we're rendering in the HD path.
+    const hdMode = pipeline.getRenderMode() === 'hd';
     // While a memory plays, its intimate fog replaces the vista/base far-plane.
     fog.far = visionPlayer.active ? visionFogFar : baseFogFar + vista.fogFarBoost;
     // Low-fog scare bands (Task 2 / spec §4): standing on a listed cell pulls
@@ -2626,6 +2629,10 @@ async function startScene(): Promise<void> {
       const near = fogCellFar(activeDef, gRow, gCol);
       if (near !== undefined) fog.far = Math.min(fog.far, near);
     }
+    // P5: in HD the snap/res-drop artifice can't render — ride the beat on fog
+    // + desat instead (both survive HD). PS1 behaviour below is unchanged.
+    const hdRider = hdMode ? hdScareRider(scareKit.snapRes() !== null, scareKit.renderDrop()) : null;
+    if (hdRider?.fogFar != null) fog.far = Math.min(fog.far, hdRider.fogFar);
 
     // --- Task 3: apply the screen-scare kit to the PS1 pipeline ----------
     // Read the held glitch timelines (advanced by game.update) and drive the
@@ -2637,8 +2644,8 @@ async function startScene(): Promise<void> {
     // the beat, the visual rider just doesn't render (same discipline as
     // flicker-safe suppression). The desat STAB below is PRESERVED (desat
     // survives in HD). The DROP *restore* stays ungated so any latch pending at
-    // a mid-beat mode switch still clears cleanly.
-    const hdMode = pipeline.getRenderMode() === 'hd';
+    // a mid-beat mode switch still clears cleanly. (`hdMode` is hoisted above
+    // the fog block for the P5 HD-scare rider; both sites read the one const.)
     // 1) One-frame resolution DROP: force 240 for the beat, restore after (a
     //    no-op at the default 240 — the paired diegetic guttering carries it).
     if (!hdMode && scareKit.renderDrop()) {
@@ -2667,7 +2674,7 @@ async function startScene(): Promise<void> {
     }
     // 3) Desaturation STAB, composited with the Brand's per-frame hollowing via
     //    max() so the stab never fights (or is fought by) the ember ramp.
-    pipeline.setDesaturation(Math.max(pipeline.getDesaturation(), scareKit.desatBoost()));
+    pipeline.setDesaturation(Math.max(pipeline.getDesaturation(), scareKit.desatBoost(), hdRider?.desatFloor ?? 0));
 
     // Frame-start info reset so draw calls cover both pipeline passes. The dev
     // HUD does this in begin(); the VITE_E2E build (no HUD, handle exposed) needs
