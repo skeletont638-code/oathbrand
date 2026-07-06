@@ -32,6 +32,9 @@ export const CLIP_FOR_STATE: Record<EnemyState, string> = {
   // to keep the record total over EnemyState. A run reads closest for any future
   // skinned circler.
   circle: 'Running_A',
+  // 'pursuit' (dread pass P3) is likewise Ash-Hound-only (procedural view), so
+  // no skinned enemy resolves it — same locomotion as approach, kept total.
+  pursuit: 'Walking_A',
   attack: '1H_Melee_Attack_Chop',
   recover: 'Idle_Combat',
   reposition: 'Walking_A',

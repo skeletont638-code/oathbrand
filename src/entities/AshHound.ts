@@ -36,6 +36,7 @@ import { bentLimb, blobHead, centredCapsule, taperedCapsule } from './organic';
 const H = TUNING.greaterVael.hound;
 const C = H.circle;
 const L = H.lunge;
+const P = H.pursuit;
 /** Give up the hunt past 1.5× aggro (the soldier rule, tuned per-kind). */
 const LEASH_M = H.aggroM * H.leashMul;
 /** Footfall/pant cadence (ms) while the hound is moving. */
@@ -57,6 +58,8 @@ export class AshHound extends Enemy {
 
   private alertT = 0;
   private circleT = 0;
+  /** P3 committed-pursuit timer (ms) — bounded by `pursuit.maxMs`. */
+  private pursuitT = 0;
   /** Attack sub-phase timer + one-connect-per-pounce latch. */
   private t = 0;
   private phase: 'windup' | 'active' = 'windup';
@@ -176,10 +179,35 @@ export class AshHound extends Enemy {
       case 'recover':
         this.t += dt;
         if (this.t >= L.recoverMs) {
-          this.state = 'approach';
+          // P3: don't drift back to the leisurely approach — commit to a
+          // bounded chase the walking player can't simply out-walk.
+          this.pursuitT = 0;
+          this.state = 'pursuit';
           this.t = 0;
         }
         return;
+
+      case 'pursuit': {
+        // Committed chase after a missed pounce: run the player down at
+        // pursuit.speedM for up to pursuit.maxMs, unless it closes to the fog
+        // edge (fold back into the flanking stalk) or the player breaks leash.
+        if (dist > LEASH_M) {
+          this.state = 'idle';
+          break;
+        }
+        if (dist <= C.radiusM) {
+          this.enterCircle();
+          break;
+        }
+        this.pursuitT += dt;
+        if (this.pursuitT >= P.maxMs) {
+          this.state = 'approach';
+          break;
+        }
+        this.stepToward(dx, dz, dist, P.speedM, dt, ctx);
+        this.pant(dt);
+        break;
+      }
 
       case 'dead': // unreachable — Enemy.update never thinks while dead
         return;
@@ -347,6 +375,7 @@ export class HoundView implements EntityView {
     let amp = 0.1;
     let lean = 0;
     switch (h.state) {
+      case 'pursuit': // P3 chase reads as the same driving lope as approach
       case 'approach':
         rate = 7;
         amp = 0.7;

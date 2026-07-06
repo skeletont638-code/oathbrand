@@ -80,6 +80,9 @@ export const TUNING = {
       hp: 2, speed: 2.6, aggroM: 13, alertMs: 500, leashMul: 1.5, heightM: 2.3,
       circle: { speedM: 3.4, radiusM: 6, minMs: 1400, maxMs: 3200, flankRandom: true },
       lunge:  { windupMs: 380, activeMs: 220, recoverMs: 900, speedM: 6.5, damage: 1, rangeM: 2.4 },
+      /** P3: bounded committed chase after a missed pounce — the one common
+       *  threat a walking player cannot simply out-walk (player walkSpeed 3.2). */
+      pursuit: { speedM: 3.7, maxMs: 2200 },
       animFps: 12,
     },
     kneeler: {

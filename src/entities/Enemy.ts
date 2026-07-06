@@ -23,6 +23,9 @@ export type EnemyState =
   // that precedes a lunge. Additive — no v1 enemy ever enters it, so their
   // FSMs are byte-for-byte unaffected.
   | 'circle'
+  // Ash-Hound only (dread pass P3): the bounded committed chase after a missed
+  // pounce — retreat is no longer a free answer. Additive like 'circle'.
+  | 'pursuit'
   | 'attack'
   | 'recover'
   | 'reposition'

@@ -126,7 +126,7 @@ describe('Ash-Hound — the circle behaviour', () => {
     expect(c1.ms).toBeLessThanOrEqual(CIRCLE.maxMs);
   });
 
-  it('lunges from the circle at rangeM, then recovers and re-approaches', () => {
+  it('lunges from the circle at rangeM, then recovers into the committed pursuit', () => {
     const w = makeWorld();
     const h = makeHound(w, 24, 20);
     const ctx = makeCtx(BIG, 24, 24);
@@ -139,8 +139,8 @@ describe('Ash-Hound — the circle behaviour', () => {
     until(h, ctx, 'recover', LUNGE.windupMs + LUNGE.activeMs + 200);
     expect(w.hits).toHaveLength(1);
     expect(w.hits[0]).toEqual({ type: 'player-hit', damage: LUNGE.damage });
-    // Recovery, then it comes round again.
-    until(h, ctx, 'approach', LUNGE.recoverMs + 200);
+    // Recovery, then it commits to the chase (P3) rather than a free re-approach.
+    until(h, ctx, 'pursuit', LUNGE.recoverMs + 200);
   });
 
   it('lunge dashes forward along the committed flank facing', () => {
@@ -183,5 +183,74 @@ describe('Ash-Hound — the circle behaviour', () => {
     expect(w.slain).toEqual([{ type: 'enemy-slain', enemyId: 'h1', kind: 'hound' }]);
     h.takeHit(1);
     expect(w.slain).toHaveLength(1);
+  });
+});
+
+describe('pursuit after recover (P3)', () => {
+  it('leaves recover into pursuit, and pursuit outruns the player walk', () => {
+    const w = makeWorld();
+    const h = makeHound(w, 24, 20);
+    const ctx = makeCtx(BIG, 24, 24);
+    // Drive a full circle→lunge, then hold the player out past the circle
+    // radius so the recover hands off to a clean straight-line pursuit step.
+    until(h, ctx, 'attack', 8000);
+    ctx.playerPos.set(24, 0, h.pos.z + 10);
+    until(h, ctx, 'recover');
+    run(h, ctx, TUNING.greaterVael.hound.lunge.recoverMs);
+    expect(h.state).toBe('pursuit');
+    const before = { x: h.pos.x, z: h.pos.z };
+    h.update(16, ctx);
+    const step = Math.hypot(h.pos.x - before.x, h.pos.z - before.z);
+    expect(step).toBeCloseTo(TUNING.greaterVael.hound.pursuit.speedM * (16 / 1000), 3);
+    expect(TUNING.greaterVael.hound.pursuit.speedM).toBeGreaterThan(TUNING.player.walkSpeed);
+  });
+
+  it('pursuit collapses into the circle when it closes to circle radius', () => {
+    const w = makeWorld();
+    const h = makeHound(w, 24, 20);
+    const ctx = makeCtx(BIG, 24, 24);
+    until(h, ctx, 'attack', 8000);
+    ctx.playerPos.set(24, 0, h.pos.z + 10);
+    until(h, ctx, 'recover');
+    run(h, ctx, LUNGE.recoverMs);
+    expect(h.state).toBe('pursuit');
+    // Player now well inside the fog-edge circle radius → the next think must
+    // hand the chase back to the flanking stalk, not keep charging straight.
+    ctx.playerPos.set(24, 0, h.pos.z + 5);
+    h.update(16, ctx);
+    expect(h.state).toBe('circle');
+  });
+
+  it('pursuit gives up after maxMs and resumes approach', () => {
+    const w = makeWorld();
+    const h = makeHound(w, 24, 20);
+    const ctx = makeCtx(BIG, 24, 24);
+    until(h, ctx, 'attack', 8000);
+    ctx.playerPos.set(24, 0, h.pos.z + 10);
+    until(h, ctx, 'recover');
+    run(h, ctx, LUNGE.recoverMs);
+    expect(h.state).toBe('pursuit');
+    // Keep the player a fixed 10 m ahead every step (outside circle radius,
+    // inside the leash) so the only exit is the pursuit timer expiring.
+    for (let t = 0; t < H.pursuit.maxMs + 64; t += 16) {
+      ctx.playerPos.set(24, 0, h.pos.z + 10);
+      h.update(16, ctx);
+    }
+    expect(h.state).toBe('approach');
+  });
+
+  it('pursuit leashes to idle beyond LEASH_M', () => {
+    const w = makeWorld();
+    const h = makeHound(w, 24, 20);
+    const ctx = makeCtx(BIG, 24, 24);
+    until(h, ctx, 'attack', 8000);
+    ctx.playerPos.set(24, 0, h.pos.z + 10);
+    until(h, ctx, 'recover');
+    run(h, ctx, LUNGE.recoverMs);
+    expect(h.state).toBe('pursuit');
+    // Player bolts past 1.5×aggro (19.5 m) → the committed chase is abandoned.
+    ctx.playerPos.set(24, 0, h.pos.z + 25);
+    h.update(16, ctx);
+    expect(h.state).toBe('idle');
   });
 });
