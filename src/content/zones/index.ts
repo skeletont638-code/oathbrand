@@ -19,6 +19,8 @@ import { GATE_FIELDS } from './gateFields';
 import { ASHEN_FOREST_N } from './ashenForestN';
 import { CINDER_VILLAGE } from './cinderVillage';
 import { PILGRIMS_DESCENT } from './pilgrimsDescent';
+import { HALL_GALLERY } from './hallGallery';
+import { HALL_BARRACKS } from './hallBarracks';
 
 /** Every built zone, by id. The seven-zone castle campaign (T11–T16) plus the
  *  first Greater Vael exteriors — the Gate Fields hub (Task 9), the Ashen
@@ -37,6 +39,10 @@ export const ZONES: Partial<Record<ZoneId, ZoneDef>> = {
   'ashen-forest-n': ASHEN_FOREST_N,
   'cinder-village': CINDER_VILLAGE,
   'pilgrims-descent': PILGRIMS_DESCENT,
+  // World Expansion v1.2 (Task 4) — the keep grows upward/outward: the gallery
+  // ringing the Great Hall (shortcut loop #2 → ramparts) and the barracks off it.
+  'hall-gallery': HALL_GALLERY,
+  'hall-barracks': HALL_BARRACKS,
 };
 
 /**

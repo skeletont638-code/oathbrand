@@ -236,6 +236,31 @@ export const LORE: Record<string, LoreEntry> = {
   'gv-descent-hold-the-rail': { title: "The Pilgrim's Rail",
     body: "The rope rail is knotted every arm's length, each knot worn black by a hundred descending hands. Some knots are worn from the underside. Something has climbed this descent from below, hand over hand, more than once. If the rail trembles, it is not the wind. Do not look down to check." },
 
+  // ─── WORLD EXPANSION v1.2 — THE HALL GALLERY (Task 4, Act III) ─────────
+  // The gallery ringing the Great Hall from above; its inscriptions carry the
+  // king-hollows beat (echo scene #6) — Osric setting the crown down and
+  // forgetting why. Forward-dread: the forgetting is coming for you, too.
+  'act3-gallery-a': {
+    title: "The King's Overlook",
+    body: 'From this rail King Osric watched his hall fill and empty a hundred years, and knew every face below. On the last night he set the crown on this stone, the better to lean and look — and could not, after, remember which of the small figures down there had once been him. You are leaning on it now.',
+  },
+  'act3-gallery-b': {
+    title: 'The Smooth Stone',
+    body: 'The parapet here is worn smooth where a crown was set down and never taken up again. Osric meant only to rest a moment; the moment has not ended. Carry nothing over this rail that you mean to carry out again — the keep keeps what is set down, and learns, in time, to call it its own.',
+  },
+
+  // ─── WORLD EXPANSION v1.2 — THE HALL BARRACKS (Task 4, Act I) ──────────
+  // The muster room off the Great Hall: bunks, an armory, the swearing-in. Act
+  // I's oath-and-gathering voice, carried forward-dread into the vigil's end.
+  'act1-barracks-a': {
+    title: 'The Muster Cots',
+    body: 'Forty cots to a wall, and a name burnt into the foot of each so the sworn would sleep beneath it and rise to it. They slept in shifts, that the brand-fire on the walls need never gutter. Read the names if you like. You will meet most of them again before the night is out, and they will not answer to them.',
+  },
+  'act1-barracks-b': {
+    title: 'The Oath-Stone by the Door',
+    body: 'Here the vigil was armed and here it swore: I burn that Vael need not. The stone by the door is chipped where a hundred gauntlets struck it to seal the words. The last hand to strike it struck twice — once to swear, and once, much later, to take the swearing back. Only the first blow was ever heard.',
+  },
+
   // ─── NG+ (T16): the recontextualisations. Defined now, placed later. ────
   'ng-queen-knew': {
     ngOnly: true,

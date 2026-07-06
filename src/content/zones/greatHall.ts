@@ -11,17 +11,24 @@
  * "fix" it. Annotations honored: doors 1→ashen-gate 2→undercroft(drop)
  * 3→ramparts 4→throne(lock gatekey — T12) 5→shortcut(lock shortcut) · banner yes
  * (vision 2, T14) · 3 lore · 3 soldiers + 1 archer (NG+: +1 wraith).
+ *
+ * World Expansion v1.2 (Task 4) adds TWO gate cells to the keep's hub — the
+ * ONLY change to this zone (grid otherwise byte-identical): a stairwell up to
+ * the Hall Gallery (gate '6', north wall [0,3]) and a side door into the Hall
+ * Barracks (gate '7', west wall [4,0]). Both are plain doors decorated on the
+ * FAR side (the gallery/barracks declare the 'Stair Door'/'Barracks Door'), so
+ * this file carries only the transition DoorDefs.
  */
 import type { ZoneDef } from '../../world/zoneDef';
 
 export const GREAT_HALL: ZoneDef = {
   id: 'great-hall',
   grid: [
-    '##################',
+    '###6##############', // gate '6' [0,3] → hall-gallery (stairwell up)
     '#....2..........3#',
     '#................#',
     '#..####....####..#',
-    '#..#..........#..#',
+    '7..#..........#..#', // gate '7' [4,0] → hall-barracks (side door)
     '#..#....B.....#..#',
     '#..####....####..#',
     '#.....4....5.....#',
@@ -88,6 +95,12 @@ export const GREAT_HALL: ZoneDef = {
     // Shortcut gate: same wall, opens from the Ramparts side (flag
     // 'shortcut-open'); its ramparts twin must reuse pair 'hall-shortcut'.
     { id: 'hall-shortcut', at: [7, 11], to: 'ramparts', lock: 'shortcut', pair: 'hall-shortcut' },
+    // World Expansion v1.2 (Task 4). The stairwell up to the Hall Gallery — the
+    // gallery declares the 'Stair Door' decoration on its own side of the edge.
+    { id: 'hall-to-gallery', at: [0, 3], to: 'hall-gallery', pair: 'gallery-hall' },
+    // The side door into the Hall Barracks — the barracks declares the
+    // 'Barracks Door' decoration on its side.
+    { id: 'hall-to-barracks', at: [4, 0], to: 'hall-barracks', pair: 'barracks-hall' },
   ],
   ambience: ['amb-hall-drone', 'amb-ember-hum'],
   ngPlus: {

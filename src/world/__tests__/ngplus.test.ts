@@ -127,10 +127,14 @@ describe('anomaly registry (Exit-8 grammar)', () => {
     // of a base zone — so it carries no anomaly by design (the withheld stillness).
     // Greater Vael exterior zones (Task 9+) are NOT part of the castle Second
     // Vigil: their unease is the live DreadDirector scare system, not static NG+
-    // anomalies, so they carry none either.
+    // anomalies, so they carry none either. The World-Expansion v1.2 dread
+    // interiors (Task 4+, `dreadInterior: true`) opt into that SAME live scare
+    // system, so they are excused for the same reason (their NG+ menace is the
+    // re-armed echo scenes + DreadDirector, not a static anomaly overlay).
     for (const zone of builtZones) {
       if (zone === 'queens-garden') continue;
       if (ZONES[zone]?.kind === 'exterior') continue;
+      if (ZONES[zone]?.dreadInterior) continue;
       expect(anomaliesForZone(zone).length, `zone ${zone} has no anomaly`).toBeGreaterThanOrEqual(1);
     }
   });

@@ -85,9 +85,14 @@ describe('zone registry', () => {
 
   it('registers the fourth Greater Vael exterior — the Pilgrim\'s Descent (Task 12)', () => {
     expect(ZONES['pilgrims-descent']).toBeDefined();
-    // Seven castle zones + the Gate Fields hub + the Ashen Forest N + the Cinder
-    // Village + the Pilgrim's Descent (the drop's terminus, the height showcase).
-    expect(Object.keys(ZONES)).toHaveLength(11);
+  });
+
+  it('registers the keep\'s upper floors — the Hall Gallery + Hall Barracks (Task 4)', () => {
+    // World Expansion v1.2: the keep grows upward (gallery) and outward
+    // (barracks). Eleven prior zones + the two keep floors = 13.
+    expect(ZONES['hall-gallery']).toBeDefined();
+    expect(ZONES['hall-barracks']).toBeDefined();
+    expect(Object.keys(ZONES)).toHaveLength(13);
   });
 
   it('zoneOrThrow returns every registered zone (the campaign is complete)', () => {

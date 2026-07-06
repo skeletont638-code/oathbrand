@@ -24,13 +24,18 @@
  * Annotations honored: banner (vision 4, T14) · 3 lore (incl. callun-post-log)
  * · 2 archers + 1 soldier (NG+ 3 archers + 1) · banner.glb ×6 along the south
  * wall · wind ambience.
+ *
+ * World Expansion v1.2 (Task 4) adds ONE gate cell — the ONLY change here (grid
+ * otherwise byte-identical): gate '2' on the north wall [0,17], the far end of
+ * shortcut loop #2 into the Hall Gallery. The gallery declares the unlocked
+ * 'Gallery Door' decoration on its side; this file carries only the DoorDef.
  */
 import type { ZoneDef } from '../../world/zoneDef';
 
 export const RAMPARTS: ZoneDef = {
   id: 'ramparts',
   grid: [
-    '####################',
+    '#################2##', // gate '2' [0,17] → hall-gallery (shortcut loop #2)
     '#S1..........#.....#',
     '#...#####....#.#5#.#',
     '#...#...#....#.....#',
@@ -90,6 +95,10 @@ export const RAMPARTS: ZoneDef = {
       pair: 'hall-shortcut',
       kick: true,
     },
+    // World Expansion v1.2 (Task 4). Gallery Door — the far end of shortcut loop
+    // #2 up into the Hall Gallery; unlocked, so the keep is a ring from the
+    // first visit. The gallery declares the 'Gallery Door' decoration.
+    { id: 'ramparts-to-gallery', at: [0, 17], to: 'hall-gallery', pair: 'gallery-ramparts' },
   ],
   ambience: ['amb-rampart-wind', 'amb-banner-cloth'],
   ngPlus: {

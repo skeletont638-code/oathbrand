@@ -12,7 +12,10 @@ export type ZoneId =
   | 'cinder-village'
   | 'pilgrims-descent'
   // Drop 2 target — authored-but-unbuilt, lives in FUTURE_ZONE_IDS.
-  | 'salt-road';
+  | 'salt-road'
+  // --- World Expansion v1.2 — the keep grows (Task 4): the keep's upper floors ---
+  | 'hall-gallery'
+  | 'hall-barracks';
 
 export type EnemyKind = 'soldier' | 'archer' | 'wraith' | 'forsworn' | 'hound' | 'kneeler';
 
