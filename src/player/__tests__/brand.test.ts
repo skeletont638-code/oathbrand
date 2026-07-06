@@ -14,6 +14,7 @@ function makeBrand(onSave?: (bannerId: string) => void) {
   bus.on('player-hollowed', (e) => events.push(e));
   bus.on('player-rekindled', (e) => events.push(e));
   bus.on('brand-pulse', (e) => events.push(e));
+  bus.on('ember-gained', (e) => events.push(e));
   const desat: number[] = [];
   const pipeline = { setDesaturation: (v: number) => desat.push(v) };
   const brand = new Brand({ bus, pipeline, onSave });
@@ -148,6 +149,66 @@ describe('Brand desaturation + blue flicker', () => {
     expect(brand.blueFlicker).toBe(false);
     brand.tick(16, null, null);
     expect(brand.blueFlicker).toBe(false);
+  });
+});
+
+const gained = (events: Array<{ type: string }>) => events.filter((e) => e.type === 'ember-gained');
+
+describe('ember wisps bank until the brand quiets (P2)', () => {
+  it('the third kill banks while a threat pulses, pays out on the first quiet tick', () => {
+    const { brand, events, bus } = makeBrand();
+    brand.damage(2); // 3 of 5 — room to gain
+    brand.tick(16, 6, null); // enemy at 6 m: pulse > 0, combat is live
+    for (let i = 0; i < 3; i++) bus.emit({ type: 'enemy-slain', enemyId: `e${i}`, kind: 'soldier' });
+    expect(brand.embers).toBe(3); // no mid-fight heal
+    brand.tick(16, 6, null);
+    expect(brand.embers).toBe(3); // still pulsing, still banked
+    brand.tick(16, null, null); // threat gone — the wisp arrives
+    expect(brand.embers).toBe(4);
+    expect(gained(events)).toEqual([{ type: 'ember-gained', total: 4 }]);
+  });
+
+  it('pays out immediately on a quiet tick when no threat was near', () => {
+    const { brand, events, bus } = makeBrand();
+    brand.damage(1);
+    for (let i = 0; i < 3; i++) bus.emit({ type: 'enemy-slain', enemyId: `e${i}`, kind: 'soldier' });
+    expect(brand.embers).toBe(4); // not yet — payout is tick-driven
+    brand.tick(16, null, null);
+    expect(brand.embers).toBe(5);
+    expect(gained(events)).toEqual([{ type: 'ember-gained', total: 5 }]);
+  });
+
+  it('two banked wisps pay out together when the fight ends', () => {
+    const { brand, bus } = makeBrand();
+    brand.damage(3); // 2 of 5
+    brand.tick(16, 4, null);
+    for (let i = 0; i < 6; i++) bus.emit({ type: 'enemy-slain', enemyId: `e${i}`, kind: 'soldier' });
+    expect(brand.embers).toBe(2);
+    brand.tick(16, null, null);
+    expect(brand.embers).toBe(4);
+  });
+
+  it('a wisp gutters out if the brand is already full when it would arrive', () => {
+    const { brand, events, bus } = makeBrand();
+    for (let i = 0; i < 3; i++) bus.emit({ type: 'enemy-slain', enemyId: `e${i}`, kind: 'soldier' });
+    brand.tick(16, null, null); // full at 5 — wisp discarded, not carried
+    expect(brand.embers).toBe(5);
+    expect(gained(events)).toEqual([]);
+    brand.damage(1);
+    brand.tick(16, null, null); // the discarded wisp must NOT arrive late
+    expect(brand.embers).toBe(4);
+  });
+
+  it('rekindle clears any banked wisps', () => {
+    const { brand, events, bus } = makeBrand();
+    brand.damage(2);
+    brand.tick(16, 6, null);
+    for (let i = 0; i < 3; i++) bus.emit({ type: 'enemy-slain', enemyId: `e${i}`, kind: 'soldier' });
+    brand.rekindle('test-banner');
+    brand.damage(1);
+    brand.tick(16, null, null);
+    expect(brand.embers).toBe(4); // no stale wisp from before the kneel
+    expect(gained(events)).toEqual([]);
   });
 });
 

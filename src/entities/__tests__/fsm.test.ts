@@ -345,7 +345,7 @@ describe('Brand — ember wisp counter (+1 per 3 kills)', () => {
     s.takeHit(3);
   }
 
-  it('every 3rd enemy-slain grants +1 ember when embers < max', () => {
+  it('every 3rd enemy-slain grants +1 ember when embers < max (on the next quiet tick)', () => {
     const w = makeWorld();
     const brand = new Brand({ bus: w.bus });
     brand.damage(2); // 3/5 embers
@@ -354,6 +354,9 @@ describe('Brand — ember wisp counter (+1 per 3 kills)', () => {
     expect(brand.embers).toBe(3);
     expect(w.gained).toHaveLength(0);
     killOne(w, 'c');
+    expect(brand.embers).toBe(3); // banked, not granted mid-fight
+    expect(w.gained).toHaveLength(0);
+    brand.tick(16, null, null); // brand falls silent — the wisp arrives
     expect(brand.embers).toBe(4);
     expect(w.gained).toEqual([{ type: 'ember-gained', total: 4 }]);
   });
@@ -364,6 +367,7 @@ describe('Brand — ember wisp counter (+1 per 3 kills)', () => {
     killOne(w, 'a');
     killOne(w, 'b');
     killOne(w, 'c');
+    brand.tick(16, null, null); // quiet — but full, so the wisp gutters out
     expect(brand.embers).toBe(TUNING.brand.maxEmbers);
     expect(w.gained).toHaveLength(0);
   });
@@ -376,6 +380,7 @@ describe('Brand — ember wisp counter (+1 per 3 kills)', () => {
     killOne(w, 'a');
     killOne(w, 'b');
     killOne(w, 'c');
+    brand.tick(16, null, null); // quiet — but hollow, so no wisp arrives
     expect(brand.embers).toBe(0);
     expect(brand.hollow).toBe(true);
     expect(w.gained).toHaveLength(0);

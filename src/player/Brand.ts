@@ -61,6 +61,10 @@ export class Brand implements Subsystem {
   /** Kills counted toward the ember-wisp rule (+1 ember per 3 kills). */
   private kills = 0;
 
+  /** Wisps earned in combat but not yet granted — they arrive only once the
+   *  brand falls silent, so fighting never heals you mid-fight (P2). */
+  private pendingEmbers = 0;
+
   constructor(private readonly deps: BrandDeps) {
     this.embers = this.cap();
     this.applyDesaturation();
@@ -94,24 +98,23 @@ export class Brand implements Subsystem {
   }
 
   /**
-   * Ember-wisp rule: every 3rd kill returns +1 ember (with `ember-gained`),
-   * but only if embers < max AND not hollow — the hollowed brand is dark;
-   * kneeling at a banner is the only way back. Kills keep counting either
-   * way, so the cadence never drifts.
+   * Ember-wisp rule: every 3rd kill earns +1 wisp, but the wisp only banks —
+   * it is not granted at kill time. Sustained fighting must not heal you
+   * mid-fight, so the wisp arrives later, once the brand falls silent
+   * (`tick` redeems on a quiet frame). Kills keep counting either way, so the
+   * cadence never drifts.
    */
   onEnemySlain(): void {
     this.kills += 1;
     if (this.kills % 3 !== 0) return;
-    if (this.hollowed || this.embers >= this.cap()) return;
-    this.embers += 1;
-    this.deps.bus.emit({ type: 'ember-gained', total: this.embers });
-    this.applyDesaturation();
+    this.pendingEmbers += 1;
   }
 
   /** Kneel at a banner: restore every ember, announce it, checkpoint. */
   rekindle(bannerId: string): void {
     this.embers = this.cap();
     this.hollowed = false;
+    this.pendingEmbers = 0;
     this.deps.bus.emit({ type: 'player-rekindled', bannerId });
     this.deps.onSave?.(bannerId);
     this.applyDesaturation();
@@ -137,6 +140,7 @@ export class Brand implements Subsystem {
   tick(dt: number, nearestEnemyM: number | null, nearestIllusoryM: number | null): void {
     void dt; // reserved: heartbeat pacing for audio pulses in a later task
     this.pulse = this.pulseFor(nearestEnemyM);
+    if (this.pendingEmbers > 0 && this.pulse === 0) this.redeemWisps();
     if (this.pulse > 0) {
       this.deps.bus.emit({ type: 'brand-pulse', intensity: this.pulse });
     }
@@ -152,6 +156,19 @@ export class Brand implements Subsystem {
       this.deps.nearestEnemyM?.() ?? null,
       this.deps.nearestIllusoryM?.() ?? null,
     );
+  }
+
+  /** Grant banked wisps now that the brand is quiet. A wisp that arrives while
+   *  the knight is hollow or already full gutters out — same discard the old
+   *  instant-grant applied at kill time. */
+  private redeemWisps(): void {
+    while (this.pendingEmbers > 0) {
+      this.pendingEmbers -= 1;
+      if (this.hollowed || this.embers >= this.cap()) continue;
+      this.embers += 1;
+      this.deps.bus.emit({ type: 'ember-gained', total: this.embers });
+      this.applyDesaturation();
+    }
   }
 
   /** The rekindle ceiling (embers a full brand holds). Defaults to the tuned
