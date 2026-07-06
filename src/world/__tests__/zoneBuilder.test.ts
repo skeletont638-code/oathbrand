@@ -592,6 +592,54 @@ describe('ZoneBuilder cinder wall/roof welding (H2/H3)', () => {
   });
 });
 
+describe('custom exterior masonry letters seat on the welded flat base (Task 6 review)', () => {
+  // towerUpper's room-forming `M` was the first custom exterior wall letter to
+  // hit the generic fallback, which seated at groundYAt − KIT_SETTLE_M — the
+  // undulated per-cell-centre height. Adjacent slabs stepped ~0.1 m and a base
+  // could float ~0.07 m above the abutting floor: exactly the defect class H2
+  // fixed for H/A. The fallback must use the same welded flat-base seating.
+  const M_TILES = { ...EXTERIOR_TILES, M: 'wall' as TileKind };
+
+  it('an M run welds: every slab shares one base and top (undulation-immune)', () => {
+    const built = new ZoneBuilder().build(exteriorZone(['MMM'], { tiles: M_TILES }), fakeAssets());
+    const pos = meshNamed(built.group, 'merged:wall')!.geometry.getAttribute('position');
+    const slabs = [
+      { min: Infinity, max: -Infinity },
+      { min: Infinity, max: -Infinity },
+      { min: Infinity, max: -Infinity },
+    ];
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i);
+      const s = x < 2 ? 0 : x < 4 ? 1 : 2;
+      slabs[s].min = Math.min(slabs[s].min, y);
+      slabs[s].max = Math.max(slabs[s].max, y);
+    }
+    expect(slabs[1].min).toBeCloseTo(slabs[0].min, 6);
+    expect(slabs[2].min).toBeCloseTo(slabs[0].min, 6);
+    expect(slabs[1].max).toBeCloseTo(slabs[0].max, 6);
+    expect(slabs[2].max).toBeCloseTo(slabs[0].max, 6);
+  });
+
+  it('M seats exactly like H (cellHeightM − WALL_SETTLE_M), and rides its heightGrid band', () => {
+    // Same formula as the H house blocks: identical base on band 0, and a band-1
+    // M sits exactly one HEIGHT_LEVEL_M (1.5 m) above a band-0 one.
+    const baseOf = (grid: string[], heightGrid?: string[]): number => {
+      const built = new ZoneBuilder().build(exteriorZone(grid, { tiles: M_TILES, heightGrid }), fakeAssets());
+      const pos = meshNamed(built.group, 'merged:wall')!.geometry.getAttribute('position');
+      let min = Infinity;
+      for (let i = 0; i < pos.count; i++) min = Math.min(min, pos.getY(i));
+      return min;
+    };
+    expect(baseOf(['M.'])).toBeCloseTo(baseOf(['H.']), 6); // the H2 welded seat, exactly
+    expect(baseOf(['M.'], ['10'])).toBeCloseTo(baseOf(['M.'], ['00']) + 1.5, 6); // band-1 terrace
+  });
+
+  it('M still blocks movement and sight (the fix is visual seating only)', () => {
+    const built = new ZoneBuilder().build(exteriorZone(['.M.'], { tiles: M_TILES }), fakeAssets());
+    expect(built.collider.raycastWall({ x: 1, z: 1 }, { x: 5, z: 1 })).toBe(true); // wall between
+  });
+});
+
 describe('planarUV', () => {
   it('tiles seamlessly at 2 m per repeat', () => {
     expect(planarUV(0, 0)).toEqual([0, 0]);

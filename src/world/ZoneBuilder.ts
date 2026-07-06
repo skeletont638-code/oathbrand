@@ -900,7 +900,12 @@ export class ZoneBuilder {
               const d = ORTHO.find(([dr, dc]) => kindAt(def, row + dr, col + dc) !== 'wall');
               addPiece('wall-door', x, groundYAt(x, z) - KIT_SETTLE_M, z, d ? Math.atan2(d[1], d[0]) : 0, KIT_SCALE);
             } else if (kind === 'wall') {
-              addExteriorWall(row, col, x, groundYAt(x, z) - KIT_SETTLE_M, z); // unknown solid letter → ruin block
+              // Custom exterior masonry letter (e.g. towerUpper's room-forming
+              // `M`): seat on the cell's FLAT base exactly like the H/A house
+              // blocks (H2) — a run welds to one shared base/top, immune to the
+              // ±undulation that stepped adjacent slabs (~0.1 m) and floated a
+              // base above the abutting floor when seated at groundYAt.
+              addExteriorWall(row, col, x, cellHeightM(row, col) - WALL_SETTLE_M, z);
             }
           }
         }

@@ -72,8 +72,19 @@ describe('C4 boulder-ized props', () => {
       g.dispose();
     });
   }
-  it('the watchtower shell is a cheap (≤200 tri), grounded, vertex-coloured, UV\'d silhouette', () => {
-    // Task 6: the Gate Fields watchtower silhouette — an off-grid backdrop prop.
+  it('clutter is deterministic (seeded, never Math.random)', () => {
+    for (const build of [stoneGeometry, bonePileGeometry, stumpGeometry, gibbetGeometry]) {
+      const a = build().getAttribute('position');
+      const b = build().getAttribute('position');
+      expect(a.count).toBe(b.count);
+      for (let i = 0; i < a.count; i++) expect(a.getY(i)).toBe(b.getY(i));
+    }
+  });
+});
+
+describe('the watchtower shell (Task 6)', () => {
+  it('is a cheap (≤200 tri), grounded, vertex-coloured, UV\'d silhouette', () => {
+    // The Gate Fields watchtower silhouette — an off-grid backdrop prop.
     // Must stay cheap (≤200 tris per the brief), keep its base on the ground
     // (minY ≥ 0, never floats), and — going through mergeGeometries — keep every
     // vertex UV'd (uv.count === position.count proves no attribute was dropped).
@@ -88,12 +99,10 @@ describe('C4 boulder-ized props', () => {
     g.dispose();
   });
 
-  it('clutter is deterministic (seeded, never Math.random)', () => {
-    for (const build of [stoneGeometry, bonePileGeometry, stumpGeometry, gibbetGeometry]) {
-      const a = build().getAttribute('position');
-      const b = build().getAttribute('position');
-      expect(a.count).toBe(b.count);
-      for (let i = 0; i < a.count; i++) expect(a.getY(i)).toBe(b.getY(i));
-    }
+  it('is deterministic (no Math.random)', () => {
+    const a = towerShellGeometry().getAttribute('position');
+    const b = towerShellGeometry().getAttribute('position');
+    expect(a.count).toBe(b.count);
+    for (let i = 0; i < a.count; i++) expect(a.getY(i)).toBe(b.getY(i));
   });
 });

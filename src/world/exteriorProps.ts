@@ -149,7 +149,8 @@ export function towerShellGeometry(): BufferGeometry {
   const crown = new CylinderGeometry(1.15, 1.15, crownH, 8, 1, true);
   crown.translate(0, shaftH + crownH / 2, 0);
   parts.push(paint(crown, STONE));
-  // Battlement merlons on the crown; the north-east one is fallen (ruined gap).
+  // Battlement merlons on the crown (E/W/S faces, +x/−x/+z); the NORTH one
+  // (−z, the [0,-r] slot) is deliberately omitted — the fallen-merlon ruin gap.
   const merlonY = shaftH + crownH + 0.3;
   const r = 1.05;
   for (const [x, z] of [[r, 0], [-r, 0], [0, r]] as const) {
