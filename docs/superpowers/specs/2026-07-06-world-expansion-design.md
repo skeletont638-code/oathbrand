@@ -140,7 +140,7 @@ scene marks `echoesWitnessed` (additive save field). Scenes re-arm only in NG+.
 Dragon finale (existing) is the arc's resolution and is untouched.
 
 **Named cast** (provisional — owner may veto names at playtest; used consistently across
-scenes + inscriptions): **King Osric** · **Queen Maren (existing codebase canon — spec originally said Maelis, corrected T5)** · **Carrow, the First Sworn**
+scenes + inscriptions): **King Osric** · **Queen Maren (existing codebase canon — spec originally said Maelis, corrected T5)** · **Callun, the First Sworn** (existing codebase canon — spec originally said Carrow, corrected T9)
 (= the Forsworn boss, retroactively named) · the player-knight stays nameless.
 
 **Inscription re-arc**: existing 58 inscriptions re-sequenced/edited so each zone's set
