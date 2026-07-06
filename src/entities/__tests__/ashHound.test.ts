@@ -239,6 +239,28 @@ describe('pursuit after recover (P3)', () => {
     expect(h.state).toBe('approach');
   });
 
+  it('faces the player while pursuing (not frozen at the pounce yaw)', () => {
+    const w = makeWorld();
+    const h = makeHound(w, 24, 20);
+    const ctx = makeCtx(BIG, 24, 24);
+    // Enter a clean straight-line pursuit (player held out along +z).
+    until(h, ctx, 'attack', 8000);
+    ctx.playerPos.set(24, 0, h.pos.z + 10);
+    until(h, ctx, 'recover');
+    run(h, ctx, LUNGE.recoverMs);
+    expect(h.state).toBe('pursuit');
+    // Snap the player to a purely LATERAL offset (off the yaw committed at the
+    // pounce, which pointed roughly +z) — still inside leash, outside circle.
+    ctx.playerPos.set(h.pos.x + 10, 0, h.pos.z);
+    h.update(16, ctx);
+    expect(h.state).toBe('pursuit');
+    // One pursuit step must have re-faced toward the player (face() convention:
+    // yaw = atan2(dx, dz)), not slid sideways at the frozen pounce yaw.
+    const dx = ctx.playerPos.x - h.pos.x;
+    const dz = ctx.playerPos.z - h.pos.z;
+    expect(h.yaw).toBeCloseTo(Math.atan2(dx, dz), 2);
+  });
+
   it('pursuit leashes to idle beyond LEASH_M', () => {
     const w = makeWorld();
     const h = makeHound(w, 24, 20);

@@ -204,6 +204,7 @@ export class AshHound extends Enemy {
           this.state = 'approach';
           break;
         }
+        this.face(dx, dz);
         this.stepToward(dx, dz, dist, P.speedM, dt, ctx);
         this.pant(dt);
         break;
