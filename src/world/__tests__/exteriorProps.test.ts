@@ -6,7 +6,7 @@
  * tri-cap assertion, never just "defined".
  */
 import { describe, it, expect } from 'vitest';
-import { bonePileGeometry, chapelShellGeometry, gibbetGeometry, roofWedgeGeometry, stoneGeometry, stumpGeometry, towerShellGeometry } from '../exteriorProps';
+import { bonePileGeometry, chapelShellGeometry, gibbetGeometry, keepShellGeometry, roofWedgeGeometry, stoneGeometry, stumpGeometry, towerShellGeometry } from '../exteriorProps';
 import type { BufferGeometry } from 'three';
 
 function tris(g: BufferGeometry): number {
@@ -127,6 +127,32 @@ describe('the sunken chapel shell (Task 7)', () => {
   it('is deterministic (no Math.random)', () => {
     const a = chapelShellGeometry().getAttribute('position');
     const b = chapelShellGeometry().getAttribute('position');
+    expect(a.count).toBe(b.count);
+    for (let i = 0; i < a.count; i++) expect(a.getY(i)).toBe(b.getY(i));
+  });
+});
+
+describe('the ruined keep shell (Task 10)', () => {
+  it('is a cheap (≤80 tri), grounded, vertex-coloured, UV\'d skyline silhouette', () => {
+    // The skyline ruined-keep silhouette — an off-grid backdrop prop. Stays in the
+    // tower-shell tri class (the brief's ≤60-target/84-accepted band, capped ≤80
+    // here), keeps its base on the ground (minY ≥ 0, never floats), and — going
+    // through mergeGeometries — keeps every vertex UV'd (uv.count === position.count
+    // proves no attribute was dropped).
+    const g = keepShellGeometry();
+    expect(g.getAttribute('color')).toBeDefined();
+    expect(tris(g)).toBeGreaterThan(0);
+    expect(tris(g)).toBeLessThanOrEqual(80);
+    expect(minY(g)).toBeGreaterThanOrEqual(-0.001);
+    const uv = g.getAttribute('uv');
+    expect(uv).toBeDefined();
+    expect(uv.count).toBe(g.getAttribute('position').count);
+    g.dispose();
+  });
+
+  it('is deterministic (no Math.random)', () => {
+    const a = keepShellGeometry().getAttribute('position');
+    const b = keepShellGeometry().getAttribute('position');
     expect(a.count).toBe(b.count);
     for (let i = 0; i < a.count; i++) expect(a.getY(i)).toBe(b.getY(i));
   });

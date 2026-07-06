@@ -85,3 +85,70 @@ test('pilgrims-descent (height layer) holds the draw-call budget', async ({ page
   const calls = await drawCallsFor(page, 'pilgrims-descent');
   expect(calls).toBeLessThan(100);
 });
+
+/**
+ * World Expansion v1.2 (Task 10) — the two headline systems this phase added,
+ * driven end-to-end through the real game: a gate-door transition and a silent
+ * echo scene. Both read through dev/CI-only `__oathbrand` hooks (openDoor /
+ * echoScenes / echoesWitnessed), never present in the shipped bundle.
+ */
+type WorldHandle = Handle & {
+  zones: { current: string };
+  controller: { pos: { set: (x: number, y: number, z: number) => void } };
+  doorsOpened: string[];
+  echoesWitnessed: string[];
+  echoScenes: { activeActors: () => unknown[] };
+  openDoor: (defId: string) => boolean;
+  stepFrame: (dtMs?: number) => void;
+};
+
+/** Boot the CI build and jump to `zone` in 'playing', returning nothing (the
+ *  handle is read per-step by the caller). */
+async function bootInto(page: import('@playwright/test').Page, zone: string): Promise<void> {
+  await page.goto('/oathbrand/');
+  await expect
+    .poll(() => page.evaluate(() => typeof (window as unknown as { __oathbrand?: WorldHandle }).__oathbrand))
+    .toBe('object');
+  await page.evaluate((z) => (window as unknown as { __oathbrand: WorldHandle }).__oathbrand.loadZone(z), zone);
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __oathbrand: WorldHandle }).__oathbrand.state), {
+      timeout: 10_000,
+    })
+    .toBe('playing');
+}
+
+test('opening the Tower Door transitions gate-fields → tower-ground', async ({ page }) => {
+  await bootInto(page, 'gate-fields');
+  // Open the decorated Tower Door (gf-to-tower) exactly as the OPEN handler does.
+  const started = await page.evaluate(() =>
+    (window as unknown as { __oathbrand: WorldHandle }).__oathbrand.openDoor('gf-to-tower'),
+  );
+  expect(started, 'openDoor should start the transition (unlocked door)').toBe(true);
+  // The async fade + zone swap lands the player in tower-ground.
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __oathbrand: WorldHandle }).__oathbrand.zones.current), {
+      timeout: 10_000,
+    })
+    .toBe('tower-ground');
+  // The far-side edge was recorded (persisted, additive doorsOpened).
+  const opened = await page.evaluate(() =>
+    (window as unknown as { __oathbrand: WorldHandle }).__oathbrand.doorsOpened,
+  );
+  expect(opened.some((id) => id.includes('tower-ground'))).toBe(true);
+});
+
+test('stepping onto the oath trigger cell witnesses the act1-oath echo', async ({ page }) => {
+  await bootInto(page, 'gate-fields');
+  // act1-oath triggers on cell [5,7]/[5,8] (world x∈[14,16), z∈[10,12)). Stand the
+  // knight on [5,7] and tick a couple of frames: the EchoSceneSystem fires, marks
+  // the scene witnessed the same instant, and reports its apparitions live.
+  const result = await page.evaluate(() => {
+    const h = (window as unknown as { __oathbrand: WorldHandle }).__oathbrand;
+    h.controller.pos.set(15, 0, 11); // cell [5,7] centre
+    h.stepFrame(16);
+    h.stepFrame(16);
+    return { active: h.echoScenes.activeActors().length, witnessed: h.echoesWitnessed };
+  });
+  expect(result.witnessed).toContain('act1-oath'); // marked witnessed on trigger
+  expect(result.active).toBeGreaterThan(0); // apparitions are live this frame
+});

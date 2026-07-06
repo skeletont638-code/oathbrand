@@ -88,7 +88,31 @@ export const PILGRIMS_DESCENT: ZoneDef = {
   ],
   // One wayside-shrine cairn at the shrine lore [4,3] — a single landmark prop so
   // the west run has a silhouette. Non-colliding; grounded on the band-2 terrace.
-  props: [{ kind: 'rubble', at: [4, 3], rotY: 0.4 }],
+  props: [
+    { kind: 'rubble', at: [4, 3], rotY: 0.4 },
+    // Skyline sweep (World Expansion v1.2, Task 10): two ruined-keep silhouettes
+    // out in the DROWNED LANDS the vista terminus looks over (PD-1, Clip #5 — the
+    // primary hero shot), so the hero view is no longer a bare gorge horizon. Both
+    // OFF-GRID and LOW (y0 = the bottom band) — sunken ruins in the flooded valley
+    // below, correct for a vista that looks DOWN. Placed inside the vista-swelled
+    // far plane; hidden at the 12 m baseline.
+    //
+    // WATCHER CONTRACT (checked): the Watcher manifests at [9,5] world (11,19),
+    // seen from the vista cells [1,1]..[1,4] (world z=3). That sightline runs
+    // 7°–27° EAST of due-south at 16–18 m. BOTH shells are placed due-south or
+    // WEST of that (opposite side of the frame) and BEYOND 19 m, so neither sits
+    // between a vista cell and the Watcher nor shares his azimuth — the dark
+    // silhouette's pixel-delta reveal is untouched. No contract cell is disturbed
+    // (both off-grid: the vista row 1, the banner [7,10], the watcher anchor
+    // [9,5], the trail `p` cells all stay clear).
+    // Shell A — due-south across the flood, beyond the sealed bottom gate.
+    { kind: 'keep-shell', at: [13, 1], rotY: 1.2 }, // world (3, 27): 0° (due S), ~24 m
+    // Shell B — on the near SW gorge rim, off the west wall.
+    { kind: 'keep-shell', at: [11, -1], rotY: -0.6 }, // world (-1, 23): ~11° W of S, ~20 m
+    // NOTE (owner eyeball): the on-screen READ of both shells — legible over the
+    // far gorge rim, not clipped by the border cliff — is the owner's playtest
+    // call (headless has no render); the coords above are contract-safe by math.
+  ],
   // A night gorge under the gorge sky/moon backdrop, lit by the ash-grey ambient.
   // Zero dynamic lights — well inside the ≤4-light budget.
   lights: [],

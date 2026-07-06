@@ -521,6 +521,43 @@ describe('The Watchtower builds through the full path (Task 6)', () => {
   });
 });
 
+describe('the skyline ruined-keep silhouettes land off-grid at vista distance (Task 10)', () => {
+  /** Every `prop:keep-shell` mesh's world XZ, as sorted "x,z" keys. */
+  function keepShellXZ(group: Group): string[] {
+    const keys: string[] = [];
+    group.traverse((o) => {
+      if (o instanceof Mesh && o.name === 'prop:keep-shell') {
+        keys.push(`${o.position.x.toFixed(3)},${o.position.z.toFixed(3)}`);
+      }
+    });
+    return keys.sort();
+  }
+
+  it('the Ashen Gate reveal gets one keep-shell deep on the far-WEST horizon', () => {
+    const built = new ZoneBuilder().build(ZONES['ashen-gate']!, fakeAssets());
+    // Grid [-7,-1] → world x = -1·2+1 = -1, z = -7·2+1 = -13: far west of the
+    // torii centre (col 3), deep behind the mid-ground ruin cluster (rows -2..-5).
+    expect(keepShellXZ(built.group)).toEqual([`${(-1).toFixed(3)},${(-13).toFixed(3)}`]);
+  });
+
+  it('the Pilgrim\'s Descent vista gets two drowned-lands keep-shells, both clear of the Watcher column', () => {
+    const built = new ZoneBuilder().build(ZONES['pilgrims-descent']!, fakeAssets());
+    // Grid [13,1] → world (3, 27) [due-south, beyond the sealed bottom] and
+    // [11,-1] → world (-1, 23) [off the west wall]. The Watcher anchor is at
+    // [9,5] → world x=11: BOTH shells sit at x ≤ 3 (due-south or WEST of the
+    // vista→Watcher azimuth), so neither can occlude his silhouette reveal.
+    expect(keepShellXZ(built.group)).toEqual(
+      [`${(-1).toFixed(3)},${(23).toFixed(3)}`, `${(3).toFixed(3)},${(27).toFixed(3)}`].sort(),
+    );
+    // Contract guard: no keep-shell lands on the Watcher's world column (x=11).
+    built.group.traverse((o) => {
+      if (o instanceof Mesh && o.name === 'prop:keep-shell') {
+        expect(o.position.x).toBeLessThan(11);
+      }
+    });
+  });
+});
+
 // --- H2 / H3: cinder wall + roof welding --------------------------------------
 
 describe('ZoneBuilder cinder wall/roof welding (H2/H3)', () => {

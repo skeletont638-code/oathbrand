@@ -74,6 +74,14 @@ peak) is likewise **original CC0 geometry generated in code**
 (`src/world/exteriorProps.ts`), vertex-coloured, no download and no texture — one
 standalone off-grid backdrop mesh (1 draw).
 
+The **ruined-keep shell** (`keep-shell`, ~48 tris, World Expansion v1.2 Task 10 —
+the skyline silhouette: a broken great-keep block with a lower roofless hall range
+and a half-fallen crown, two merlons of three) is likewise **original CC0 geometry
+generated in code** (`src/world/exteriorProps.ts`), vertex-coloured, no download
+and no texture — one standalone off-grid backdrop mesh per placement (1 draw each),
+at vista distance in the Ashen Gate reveal and the Pilgrim's Descent drowned-lands
+view.
+
 ## Processing applied (all repeatable via `bash scripts/fetch-assets.sh`)
 
 - Texture atlases downsampled to 128 px, darkened toward the OATHBRAND palette

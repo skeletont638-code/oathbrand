@@ -86,7 +86,8 @@ export const MANOR_GROUND: ZoneDef = {
   enemies: [
     // The sanctioned kneeler-vigil (T5): one Kneeling Hollow knelt by the hearth —
     // the single villager who let itself be counted rather than take the fire.
-    // Dormant statuary until a brand-pulse wakes it (main.ts routeScare).
+    // Dormant statuary until a real brand pulse close by wakes it (KneelingHollow
+    // auto-wake — the manor stages no scare beat, so nothing calls routeScare here).
     { kind: 'kneeler', at: [4, 2] },
   ],
   // Inscription (Act II — the burning: they chose the fire rather than hollow).

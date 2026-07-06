@@ -843,10 +843,16 @@ describe('Realism density pass — inhabited dead-kingdom fields (map-gaps EMPTI
     expect(statues).toContainEqual([4, 11]);
   });
 
-  it('pilgrims-descent — light touch: switchback clutter (0 → 4) + one shrine cairn', () => {
+  it('pilgrims-descent — light touch: switchback clutter (0 → 4) + shrine cairn + 2 skyline keeps', () => {
     const pd = zoneOrThrow('pilgrims-descent');
     expect(scatterCount(pd)).toBe(4); // scatter was absent (sparseness is partly design)
-    expect(pd.props.length).toBe(1); // was []: a single wayside-shrine cairn
+    expect(pd.props.length).toBe(3); // 1 wayside-shrine cairn + 2 Task-10 skyline keep-shells
+    // The two drowned-lands keep-shells sit OFF-GRID and WEST of / due-south of the
+    // Watcher's column (col 5), so they can never occlude his [9,5] sighting.
+    const keeps = pd.props.filter((p) => p.kind === 'keep-shell').map((p) => p.at);
+    expect(keeps).toContainEqual([13, 1]);
+    expect(keeps).toContainEqual([11, -1]);
+    for (const [, col] of keeps) expect(col).toBeLessThan(5); // clear of the Watcher column
   });
 });
 

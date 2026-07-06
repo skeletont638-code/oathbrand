@@ -2278,6 +2278,34 @@ async function startScene(): Promise<void> {
       get drawCalls() {
         return renderer.info.render.calls;
       },
+      // Task 10 (verification sweep): dev/CI-only observables for the extended
+      // smoke (open a door, witness an echo). The EchoSceneSystem reports the live
+      // apparitions (`activeActors()`) and the persisted sets mirror run state.
+      echoScenes,
+      get echoesWitnessed() {
+        return [...echoesWitnessed];
+      },
+      get doorsOpened() {
+        return [...doorsOpened];
+      },
+      // Drive a gate-door transition by DoorDef id, replaying the exact OPEN
+      // handler (bar check → passability → the far-side unbar record). Returns
+      // whether the transition started (barred / unbuilt targets return false).
+      // Dev/CI-only — gated with the whole handle, never in the shipped bundle.
+      openDoor: (defId: string): boolean => {
+        const door = built.doors.find((d) => d.def.id === defId);
+        if (!door || transitioning) return false;
+        const inst = doorInstancesByDefId.get(door.def.id);
+        if (inst) {
+          if (isBarred(inst, zones.current, doorsOpened)) return false;
+          if (!(canPass(door.def, flags) && hasZone(door.def.to))) return false;
+          goThrough(door, inst.edgeId);
+          return true;
+        }
+        if (!(canPass(door.def, flags) && hasZone(door.def.to))) return false;
+        goThrough(door);
+        return true;
+      },
     };
     // Dev-only brand test keys: H burns an ember, R kneels at a phantom
     // banner, K strikes the Forsworn for 4 (fast phase-forcing in QA).
@@ -2771,15 +2799,15 @@ async function startScene(): Promise<void> {
         // The checkpoint ritual (Task 14): rekindle + save + motif cue + enemy
         // respawn, and — on the FIRST kneel here — this banner's memory. Locks
         // input (enters 'vision') for its ~4s (longer while the memory plays).
-        if (kneel.start(zones.current, visionForZone(zones.current))) {
+        const zoneVision = visionForZone(zones.current);
+        if (kneel.start(zones.current, zoneVision)) {
           hidePrompt();
           // Banner-kneel memory (Task 9): a one-line whisper of the zone's act,
           // shown on kneels where the full banner-vision is NOT (re)playing — so
           // once the memory has been witnessed, the story lingers at the banner
           // as a whisper. Rotates by the banner zone's act (Gate Fields = I,
           // Ashen Gate = II, Undercroft = III); silent at act-less banners.
-          const vis = visionForZone(zones.current);
-          const visionPlaying = vis !== undefined && !visionPlayer.hasSeen(vis.id);
+          const visionPlaying = zoneVision !== undefined && !visionPlayer.hasSeen(zoneVision.id);
           if (!visionPlaying) {
             const whisper = bannerMemoryLine(zones.current);
             if (whisper) showCard(whisper);

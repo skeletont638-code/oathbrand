@@ -38,7 +38,7 @@ import type { AssetCache } from './assets';
 import type { DoorDef, EnemySpawn, GridPos, ItemSpot, LoreSpot, TileKind, ZoneDef } from './zoneDef';
 import { grassGeometry, pineGeometry, trunkGeometry, WIND } from './exteriorForest';
 import { undulation, UNDULATION_AMP_M } from './noise';
-import { bonePileGeometry, chapelShellGeometry, gibbetGeometry, roofWedgeGeometry, stoneGeometry, stumpGeometry, towerShellGeometry } from './exteriorProps';
+import { bonePileGeometry, chapelShellGeometry, gibbetGeometry, keepShellGeometry, roofWedgeGeometry, stoneGeometry, stumpGeometry, towerShellGeometry } from './exteriorProps';
 import { buildExteriorSky } from './exteriorSky';
 import { getTexture } from './textures';
 import type { Anomaly } from '../content/anomalies';
@@ -143,6 +143,7 @@ export const PROCEDURAL_PROPS: Record<string, () => BufferGeometry> = {
   gibbet: gibbetGeometry,
   'tower-shell': towerShellGeometry, // the Gate Fields watchtower silhouette (Task 6)
   'chapel-shell': chapelShellGeometry, // the Ashen Forest sunken-chapel silhouette (Task 7)
+  'keep-shell': keepShellGeometry, // the skyline ruined-keep silhouette (Task 10)
 };
 /** Merge only these attributes; anything else (tangents…) is dropped. */
 const MERGE_ATTRS = ['position', 'normal', 'uv'] as const;

@@ -46,6 +46,17 @@ export const ASHEN_GATE: ZoneDef = {
     { kind: 'pillar', at: [-2, 0] },
     { kind: 'pillar', at: [-4, 6], rotY: 0.9 },
     { kind: 'rubble', at: [-3, 9], rotY: 1.7 },
+    // Skyline sweep (World Expansion v1.2, Task 10): a broken great-keep on the
+    // far-WEST horizon of the reveal — a dead stronghold behind the ruin cluster,
+    // deepening the "dead kingdom" read the vista opens. OFF-GRID at [-7,-1]
+    // (world x=-1, z=-13): far west of the torii CENTRE (col 3, the reveal's
+    // subject) and DEEP behind the mid-ground cluster (rows -2..-5), so it frames
+    // the composition on the flank without competing with the centred torii — a
+    // distant silhouette, ~16 m out (inside the vista-swelled 28 m plane, hidden
+    // at the 12 m baseline). ~48-tri procedural masonry shell (1 draw call;
+    // PROCEDURAL_PROPS 'keep-shell'). Unreachable set-dressing (out-of-bounds is
+    // solid), like the torii/statue/stair skyline it joins.
+    { kind: 'keep-shell', at: [-7, -1], rotY: 0.5 },
   ],
   lights: [
     // A lone ember burning deep among the ruins beyond the wall — the

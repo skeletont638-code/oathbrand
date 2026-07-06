@@ -203,6 +203,40 @@ export function chapelShellGeometry(): BufferGeometry {
   return merge(parts);
 }
 
+/**
+ * THE RUINED KEEP SHELL (World Expansion v1.2, Task 10) — a third silhouette
+ * kind for the skyline sweep: a broken great-keep block with a lower attached
+ * hall range and a half-fallen crown (two merlons of three). The one shape that
+ * reads "a dead stronghold on the horizon" where the tower-shell reads a watch
+ * spire and the chapel-shell a nave. Placed OFF-GRID at vista distance as
+ * unreachable set-dressing (out-of-bounds is solid to the collider) in the
+ * exterior zones whose skyline was bare — the Ashen Gate reveal and the Pilgrim's
+ * Descent drowned-lands view. Cheap: ~48 tris, one draw call, vertex-coloured for
+ * the flat PS1 look; base at y0 (never floats). Declared CC0 in assets/LICENSES.md. */
+export function keepShellGeometry(): BufferGeometry {
+  const parts: BufferGeometry[] = [];
+  // The great-keep block — a tall, broad tower-house, base seated at y0.
+  const keepW = 3.2, keepD = 2.6, keepH = 7.0;
+  const keep = new BoxGeometry(keepW, keepH, keepD);
+  keep.translate(0, keepH / 2, 0);
+  parts.push(paint(keep, STONE));
+  // A lower attached hall range to the east, shorter and roofless — reads as a
+  // keep-with-hall stronghold, not a lone box. Its top stays open (the collapse).
+  const hallW = 2.2, hallH = 4.0, hallD = 2.2;
+  const hall = new BoxGeometry(hallW, hallH, hallD);
+  hall.translate(keepW / 2 + hallW / 2 - 0.3, hallH / 2, 0.2);
+  parts.push(paint(hall, STONE));
+  // Two battlement merlons on the keep crown; the third (west, −x) slot is the
+  // fallen-merlon ruin gap — the same broken-crown read as the watchtower shell.
+  const merlonY = keepH + 0.3;
+  for (const x of [0.55, -0.15] as const) {
+    const m = new BoxGeometry(0.7, 0.6, 0.9);
+    m.translate(x, merlonY, 0);
+    parts.push(paint(m, STONE));
+  }
+  return merge(parts);
+}
+
 /** A pitched, charred roof wedge capping an H/A house cell (~2 m footprint). */
 export function roofWedgeGeometry(): BufferGeometry {
   const g = new ConeGeometry(1.5, 1.1, 4, 1, false); // a 4-sided pyramid reads as a pitched roof

@@ -21,7 +21,7 @@ export const CHAPEL_CRYPT: ZoneDef = {
   grid: [
     '###1##', // 0  N wall — Crypt Stair '1' [0,3] → chapel-nave (UP)
     '#....#', // 1  vault — torches [1,1]/[1,4] flank the stair-foot; entry [1,3]
-    '#....#', // 2  vault — inscription [2,2], the tomb-slab [2,3]
+    '#....#', // 2  vault — inscription [2,2], the tomb-slab [2,3], bones [2,4]
     '#....#', // 3  vault — bones [3,4]
     '#....#', // 4  vault — bones [4,1], the WRAITH [4,3] (dark corner), rubble [4,4]
     '#.S..#', // 5  vault — spawn [5,2] (fallback), bones [5,3]

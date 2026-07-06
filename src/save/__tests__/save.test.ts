@@ -234,6 +234,59 @@ describe('save schema v2 + v1→v2 migration', () => {
     });
   });
 
+  it('a realistic v1.1 save upgrades to v1.2 losslessly — doors/echoes default empty, no field dropped', () => {
+    // The exact "player updates the app from v1.1 to v1.2 (this branch)" path. A
+    // v1.1 save predates world-expansion v1.2 entirely: schema VERSION 1, a
+    // Greater-Vael Drop-1 dread ledger (Task-3/5 shape — no `open`), and NEITHER
+    // `doorsOpened` NOR `echoesWitnessed` (both added THIS branch). Loading it must
+    // (a) succeed, (b) migrate to v2 preserving EVERY prior field byte-for-byte
+    // (no progress lost), (c) derive `open` from the beaten castle, and (d) leave
+    // doors + echoes ABSENT so the load site defaults each to a fresh empty set.
+    const v1_1: SaveDataV1 = {
+      version: 1,
+      zone: 'pilgrims-descent',
+      bannerId: 'banner-mid-descent',
+      embers: 4,
+      flags: ['gatekey', 'shortcut-open', 'throne-open', 'greater-vael-open'],
+      endingsSeen: [1, 4],
+      loreRead: ['gate-plaque', 'gv-descent-shrine', 'gv-village-well'],
+      visionsSeen: ['vision-oath', 'gv-vision-hag'],
+      ngPlus: false,
+      greaterVael: {
+        glitchSeen: ['knock', 'creak'],
+        watcherSightings: 2,
+        maxEmberCap: 3,
+        bargains: ['hag-tithed'],
+      },
+    };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(v1_1));
+
+    const loaded = loadGame();
+    expect(loaded).not.toBeNull();
+    expect(loaded?.version).toBe(2);
+    // (b) every non-schema field carried over untouched — no data loss.
+    expect(loaded?.zone).toBe('pilgrims-descent');
+    expect(loaded?.bannerId).toBe('banner-mid-descent');
+    expect(loaded?.embers).toBe(4);
+    expect(loaded?.flags).toEqual(['gatekey', 'shortcut-open', 'throne-open', 'greater-vael-open']);
+    expect(loaded?.endingsSeen).toEqual([1, 4]);
+    expect(loaded?.loreRead).toEqual(['gate-plaque', 'gv-descent-shrine', 'gv-village-well']);
+    expect(loaded?.visionsSeen).toEqual(['vision-oath', 'gv-vision-hag']);
+    expect(loaded?.ngPlus).toBe(false);
+    // (b) the Drop-1 ledger preserved verbatim; only `open` (+ firedBeatIds) added.
+    expect(loaded?.greaterVael).toEqual({
+      open: true, // (c) derived: a beaten castle (endingsSeen non-empty) unsealed the postern
+      glitchSeen: ['knock', 'creak'],
+      watcherSightings: 2,
+      maxEmberCap: 3,
+      bargains: ['hag-tithed'],
+      firedBeatIds: [],
+    });
+    // (d) the v1.2 fields are absent → the load site (main.ts) defaults each to [].
+    expect(loaded?.doorsOpened).toBeUndefined();
+    expect(loaded?.echoesWitnessed).toBeUndefined();
+  });
+
   it('unknown version (99) still returns null; round-trips a v2 save', () => {
     localStorage.setItem(SAVE_KEY, JSON.stringify({ ...SAMPLE_V2, version: 99 }));
     expect(loadGame()).toBeNull();
