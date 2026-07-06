@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { BoxGeometry, Group, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Quaternion, Vector3 } from 'three';
-import { gridToPlacements, planarUV, ZoneBuilder } from '../ZoneBuilder';
+import {
+  DOOR_PANEL_MAX_TRIS,
+  doorPanelGeometry,
+  doorPropPlacements,
+  gridToPlacements,
+  planarUV,
+  ZoneBuilder,
+} from '../ZoneBuilder';
 import { UNDULATION_AMP_M, undulation } from '../noise';
 import { ZONES } from '../../content/zones';
 import type { AssetCache } from '../assets';
@@ -567,5 +574,38 @@ describe('planarUV', () => {
   it('tiles seamlessly at 2 m per repeat', () => {
     expect(planarUV(0, 0)).toEqual([0, 0]);
     expect(planarUV(2, 4)).toEqual([1, 2]);
+  });
+});
+
+describe('door prop (world-expansion v1.2, Task 1)', () => {
+  it('the shared door panel is within the ≤120-tri budget', () => {
+    const geo = doorPanelGeometry();
+    const tris = geo.index ? geo.index.count / 3 : geo.attributes.position.count / 3;
+    expect(tris).toBeLessThanOrEqual(DOOR_PANEL_MAX_TRIS);
+    expect(geo.attributes.uv).toBeDefined(); // textured through the PS1 pipeline
+  });
+
+  it('places a panel on each decorated gate cell, aligned with its wall-door frame', () => {
+    const def = zone(['#2#', '#.#', '###']);
+    const props = doorPropPlacements(def, new Set(['2']));
+    expect(props).toHaveLength(1);
+    expect(props[0]).toMatchObject({ row: 0, col: 1 });
+    expect(props[0].x).toBeCloseTo(3); // col 1 centre (cell 2)
+    expect(props[0].z).toBeCloseTo(1); // row 0 centre
+    // The panel faces exactly where the gate's `wall-door` frame faces, so the
+    // iron fills the opening rather than sitting askew in it.
+    const frame = gridToPlacements(def).find((p) => p.piece === 'wall-door');
+    expect(frame).toBeDefined();
+    expect(props[0].rotY).toBeCloseTo(frame!.rotY);
+  });
+
+  it('covers every cell of a wide gate (repeated digit)', () => {
+    const def = zone(['######', '#....#', '#.22.#', '######']);
+    expect(doorPropPlacements(def, new Set(['2']))).toHaveLength(2);
+  });
+
+  it('places nothing when no gate is decorated (v1 zones build unchanged)', () => {
+    const def = zone(['#2#', '#.#', '###']);
+    expect(doorPropPlacements(def, new Set())).toEqual([]);
   });
 });

@@ -14,6 +14,7 @@
  * grid pieces are placed at uniform scale 0.5; props are life-sized.
  */
 import {
+  BoxGeometry,
   BufferGeometry,
   DoubleSide,
   Euler,
@@ -277,6 +278,79 @@ export function gridToPlacements(def: ZoneDef): Placement[] {
         out.push({ piece: 'wall', x: cx, z: cz, rotY: Math.atan2(0, diag[0]) });
       }
       // No open neighbor at all: fully buried, emit nothing.
+    }
+  }
+  return out;
+}
+
+// --- Door prop (world-expansion v1.2, Task 1) ------------------------------
+
+/** Perf budget for the shared door panel (spec §1). Enforced by a unit test. */
+export const DOOR_PANEL_MAX_TRIS = 120;
+
+/**
+ * The shared door-prop geometry: a stone frame (two jambs + a lintel) holding
+ * an iron-studded plank panel, built in the canonical `+z`-facing orientation
+ * (so a placement's `rotY` turns the face toward the passage, exactly like the
+ * `wall-door` frame). ONE geometry, instanced per decorated door — 96 tris,
+ * inside the ≤120 budget. Textured through the PS1 pipeline at spawn.
+ * Origin at the sill, so a placement sits it on the floor.
+ */
+export function doorPanelGeometry(): BufferGeometry {
+  const W = 1.7; // opening width (a 2 m cell)
+  const H = 2.0; // opening height
+  const T = 0.14; // panel thickness
+  const box = (w: number, h: number, d: number, x: number, y: number, z: number): BufferGeometry =>
+    new BoxGeometry(w, h, d).translate(x, y, z);
+  const parts: BufferGeometry[] = [
+    box(W - 0.3, H - 0.2, T, 0, H / 2, 0), // iron-studded plank panel (12 tris)
+    box(0.18, H, 0.22, -(W / 2 - 0.09), H / 2, 0), // left jamb (12)
+    box(0.18, H, 0.22, W / 2 - 0.09, H / 2, 0), // right jamb (12)
+    box(W, 0.2, 0.22, 0, H - 0.1, 0), // lintel (12)
+  ];
+  // Four iron studs, proud of the panel face (48 tris) → 96 total.
+  for (const yy of [0.55, 1.35]) for (const xx of [-0.35, 0.35]) parts.push(box(0.12, 0.12, 0.1, xx, yy, T / 2 + 0.03));
+  const merged = mergeGeometries(parts, false);
+  if (!merged) throw new Error('doorPanelGeometry: mergeGeometries returned null');
+  merged.computeVertexNormals();
+  return merged;
+}
+
+/** A placed door panel: the span cell it covers + its world pose. */
+export interface DoorPropPlacement {
+  row: number;
+  col: number;
+  x: number;
+  z: number;
+  rotY: number;
+}
+
+/**
+ * Where a zone's decorated gates want a door panel. `decoratedGates` holds the
+ * gate DIGIT chars that carry a door in THIS zone (resolved from the global
+ * door map by `main.ts`, so BOTH sides of a decorated edge render). Every grid
+ * cell of a decorated digit gets a panel (a wide gate repeats its digit → one
+ * panel per cell), oriented toward the passage exactly like its `wall-door`.
+ * Pure — `main.ts` turns each into a shared-geometry mesh + solidifies its cell.
+ */
+export function doorPropPlacements(def: ZoneDef, decoratedGates: ReadonlySet<string>): DoorPropPlacement[] {
+  if (decoratedGates.size === 0) return [];
+  const cell = def.cell;
+  const half = cell / 2;
+  const out: DoorPropPlacement[] = [];
+  for (let row = 0; row < def.grid.length; row++) {
+    for (let col = 0; col < def.grid[row].length; col++) {
+      const ch = def.grid[row][col];
+      if (!decoratedGates.has(ch)) continue;
+      if (cellKind(ch, def, row, col) !== 'door') continue; // only real gate cells
+      const d = ORTHO.find(([dr, dc]) => kindAt(def, row + dr, col + dc) !== 'wall');
+      out.push({
+        row,
+        col,
+        x: col * cell + half,
+        z: row * cell + half,
+        rotY: d ? Math.atan2(d[1], d[0]) : 0,
+      });
     }
   }
   return out;

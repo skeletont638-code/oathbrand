@@ -367,3 +367,38 @@ describe('save schema v2 + v1→v2 migration', () => {
     expect(next.endingsSeen).toEqual(prev.endingsSeen);
   });
 });
+
+describe('doorsOpened (world-expansion v1.2, Task 1)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('localStorage', makeStorageStub());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('a far-side unbar round-trips through save/load', () => {
+    const data: SaveData = { ...SAMPLE_V2, doorsOpened: ['gate-fields-undercroft:2'] };
+    saveGame(data);
+    expect(loadGame()).toEqual(data);
+    expect(loadGame()?.doorsOpened).toEqual(['gate-fields-undercroft:2']);
+  });
+
+  it('a pre-v1.2 save (no doorsOpened) loads clean — absent is valid', () => {
+    saveGame(SAMPLE_V2); // no doorsOpened field
+    const loaded = loadGame();
+    expect(loaded).not.toBeNull();
+    expect(loaded?.doorsOpened).toBeUndefined(); // load site defaults it to []
+  });
+
+  it('a malformed doorsOpened is rejected (never crashes new Set(...))', () => {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ ...SAMPLE_V2, doorsOpened: 5 }));
+    expect(loadGame()).toBeNull();
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ ...SAMPLE_V2, doorsOpened: [1, 2] }));
+    expect(loadGame()).toBeNull();
+  });
+
+  it('secondVigilSave drops doorsOpened — the castle re-seals, far-side doors re-bar', () => {
+    const prev: SaveData = { ...SAMPLE_V2, doorsOpened: ['gate-fields-undercroft:2'] };
+    expect(secondVigilSave(prev, 5).doorsOpened).toBeUndefined();
+  });
+});

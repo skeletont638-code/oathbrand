@@ -50,6 +50,9 @@ import { flashDenied, hidePrompt, showPrompt } from './ui/prompt';
 import { AshPriest, ashPriestsIn } from './entities/AshPriest';
 import { dialogueSequence } from './content/dialogue';
 import type { BuiltZone, PlacedDoor } from './world/ZoneBuilder';
+import { doorPanelGeometry, doorPropPlacements } from './world/ZoneBuilder';
+import { isBarred, resolveDoorInstances } from './world/doors';
+import { getTexture } from './world/textures';
 import { resolveZoneLighting } from './world/lighting';
 import { ZoneManager } from './world/ZoneManager';
 import { kickOpen, takeItem } from './world/mechanics';
@@ -108,6 +111,9 @@ const DEFAULT_AMBIENT = 0.35;
 /** Shortcut gate: how far it swings open (rad) and how fast (rad/s). */
 const GATE_OPEN_ANGLE = -1.4;
 const GATE_SWING_SPEED = 3.2;
+/** Total black-fade through a decorated door (world-expansion v1.2, Task 1):
+ *  half out to black (covering the zone load) + half back in. */
+const DOOR_FADE_MS = 400;
 /** Landing-dip on the undercroft drop: start crouch (m) + recovery (m/s). */
 const FALL_DIP_M = 1.3;
 const FALL_DIP_RECOVER = 2.4;
@@ -248,6 +254,8 @@ function collectInteractables(
   built: BuiltZone,
   flags: Set<GameFlag>,
   npcs: AshPriest[],
+  /** A decorated door's prompt label, or undefined for a plain gate (Task 1). */
+  doorLabel: (defId: string) => string | undefined,
 ): Interactable[] {
   const items: Interactable[] = built.lore.map((l) => ({
     id: l.spot.id,
@@ -266,6 +274,7 @@ function collectInteractables(
       verb: 'OPEN',
       x: door.position.x,
       z: door.position.z,
+      label: doorLabel(door.def.id), // "Iron Door" on a decorated gate, else undefined
     });
   }
   if (built.banner) {
@@ -344,6 +353,16 @@ async function startScene(): Promise<void> {
   // this set + emits `lore-read` on each first read, and it banks at the next
   // kneel (see Brand.onSave below).
   const loreRead = new Set<string>(save?.loreRead ?? []);
+
+  // World-expansion v1.2 (Task 1): resolve every authored gate-door decoration
+  // into an edge-keyed DoorInstance, indexed by DoorDef id so a targeted door
+  // resolves on EITHER side of its edge. Empty while no zone declares
+  // `gateDoors` — the mechanism is dormant and v1 gates stay open borders.
+  const doorInstancesByDefId = resolveDoorInstances(
+    Object.values(ZONES).filter((z): z is ZoneDef => z !== undefined),
+  );
+  // Far-side doors permanently unbarred (persisted, additive); seeded from save.
+  const doorsOpened = new Set<string>(save?.doorsOpened ?? []);
 
   // --- Task 5: the Hag's ember cap + the bargains struck --------------------
   // The brand's rekindle CEILING reads `emberCap`; a tithe lowers it, persisting
@@ -490,6 +509,8 @@ async function startScene(): Promise<void> {
           maxEmberCap: emberCap,
           bargains: hagBargains,
         }),
+        // Far-side doors unbarred for good (world-expansion v1.2, Task 1).
+        doorsOpened: [...doorsOpened],
       };
       saveGame(data);
     },
@@ -905,6 +926,22 @@ async function startScene(): Promise<void> {
   /** Door-span trigger cells of the current zone, "row,col" → placed door. */
   let doorCells = new Map<string, PlacedDoor>();
 
+  // --- Decorated-door panels (world-expansion v1.2, Task 1) ----------------
+  // ONE shared geometry + material for every door panel game-wide (instanced
+  // per door → a couple of draw calls at most, well inside the ≤100/zone cap).
+  // Textured through the PS1 pipeline (`rock`, crunched); flat colour in tests
+  // where getTexture is undefined. Never disposed (shared for the session).
+  const doorPanelGeo = doorPanelGeometry();
+  const doorPanelMat = new THREE.MeshStandardMaterial({
+    color: 0x3b3b40, // dark iron-in-stone
+    map: getTexture('rock') ?? null,
+    roughness: 1,
+    metalness: 0,
+    flatShading: true,
+  });
+  /** The current zone's door-panel meshes (rebuilt per zone). */
+  let doorProps: THREE.Mesh[] = [];
+
   /** Glint meshes for the current zone's un-taken items, by item id. */
   let itemMeshes: { id: string; mesh: THREE.Mesh }[] = [];
 
@@ -1291,6 +1328,7 @@ async function startScene(): Promise<void> {
         maxEmberCap: emberCap,
         bargains: hagBargains,
       }),
+      doorsOpened: [...doorsOpened], // world-expansion v1.2 (Task 1)
     });
   }
 
@@ -1340,6 +1378,29 @@ async function startScene(): Promise<void> {
     shortcutGate.leaf.geometry.dispose();
     shortcutGate.material.dispose();
     shortcutGate = null;
+  }
+
+  /** Drop the current zone's door panels (geometry/material are shared → kept). */
+  function clearDoorProps(): void {
+    for (const m of doorProps) scene.remove(m);
+    doorProps = [];
+  }
+
+  /**
+   * Place an iron door panel on every decorated gate cell (Task 1), oriented
+   * with its wall-door frame, and SOLIDIFY the cell so the panel collides —
+   * a decorated gate is a closed door you must OPEN, not a walk-through border.
+   * No-op when the zone decorates no gate (every v1 zone → byte-identical).
+   */
+  function spawnDoorProps(decoratedGates: ReadonlySet<string>): void {
+    for (const p of doorPropPlacements(activeDef, decoratedGates)) {
+      const mesh = new THREE.Mesh(doorPanelGeo, doorPanelMat);
+      mesh.position.set(p.x, built.groundYAt(p.x, p.z), p.z);
+      mesh.rotation.y = p.rotY;
+      scene.add(mesh);
+      doorProps.push(mesh);
+      built.collider.setSolid(p.row, p.col, true); // the panel blocks the cell
+    }
   }
 
   /** The current zone's Ash-Priests (Task 13) — static SPEAK-able NPCs,
@@ -1564,7 +1625,13 @@ async function startScene(): Promise<void> {
   function persistProgress(): void {
     const prev = loadGame();
     if (!prev) return;
-    saveGame({ ...prev, zone: zones.current, flags: [...flags], ngPlus });
+    saveGame({
+      ...prev,
+      zone: zones.current,
+      flags: [...flags],
+      ngPlus,
+      doorsOpened: [...doorsOpened], // far-side doors unbarred this run (Task 1)
+    });
   }
 
   function spawnEnemies(): void {
@@ -1673,7 +1740,12 @@ async function startScene(): Promise<void> {
   /** collectInteractables plus the Task-15 dynamic targets: the dropped tachi
    *  and the summit's GIVE-THE-CROWN flame. */
   function rebuildInteractables(): void {
-    interactables = collectInteractables(built, flags, ashPriests);
+    interactables = collectInteractables(
+      built,
+      flags,
+      ashPriests,
+      (defId) => doorInstancesByDefId.get(defId)?.label,
+    );
     // Task 5: the Hag's cairn — a threshold OFFER target (silent bargain). The
     // presence tick decides whether she is glimpsed/present; the target itself
     // is always at the authored cell so the player can reach the bargain.
@@ -1755,12 +1827,23 @@ async function startScene(): Promise<void> {
     ambient.color.setHex(gardenHere ? 0x6f9c62 : 0x8a8a92);
     if (gardenHere) ambient.intensity = 0.5;
     enemyCtx.collider = built.collider;
+    // Walk-in transitions target these cells. A DECORATED gate (Task 1) is
+    // excluded — its iron panel collides (below) and it opens only on E, never
+    // by walking in — so it never lands in `doorCells`.
     doorCells = new Map();
+    const decoratedGates = new Set<string>();
     for (const door of built.doors) {
+      if (doorInstancesByDefId.has(door.def.id)) {
+        const ch = activeDef.grid[door.def.at[0]]?.[door.def.at[1]];
+        if (ch) decoratedGates.add(ch);
+        continue; // decorated: opens on OPEN only, panel blocks the cell
+      }
       for (const [row, col] of doorSpan(activeDef, door.def)) {
         doorCells.set(`${row},${col}`, door);
       }
     }
+    clearDoorProps();
+    spawnDoorProps(decoratedGates); // panels + solidified cells (no-op if none)
     clearWisps();
     clearItemMeshes();
     clearGate();
@@ -1814,14 +1897,37 @@ async function startScene(): Promise<void> {
   // door (see DoorDef pairing docs in zoneDef.ts), facing into the room —
   // never on a door cell, so arrivals cannot chain-transition.
   let transitioning = false;
-  function goThrough(door: PlacedDoor): void {
+  /** Ease the full-screen blackout to `to` (0..1) over `ms`, from wherever it
+   *  is now. Reuses the endings' blackout overlay (`ui/credits`). */
+  let blackoutAlpha = 0;
+  function rampBlackout(to: number, ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      const from = blackoutAlpha;
+      const start = performance.now();
+      const step = (now: number): void => {
+        const t = ms <= 0 ? 1 : Math.min(1, (now - start) / ms);
+        blackoutAlpha = from + (to - from) * t;
+        setBlackout(blackoutAlpha);
+        if (t >= 1) resolve();
+        else requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
+  }
+
+  // A decorated door (Task 1) passes `edgeToOpen`: it fades through black and
+  // records the edge as unbarred-for-good on arrival. A plain gate omits it and
+  // transitions instantly (v1 behavior, byte-identical).
+  function goThrough(door: PlacedDoor, edgeToOpen?: string): void {
     if (transitioning) return;
     transitioning = true; // freezes simulation until the new zone is live
     hidePrompt();
+    const fade = edgeToOpen !== undefined;
     const from = zones.current;
-    game.bus.emit({ type: 'door-opened', doorId: door.def.id });
+    game.bus.emit({ type: 'door-opened', doorId: door.def.id }); // hinge groan
     void (async () => {
       try {
+        if (fade) await rampBlackout(1, DOOR_FADE_MS / 2); // to black, then load
         built = await zones.transition(door);
         const def = resolveZone(zones.current);
         // Task 5: the door OUT of Greater Vael restores the Hag-tithed ember cap
@@ -1846,9 +1952,15 @@ async function startScene(): Promise<void> {
         }
         controller.pitch = 0;
         enterZone();
+        // A far-side door, once walked, is unbarred for good — record + persist.
+        if (edgeToOpen !== undefined && !doorsOpened.has(edgeToOpen)) {
+          doorsOpened.add(edgeToOpen);
+          persistProgress();
+        }
         // The undercroft is entered by DROPPING in from the hall — a brief
         // landing crouch that eases back up (spec's "one-way drop").
         if (zones.current === 'undercroft' && from === 'great-hall') fallDip = FALL_DIP_M;
+        if (fade) await rampBlackout(0, DOOR_FADE_MS / 2); // back in
       } finally {
         transitioning = false;
       }
@@ -2543,8 +2655,18 @@ async function startScene(): Promise<void> {
       } else if (pressedE && target?.verb === 'OPEN') {
         const door = built.doors.find((d) => d.def.id === target.id);
         if (door) {
+          const inst = doorInstancesByDefId.get(door.def.id);
           // At the summit, the stair down is the KEEP choice, not a transition.
-          if (zones.current === 'summit' && door.def.to === 'throne' && !endingId) {
+          if (inst) {
+            // A decorated gate (world-expansion v1.2). Barred from the far side
+            // until first opened from within; otherwise hinge-groan + black
+            // fade + transition, and the far-side lock lifts for good.
+            if (isBarred(inst, zones.current, doorsOpened)) {
+              showCard('Barred from the other side.');
+            } else if (canPass(door.def, flags) && hasZone(door.def.to)) {
+              goThrough(door, inst.edgeId);
+            } else flashDenied();
+          } else if (zones.current === 'summit' && door.def.to === 'throne' && !endingId) {
             handleKeepPress();
           } else if (
             // The illusory wall to the Queen's Garden — revealable only on a

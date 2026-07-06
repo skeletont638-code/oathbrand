@@ -49,6 +49,13 @@ interface SaveDataBase {
   ngPlus: boolean;
   /** Greater Vael dread ledger (Task 3); absent on castle-only saves. */
   greaterVael?: DreadSave;
+  /**
+   * Canonical edge ids of far-side doors opened for good (world-expansion
+   * v1.2, Task 1 — see `world/doors.ts`). OPTIONAL + additive: absent on every
+   * pre-v1.2 save ⇒ no door has been unbarred yet (a fresh `[]` at the load
+   * site). Second Vigil drops it (the castle re-seals — far-side doors re-bar).
+   */
+  doorsOpened?: string[];
 }
 
 /**
@@ -114,7 +121,10 @@ function isSaveData(v: unknown): v is SaveData {
     isStringArray(o.loreRead) &&
     isStringArray(o.visionsSeen) &&
     typeof o.ngPlus === 'boolean' &&
-    isDreadSave(o.greaterVael)
+    isDreadSave(o.greaterVael) &&
+    // `doorsOpened` (v1.2) is optional + additive: absent is valid; if present
+    // it must be a string[] (a malformed one can't crash `new Set(...)`).
+    (o.doorsOpened === undefined || isStringArray(o.doorsOpened))
   );
 }
 

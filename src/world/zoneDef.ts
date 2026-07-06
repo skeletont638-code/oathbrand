@@ -110,6 +110,35 @@ export interface DoorDef {
 }
 
 /**
+ * A DECORATION laid over an existing gate cell (world-expansion v1.2, Task 1):
+ * a physical door — stone frame + iron-studded panel — that turns an open,
+ * walk-through gate into one you must `OPEN`. It does NOT define a transition
+ * (the sibling `DoorDef` in `doors` still carries `to`/`pair` and does the zone
+ * load); it only adds presentation + an optional far-side lock bit ON TOP of
+ * the gate the `DoorDef` already names.
+ *
+ * NAMING: the design spec calls this field `doors`, but `ZoneDef.doors` is
+ * ALREADY the required `DoorDef[]` transition table — so the decoration layer
+ * lives under `gateDoors` to avoid the collision. A `gateDoors` entry `gate`
+ * matches the digit char of the `DoorDef` it decorates (the char at that
+ * door's `at` cell); the two are resolved into a canonical, edge-keyed
+ * `DoorInstance` by `collectDoors` (world/doors.ts). ONE `gateDoors` entry
+ * (on either side of a zoneGraph edge) decorates the WHOLE edge — the far
+ * side renders the same door automatically; declaring it on both sides throws.
+ */
+export interface ZoneDoorDef {
+  /** The gate digit this door decorates, e.g. '1' — the grid char at the
+   *  sibling `DoorDef.at` cell in THIS zone. */
+  gate: string;
+  /** Prompt label after the verb: "Iron Door", "Postern Gate", "Stair Door". */
+  label: string;
+  /** `'far-side'`: passable ONLY from this (the defining) zone until the first
+   *  passage through it; opening it from within permanently unbars the far
+   *  side (persisted in SaveData.doorsOpened). Absent ⇒ passable both ways. */
+  locked?: 'far-side';
+}
+
+/**
  * A picked-up world item (a "lore-item"): the `at` cell shows a prompt
  * (`TAKE`); taking it sets `flag` once and surfaces `card` as an inscription
  * plate. The Gatekey of Vael lives on the undercroft pedestal.
@@ -256,6 +285,13 @@ export interface ZoneDef {
   /** Takeable world items (pedestal pickups); the Gatekey lives here. */
   items?: ItemSpot[];
   doors: DoorDef[];
+  /**
+   * Decorative doors laid over gate cells (world-expansion v1.2, Task 1): each
+   * turns a walk-through gate into an `OPEN`-gated one with a label and an
+   * optional far-side lock. Absent ⇒ the zone's gates stay open borders (v1
+   * behavior, byte-identical builds). See `ZoneDoorDef` + `world/doors.ts`.
+   */
+  gateDoors?: ZoneDoorDef[];
   illusory?: IllusoryWall[];
   ambience: string[];
   /**
