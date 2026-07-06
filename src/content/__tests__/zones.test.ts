@@ -52,6 +52,31 @@ function isWall(def: ZoneDef, row: number, col: number): boolean {
   return def.tiles[ch] !== 'floor' && def.tiles[ch] !== 'void';
 }
 
+/** Flood-fill the set of walkable cells reachable from the zone's spawn, moving
+ *  orthogonally across walkable cells only (void `~` and walls block). Used to
+ *  prove a route exists around missing-floor holes. Keys are `String([r,c])`. */
+function walkableReach(def: ZoneDef): Set<string> {
+  let start: GridPos | undefined;
+  def.grid.forEach((row, r) => {
+    for (let c = 0; c < row.length; c++) if (row[c] === 'S') start = [r, c];
+  });
+  const seen = new Set<string>();
+  if (!start) return seen;
+  const queue: GridPos[] = [start];
+  seen.add(String(start));
+  while (queue.length > 0) {
+    const [r, c] = queue.shift() as GridPos;
+    for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as GridPos[]) {
+      const next: GridPos = [r + dr, c + dc];
+      if (seen.has(String(next))) continue;
+      if (!isWalkable(def, next)) continue;
+      seen.add(String(next));
+      queue.push(next);
+    }
+  }
+  return seen;
+}
+
 describe('zone registry', () => {
   it('registers the two Task 11 zones', () => {
     expect(ZONES['ashen-gate']).toBeDefined();
@@ -108,12 +133,17 @@ describe('zone registry', () => {
   });
 
   it('registers the Sunken Chapel — nave + crypt (Task 7)', () => {
-    // World Expansion v1.2: the second landscape ruin. Eleven prior zones + the
-    // two keep floors + the keep chapel + the two tower floors + the chapel's
-    // nave & crypt = 18.
+    // World Expansion v1.2: the second landscape ruin.
     expect(ZONES['chapel-nave']).toBeDefined();
     expect(ZONES['chapel-crypt']).toBeDefined();
-    expect(Object.keys(ZONES)).toHaveLength(18);
+  });
+
+  it('registers the Burnt Manor — ground + upper (Task 8)', () => {
+    // World Expansion v1.2: the third and final landscape ruin. The 18 prior zones
+    // + the manor's gutted hall & burnt gallery = 20.
+    expect(ZONES['manor-ground']).toBeDefined();
+    expect(ZONES['manor-upper']).toBeDefined();
+    expect(Object.keys(ZONES)).toHaveLength(20);
   });
 
   it('zoneOrThrow returns every registered zone (the campaign is complete)', () => {
@@ -634,6 +664,119 @@ describe('The Sunken Chapel (Task 7) — entry, echo aisle, and crypt', () => {
     expect(byId.get('nave-to-forest')?.label).toBe('Chapel Door');
     expect(byId.get('nave-to-crypt')?.label).toBe('Crypt Stair');
     expect(byId.get('crypt-to-nave')?.label).toBe('Crypt Stair');
+  });
+});
+
+describe('The Burnt Manor (Task 8) — entry, hearth vigil, and burnt gallery', () => {
+  const village = zoneOrThrow('cinder-village');
+  const ground = zoneOrThrow('manor-ground');
+  const upper = zoneOrThrow('manor-upper');
+
+  it('the Manor Door pairs both ways between the Cinder Village and the gutted hall', () => {
+    const cvToManor = village.doors.find((d) => d.id === 'cv-to-manor');
+    const manorToVillage = ground.doors.find((d) => d.id === 'manor-ground-to-village');
+    expect(cvToManor, 'cinder-village is missing the cv-to-manor door').toBeDefined();
+    expect(manorToVillage, 'manor-ground is missing the manor-ground-to-village door').toBeDefined();
+    expect(cvToManor!.pair).toBe('manor-door');
+    expect(manorToVillage!.pair).toBe('manor-door');
+    expect(cvToManor!.lock, 'the Manor Door is unlocked').toBeUndefined();
+    // The new gate cell '1' sits in the central-plaza pocket, not on any prior gate.
+    expect(charAt(village, [3, 8])).toBe('1');
+    expect(pairedDoor('cinder-village', cvToManor!, ground)?.to).toBe('cinder-village');
+    expect(pairedDoor('manor-ground', manorToVillage!, village)?.to).toBe('manor-ground');
+  });
+
+  it('the new Manor Door gate does not disturb any Cinder Village contract cell', () => {
+    // The spawn/roads/banner and the frozen-procession cells keep theirs.
+    expect(charAt(village, [4, 1])).toBe('S'); // spawn, untouched
+    expect(charAt(village, [4, 0])).toBe('3'); // the fields road
+    expect(charAt(village, [4, 14])).toBe('D'); // the sealed east arch
+    expect(village.banner?.at).toEqual([4, 7]); // the plaza banner
+    // The live kneeler, both inert procession statues, and the gibbet keep their cells.
+    expect(village.enemies.map((e) => String(e.at)).sort()).toEqual(['4,9', '5,11']);
+    const statues = village.props.filter((p) => p.kind === 'statue-knight').map((p) => String(p.at)).sort();
+    expect(statues).toEqual(['4,11', '4,3']);
+    expect(village.props.some((p) => p.kind === 'gibbet' && String(p.at) === '2,7')).toBe(true);
+    // The tithe-ledger item + its lore read + every scatter clump keep their cells.
+    expect(village.items?.map((i) => String(i.at))).toEqual(['3,4']);
+    expect(village.lore.map((l) => l.id)).toContain('gv-village-tithe-ledger');
+    const scatterCells = new Set((village.scatter ?? []).flatMap((s) => s.cells.map((c) => String(c))));
+    expect(scatterCells.has('3,8'), 'the gate cell must not sit on a scatter cell').toBe(false);
+    // The Manor Door's inward entry cell is clean plaza-spine street (not a door cell).
+    const entry = doorEntry(village, village.doors.find((d) => d.id === 'cv-to-manor')!);
+    const [er, ec] = [Math.floor(entry.z / village.cell), Math.floor(entry.x / village.cell)];
+    expect([er, ec]).toEqual([4, 8]);
+    expect(isPlainFloor(village, [4, 8])).toBe(true);
+  });
+
+  it('the Stair Door pairs both ways between the two manor floors', () => {
+    const groundUp = ground.doors.find((d) => d.id === 'manor-ground-to-upper');
+    const upperDown = upper.doors.find((d) => d.id === 'manor-upper-to-ground');
+    expect(groundUp?.pair).toBe('manor-stair');
+    expect(upperDown?.pair).toBe('manor-stair');
+    expect(pairedDoor('manor-ground', groundUp!, upper)?.to).toBe('manor-ground');
+    expect(pairedDoor('manor-upper', upperDown!, ground)?.to).toBe('manor-upper');
+  });
+
+  it('the gutted hall is a dread interior with a kneeler vigil, 3 torches (2 lit + 1 unlit), 1 Act-II inscription', () => {
+    expect(ground.dreadInterior).toBe(true);
+    expect(ground.kind ?? 'interior').toBe('interior');
+    // The sanctioned kneeler-vigil (T5) knelt by the hearth.
+    expect(ground.enemies.filter((e) => e.kind === 'kneeler')).toHaveLength(1);
+    // Torches ×3 as a mix: 2 LIT kit torches + 1 UNLIT bare `torch` bracket prop.
+    expect(ground.torches?.length).toBe(2);
+    expect(ground.props.filter((p) => p.kind === 'torch')).toHaveLength(1);
+    // The hearth read = a prop cluster (hearth-breast pillar + fallen chimney rubble).
+    expect(ground.props.some((p) => p.kind === 'pillar' && String(p.at) === '4,1')).toBe(true);
+    expect(ground.lore.map((l) => l.id)).toEqual(['act2-manor-a']);
+    expect(LORE['act2-manor-a']).toBeDefined();
+  });
+
+  it('reserves the 2×2 burning-echo block by the hearth prop/enemy-free (Scene 4, Task 9)', () => {
+    const reserved: GridPos[] = [[3, 3], [3, 4], [4, 3], [4, 4]];
+    const occupied = new Set<string>([
+      ...ground.props.map((p) => String(p.at)),
+      ...ground.enemies.map((e) => String(e.at)),
+      ...(ground.ngPlus?.enemies ?? []).map((e) => String(e.at)),
+      ...ground.lore.map((l) => String(l.at)),
+    ]);
+    for (const cell of reserved) {
+      expect(isWalkable(ground, cell), `echo cell ${String(cell)} must be walkable hall`).toBe(true);
+      expect(occupied.has(String(cell)), `echo cell ${String(cell)} must stay clear`).toBe(false);
+    }
+  });
+
+  it('the burnt gallery is a dread interior with missing-floor void, 1 soldier, 2 torches, 1 inscription', () => {
+    expect(upper.dreadInterior).toBe(true);
+    expect(upper.kind ?? 'interior').toBe('interior');
+    // The burned-through hole is authored as `~` void cells reading DOWN.
+    const voidCells = upper.grid.flatMap((row, r) =>
+      [...row].flatMap((ch, c) => (ch === '~' ? [[r, c] as GridPos] : [])),
+    );
+    expect(voidCells.length, 'the gallery needs missing-floor void cells').toBeGreaterThan(0);
+    // A walkable route reaches every content cell without crossing the hole: BFS
+    // the walkable cells from the spawn and assert each door/enemy/lore/torch cell
+    // (or a walkable orthogonal neighbour, for wall-hung torches) is reached.
+    const reach = walkableReach(upper);
+    const near = (at: GridPos): boolean =>
+      reach.has(String(at)) ||
+      [[-1, 0], [1, 0], [0, -1], [0, 1]].some(([dr, dc]) => reach.has(String([at[0] + dr, at[1] + dc])));
+    for (const d of upper.doors) expect(near(d.at), `door ${d.id} unreachable`).toBe(true);
+    for (const e of upper.enemies) expect(near(e.at), `enemy @ ${String(e.at)} unreachable`).toBe(true);
+    for (const l of upper.lore) expect(near(l.at), `lore ${l.id} unreachable`).toBe(true);
+    for (const t of upper.torches ?? []) expect(near(t.at), `torch @ ${String(t.at)} unreachable`).toBe(true);
+    expect(upper.enemies.filter((e) => e.kind === 'soldier')).toHaveLength(1);
+    expect(upper.torches?.length).toBe(2);
+    expect(upper.lore.map((l) => l.id)).toEqual(['act2-manor-b']);
+    expect(LORE['act2-manor-b']).toBeDefined();
+  });
+
+  it('both manor doors resolve to labelled DoorInstances (Manor Door + Stair Door)', () => {
+    const byId = resolveDoorInstances(entries.map(([, d]) => d));
+    expect(byId.get('cv-to-manor')?.label).toBe('Manor Door');
+    expect(byId.get('manor-ground-to-village')?.label).toBe('Manor Door');
+    expect(byId.get('manor-ground-to-upper')?.label).toBe('Stair Door');
+    expect(byId.get('manor-upper-to-ground')?.label).toBe('Stair Door');
   });
 });
 

@@ -26,6 +26,8 @@ import { TOWER_GROUND } from './towerGround';
 import { TOWER_UPPER } from './towerUpper';
 import { CHAPEL_NAVE } from './chapelNave';
 import { CHAPEL_CRYPT } from './chapelCrypt';
+import { MANOR_GROUND } from './manorGround';
+import { MANOR_UPPER } from './manorUpper';
 
 /** Every built zone, by id. The seven-zone castle campaign (T11–T16) plus the
  *  first Greater Vael exteriors — the Gate Fields hub (Task 9), the Ashen
@@ -58,6 +60,10 @@ export const ZONES: Partial<Record<ZoneId, ZoneDef>> = {
   // the half-collapsed nave (the queen's-walk echo room) and the crypt beneath.
   'chapel-nave': CHAPEL_NAVE,
   'chapel-crypt': CHAPEL_CRYPT,
+  // World Expansion v1.2 (Task 8) — the Burnt Manor off the Cinder Village plaza:
+  // the fire-gutted tithe-hall (the burning-echo room) and the burnt gallery above.
+  'manor-ground': MANOR_GROUND,
+  'manor-upper': MANOR_UPPER,
 };
 
 /**

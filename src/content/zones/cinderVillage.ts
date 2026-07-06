@@ -26,7 +26,9 @@
  * Grid is the authored layout from the Task-11 brief — copied VERBATIM; do not
  * "fix" it. `w` is the curdled-well floor [1,8]; `D` is the sealed east arch
  * [4,14] into the Drop-2 salt-road (a `greatervael` lock it reads as sealed
- * set-dressing — the target lives in FUTURE_ZONE_IDS).
+ * set-dressing — the target lives in FUTURE_ZONE_IDS). `1` (Task 8) is the Manor
+ * Door [3,8] into the burnt tithe-hall — the one enterable face of the dense
+ * central plaza house-blocks, reused as the manor's street read (no new facade).
  */
 import type { ZoneDef } from '../../world/zoneDef';
 
@@ -36,7 +38,7 @@ export const CINDER_VILLAGE: ZoneDef = {
     '###HHHHHHHHH###', // 0
     '#..H..H.wH.H..#', // 1  `w` = curdled well [1,8]
     '#.HHH.H.H.HHH.#', // 2
-    '#....A.H.A....#', // 3  door-void houses [3,5]/[3,9] frame the plaza · tithe-ledger + salt-line + collector-house alleys
+    '#....A.H1A....#', // 3  door-void houses [3,5]/[3,9] frame the plaza · Manor Door '1' [3,8] → manor-ground · tithe-ledger + salt-line + collector-house alleys
     '3SpppppBppppppD', // 4  W door 3 [4,0]→gate-fields (pair gf-village)·S spawn [4,1]·B banner [4,7]·D sealed east arch [4,14]→salt-road
     '#....A.H.A....#', // 5  door-void houses [5,5]/[5,9] frame the plaza · archer on the collector-house floor [5,11]
     '#.HHH.H.H.HHH.#', // 6
@@ -133,6 +135,14 @@ export const CINDER_VILLAGE: ZoneDef = {
   doors: [
     // W road back to the Gate Fields hub — the paired other end of `gf-village`.
     { id: 'cv-to-fields', at: [4, 0], to: 'gate-fields', pair: 'gf-village' },
+    // The Manor Door (Task 8): the burnt tithe-hall entered off the plaza. The gate
+    // '1' at [3,8] sits in the pocket of the central plaza house-blocks ([2,8]`H` /
+    // [3,7]`H` / [3,9]`A`), so the existing dense central ruin READS as the manor
+    // from the spine street — no new facade prop (the brief's preferred H-block
+    // reuse). Unlocked; the 'Manor Door' decoration is declared on the manorGround
+    // side (one side per edge). No contract cell disturbed: [3,8] was bare alley
+    // floor, clear of every procession/kneeler/archer/banner/lore/item/beat/scatter.
+    { id: 'cv-to-manor', at: [3, 8], to: 'manor-ground', pair: 'manor-door' },
     // The sealed east arch into the Drop-2 salt-road. Its `greatervael` lock is
     // satisfiable, but the target is authored-but-unbuilt (FUTURE_ZONE_IDS), so
     // it reads as a sealed arch — never a live transition this drop.

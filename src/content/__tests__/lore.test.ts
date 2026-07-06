@@ -24,7 +24,7 @@ const base = loreEntries.filter(([, e]) => !e.ngOnly);
 const ng = loreEntries.filter(([, e]) => e.ngOnly);
 
 describe('LORE content', () => {
-  it('writes 61 placed base inscriptions + 8 NG+ inscriptions (69 total)', () => {
+  it('writes 63 placed base inscriptions + 8 NG+ inscriptions (71 total)', () => {
     // 25 castle-campaign base entries + the 5 Gate Fields inscriptions (Task 9)
     // + the 5 Ashen Forest N inscriptions (Task 10) + the 5 Cinder Village
     // inscriptions (Task 11) + the 4 Pilgrim's Descent inscriptions (Task 12)
@@ -33,11 +33,12 @@ describe('LORE content', () => {
     // 2 Hall Barracks / Act I) + the 2 Keep Chapel inscriptions (Task 5, Act II
     // — Queen Maren's last vigil) + the 2 Watchtower inscriptions (Task 6, Act I
     // — the field-watch's muster + the roof-walk tally) + the 3 Sunken Chapel
-    // inscriptions (Task 7, Act II — the queen's walk: 2 nave + 1 crypt) — the
-    // lore warns, not only mourns.
-    expect(base.length).toBe(61);
+    // inscriptions (Task 7, Act II — the queen's walk: 2 nave + 1 crypt) + the 2
+    // Burnt Manor inscriptions (Task 8, Act II — the burning: 1 ground + 1 gallery)
+    // — the lore warns, not only mourns.
+    expect(base.length).toBe(63);
     expect(ng.length).toBe(8);
-    expect(loreEntries.length).toBe(69);
+    expect(loreEntries.length).toBe(71);
   });
 
   it('every entry has a real title and body (no leftover placeholders)', () => {

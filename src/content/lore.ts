@@ -307,6 +307,21 @@ export const LORE: Record<string, LoreEntry> = {
     body: 'Beneath the chapel the vigil laid its own — the ones who guttered before the ride, and were kept off the roll of the fallen because they had never left to fall. Queen Maren came down here once, at the very end, and set a thing on the lowest slab: not a body, the keeper wrote, but a weight she would not carry up again. The dark has taken the shape of it since. Do not bring your brand near what stirs in the corner — it has waited a long time to be counted, and cannot tell your fire from hers.',
   },
 
+  // ─── WORLD EXPANSION v1.2 — THE BURNT MANOR (Task 8, Act II) ───────────
+  // The fire-gutted tithe-hall on the Cinder Village plaza, and its burnt gallery.
+  // Act II's fire-and-mercy voice carried to the villagers who met the same choice
+  // the Queen met: the warmer mercy (the fire, taken while it was still theirs) or
+  // the colder one (kneeling to be counted, and hollowing). Turned forward-dread —
+  // the count, and the choice, are coming for the last knight too.
+  'act2-manor-a': {
+    title: 'The Barred Hall',
+    body: 'This was the tithe-hall of Cinder, where the village was called in to be counted and stripped of its last embers. When the collectors came for the final count — the one that leaves the counted hollow — the folk gathered here would not kneel to it. They barred the doors from within, banked the hearth to a pyre, and took the fire while it was still theirs to take. One would not: it knelt by the warmth to be tallied, and kneels there yet in the ash. Keep your brand low as you pass — it can no longer tell your flame from the one that freed the others.',
+  },
+  'act2-manor-b': {
+    title: 'The Gallery Rail',
+    body: "The fire ate the gallery floor first, so the hall where they chose shows through the gaps at your feet. The last of them climbed here — not to flee the flame but to find the nerve to walk down into it — and stood at this rail deciding while the boards charred beneath. Those who chose in time burned, and did not hollow. Those who only stood and weighed it are the ones still here, thin as smoke at the rail's edge. Do not stop to decide as they did: the weighing is the hollowing, and yours is already well begun.",
+  },
+
   // ─── NG+ (T16): the recontextualisations. Defined now, placed later. ────
   'ng-queen-knew': {
     ngOnly: true,

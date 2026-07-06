@@ -23,7 +23,10 @@ export type ZoneId =
   | 'tower-upper'
   // --- World Expansion v1.2 — the Sunken Chapel, Ashen Forest N (Task 7) ---
   | 'chapel-nave'
-  | 'chapel-crypt';
+  | 'chapel-crypt'
+  // --- World Expansion v1.2 — the Burnt Manor, Cinder Village (Task 8) ---
+  | 'manor-ground'
+  | 'manor-upper';
 
 export type EnemyKind = 'soldier' | 'archer' | 'wraith' | 'forsworn' | 'hound' | 'kneeler';
 
