@@ -41,6 +41,8 @@ import { clearSave, greaterVaelCheckpoint, loadGame, saveGame, secondVigilSave }
 import type { SaveData } from './save/save';
 import { VisionPlayer } from './engine/VisionPlayer';
 import type { GhostSprite } from './engine/VisionPlayer';
+import { EchoSceneSystem } from './engine/EchoScene';
+import { ECHOES } from './content/echoes';
 import { visionForZone, GV_VISION_HAG } from './content/visions';
 import { kitPieceUrl, loadKitPieces } from './world/assets';
 import { createBrandHud } from './ui/brandHud';
@@ -366,6 +368,11 @@ async function startScene(): Promise<void> {
   );
   // Far-side doors permanently unbarred (persisted, additive); seeded from save.
   const doorsOpened = new Set<string>(save?.doorsOpened ?? []);
+  // Echo scenes witnessed this run (world-expansion v1.2, Task 3; persisted,
+  // additive). Seeded from save; the EchoSceneSystem appends via `onWitness`,
+  // and every checkpoint banks it. Empty in NG+ (secondVigilSave drops it) ⇒
+  // every echo re-arms.
+  const echoesWitnessed = new Set<string>(save?.echoesWitnessed ?? []);
 
   // --- Task 5: the Hag's ember cap + the bargains struck --------------------
   // The brand's rekindle CEILING reads `emberCap`; a tithe lowers it, persisting
@@ -517,6 +524,8 @@ async function startScene(): Promise<void> {
         }),
         // Far-side doors unbarred for good (world-expansion v1.2, Task 1).
         doorsOpened: [...doorsOpened],
+        // Echo scenes witnessed this run (world-expansion v1.2, Task 3).
+        echoesWitnessed: [...echoesWitnessed],
       };
       saveGame(data);
     },
@@ -820,6 +829,108 @@ async function startScene(): Promise<void> {
       );
     }
   }
+
+  // --- Task 3: Echo scenes (silent apparition replays) renderer adapter -----
+  // Pooled ghost meshes, one pool per rig kind, reused across scenes and zones
+  // (hidden when idle). Rig → look: king = soldier rig + crown cone + pale tint;
+  // queen = kneeler rig + pale tint; knight = soldier rig untinted; the base
+  // rigs (soldier/archer/kneeler) reuse the vision-ghost material approach. The
+  // registry (src/content/echoes) ships EMPTY this task, so no scene ever fires,
+  // no mesh is ever built, and the PS1 byte-pin stays green — the wiring is live
+  // and inert until Task 9 authors the seven scenes.
+  const ECHO_PALE_TINT = 0xd8dcf0; // cold, faded — royalty (king/queen)
+  const ECHO_WARM_TINT = 0xffe6b0; // the warm apparition gold (everyone else)
+  const ECHO_SIGIL_PULSE = 0.3; // gentle sigil glow while a memory plays
+  const echoPools = new Map<string, THREE.Object3D[]>();
+  /** Set true for the frame by the EchoSceneSystem's brandPulse dep whenever a
+   *  scene is live; composited into the HUD sigil pulse (never touches Brand). */
+  let echoSceneLive = false;
+
+  /** Kit piece backing a rig: royalty/knight ride the warrior, queen/kneeler
+   *  the robed statue-knight, archer its own skeleton. */
+  function echoRigPiece(rig: string): GhostSprite['piece'] {
+    if (rig === 'archer') return 'skeleton-archer';
+    if (rig === 'queen' || rig === 'kneeler') return 'statue-knight';
+    return 'skeleton-warrior'; // soldier, king, knight
+  }
+
+  /** Build one apparition mesh for a rig: the spectral ghost material (additive,
+   *  transparent, never occluding), a pale tint for royalty, a crown cone for
+   *  the king. Not billboarded — echoes hold their authored facing. */
+  function echoRigMesh(rig: string): THREE.Object3D {
+    const root = ghostTemplate(echoRigPiece(rig));
+    root.scale.setScalar(ENEMY_SCALE);
+    const tint = rig === 'king' || rig === 'queen' ? ECHO_PALE_TINT : ECHO_WARM_TINT;
+    root.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.frustumCulled = false; // skinned bounds don't follow the bones
+      const src = mesh.material as THREE.Material | THREE.Material[];
+      const mat = (Array.isArray(src) ? src[0] : src).clone() as THREE.MeshStandardMaterial;
+      mat.transparent = true;
+      mat.depthWrite = false; // a memory, never occludes the present
+      mat.blending = THREE.AdditiveBlending;
+      mat.color.setHex(tint);
+      if (mat.emissive) mat.emissive.setHex(0x2a2a34);
+      mesh.material = mat;
+    });
+    if (rig === 'king') {
+      const crownMat = new THREE.MeshStandardMaterial({
+        color: ECHO_PALE_TINT,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      });
+      const crown = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.28, 6), crownMat);
+      crown.position.y = 2.6; // model-space head; scaled with the root
+      root.add(crown);
+    }
+    return root;
+  }
+
+  /** Fade every material under a root to `opacity` (whole-scene envelope). */
+  function setEchoOpacity(root: THREE.Object3D, opacity: number): void {
+    root.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (mesh.isMesh) (mesh.material as THREE.Material).opacity = opacity;
+    });
+  }
+
+  /** Per-frame renderer adapter: place/tint/fade the live apparitions, reusing
+   *  pooled meshes per rig kind and hiding any the current scene doesn't use. */
+  function updateEchoActors(states: ReturnType<EchoSceneSystem['activeActors']>): void {
+    const usedByRig = new Map<string, number>();
+    for (const st of states) {
+      let pool = echoPools.get(st.rig);
+      if (!pool) {
+        pool = [];
+        echoPools.set(st.rig, pool);
+      }
+      const idx = usedByRig.get(st.rig) ?? 0;
+      usedByRig.set(st.rig, idx + 1);
+      let mesh = pool[idx];
+      if (!mesh) {
+        mesh = echoRigMesh(st.rig);
+        pool.push(mesh);
+        scene.add(mesh);
+      }
+      mesh.visible = true;
+      mesh.position.set(st.x, built.groundYAt(st.x, st.z), st.z);
+      mesh.rotation.y = st.facing;
+      setEchoOpacity(mesh, st.opacity);
+    }
+    for (const [rig, pool] of echoPools) {
+      for (let i = usedByRig.get(rig) ?? 0; i < pool.length; i += 1) pool[i].visible = false;
+    }
+  }
+
+  const echoScenes = new EchoSceneSystem(ECHOES, {
+    witnessed: echoesWitnessed,
+    onWitness: (id) => echoesWitnessed.add(id),
+    brandPulse: () => {
+      echoSceneLive = true;
+    },
+  });
 
   const visionPlayer = new VisionPlayer({
     game,
@@ -1335,6 +1446,7 @@ async function startScene(): Promise<void> {
         bargains: hagBargains,
       }),
       doorsOpened: [...doorsOpened], // world-expansion v1.2 (Task 1)
+      echoesWitnessed: [...echoesWitnessed], // world-expansion v1.2 (Task 3)
     });
   }
 
@@ -1642,6 +1754,7 @@ async function startScene(): Promise<void> {
       flags: [...flags],
       ngPlus,
       doorsOpened: [...doorsOpened], // far-side doors unbarred this run (Task 1)
+      echoesWitnessed: [...echoesWitnessed], // echoes witnessed this run (Task 3)
     });
   }
 
@@ -1794,6 +1907,9 @@ async function startScene(): Promise<void> {
   /** Bind all zone-scoped state to the freshly built `built`/`zones.current`. */
   function enterZone(): void {
     activeDef = resolveZone(zones.current);
+    // Task 3: arm this zone's echo scenes (and end any left running in the zone
+    // we just left — an apparition never follows the player through a door).
+    echoScenes.enterZone(zones.current);
     // Exterior zones (Greater Vael) fog into their sky and default to the tuned
     // 16 m dread range; interiors keep the v1 stone-grey haze byte-for-byte.
     const isExterior = activeDef.kind === 'exterior';
@@ -2455,6 +2571,19 @@ async function startScene(): Promise<void> {
         crossingSilhouette?.update(dt, controller.pos);
       }
 
+      // --- Task 3: Echo scenes (silent apparition replays) --------------
+      // Runs in EVERY zone (not just dread-eligible ones): a trigger cell fires
+      // the zone's un-witnessed scene, apparitions fade in/hold/out over the
+      // scene's duration, and the brand sigil glows while a memory plays. Player
+      // control is never touched. Dormant this task — the registry is empty.
+      echoSceneLive = false;
+      {
+        const eRow = Math.floor(controller.pos.z / built.cellM);
+        const eCol = Math.floor(controller.pos.x / built.cellM);
+        echoScenes.update(dt, [eRow, eCol]);
+        updateEchoActors(echoScenes.activeActors());
+      }
+
       // Combat: guard mirrors the held button; latched presses start actions.
       combat.tryGuard(controller.input.guardHeld);
       // A cue fires only when the swing actually starts (tryLight/Heavy true).
@@ -2612,7 +2741,13 @@ async function startScene(): Promise<void> {
       // Composite the false-pulse spoof (finding 4b) over the real pulse via
       // max(), mirroring the desat-stab compositing — a GF-2 crossing throbs the
       // sigil once even with no threat in range, then eases back to the real read.
-      brandHud.setPulse(Math.max(brand.pulse, scareKit.pulseBoost()), brand.blueFlicker);
+      // Task 3: an echo scene throbs the sigil gently while it plays (composited
+      // via the same max() as the false-pulse); 0 whenever no memory is live.
+      const echoPulse = echoSceneLive ? ECHO_SIGIL_PULSE : 0;
+      brandHud.setPulse(
+        Math.max(brand.pulse, scareKit.pulseBoost(), echoPulse),
+        brand.blueFlicker,
+      );
       const target = interactor.nearest(interactables);
       // Walking off the summit stair cancels a pending KEEP confirm.
       if (keepConfirmPending && target?.id !== 'summit-to-throne') keepConfirmPending = false;

@@ -402,3 +402,38 @@ describe('doorsOpened (world-expansion v1.2, Task 1)', () => {
     expect(secondVigilSave(prev, 5).doorsOpened).toBeUndefined();
   });
 });
+
+describe('echoesWitnessed (world-expansion v1.2, Task 3)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('localStorage', makeStorageStub());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('witnessed echoes round-trip through save/load', () => {
+    const data: SaveData = { ...SAMPLE_V2, echoesWitnessed: ['act1-oath', 'act2-burning'] };
+    saveGame(data);
+    expect(loadGame()).toEqual(data);
+    expect(loadGame()?.echoesWitnessed).toEqual(['act1-oath', 'act2-burning']);
+  });
+
+  it('a pre-v1.2 save (no echoesWitnessed) loads clean — absent is valid', () => {
+    saveGame(SAMPLE_V2); // no echoesWitnessed field
+    const loaded = loadGame();
+    expect(loaded).not.toBeNull();
+    expect(loaded?.echoesWitnessed).toBeUndefined(); // load site defaults it to []
+  });
+
+  it('a malformed echoesWitnessed is rejected (never crashes new Set(...))', () => {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ ...SAMPLE_V2, echoesWitnessed: 5 }));
+    expect(loadGame()).toBeNull();
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ ...SAMPLE_V2, echoesWitnessed: [1, 2] }));
+    expect(loadGame()).toBeNull();
+  });
+
+  it('secondVigilSave drops echoesWitnessed — echoes re-arm in NG+', () => {
+    const prev: SaveData = { ...SAMPLE_V2, echoesWitnessed: ['act1-oath'] };
+    expect(secondVigilSave(prev, 5).echoesWitnessed).toBeUndefined();
+  });
+});

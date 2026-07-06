@@ -56,6 +56,14 @@ interface SaveDataBase {
    * site). Second Vigil drops it (the castle re-seals — far-side doors re-bar).
    */
   doorsOpened?: string[];
+  /**
+   * Echo-scene ids already witnessed this run (world-expansion v1.2, Task 3 —
+   * see `engine/EchoScene.ts`). OPTIONAL + additive: absent on every pre-v1.2
+   * save ⇒ no apparition has played yet (a fresh `[]` at the load site). Second
+   * Vigil DROPS it (like `doorsOpened`) so every echo re-arms in NG+ — the sole
+   * replay condition (scenes are otherwise one-shot per run).
+   */
+  echoesWitnessed?: string[];
 }
 
 /**
@@ -124,7 +132,9 @@ function isSaveData(v: unknown): v is SaveData {
     isDreadSave(o.greaterVael) &&
     // `doorsOpened` (v1.2) is optional + additive: absent is valid; if present
     // it must be a string[] (a malformed one can't crash `new Set(...)`).
-    (o.doorsOpened === undefined || isStringArray(o.doorsOpened))
+    (o.doorsOpened === undefined || isStringArray(o.doorsOpened)) &&
+    // `echoesWitnessed` (v1.2, Task 3) — same optional + additive contract.
+    (o.echoesWitnessed === undefined || isStringArray(o.echoesWitnessed))
   );
 }
 
@@ -296,5 +306,7 @@ export function secondVigilSave(prev: SaveData | null, maxEmbers: number): SaveD
     visionsSeen: prev?.visionsSeen ?? [],
     ngPlus: true, // second — and every later — Vigil
     // greaterVael dropped — the tithed ember cap restores to the full brand.
+    // doorsOpened + echoesWitnessed intentionally DROPPED (absent): far-side
+    // doors re-bar and every echo scene re-arms — NG+ is the only replay path.
   };
 }
