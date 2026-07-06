@@ -177,3 +177,17 @@ owner playtest 7/7 evening → merge → tag v1.2.0.
 
 Hound pulse-distance cap (dread watch-item) · 5 post-merge nits from v1.1 · localization
 of new text · echo scenes in NG+ variants beyond re-arm.
+
+## Addendum (2026-07-06 night) — SEAMLESS TRAVERSAL (owner directive)
+
+Owner verdict on the built phase: door/stair FADES kill exploration-dread. New binding rule:
+**no blackout/teleport anywhere the player moves; the only allowed treatment is the v1
+instant walk-in transition (verified fade-free, main.ts goThrough `fade = edgeToOpen !==
+undefined`).** Doors become physical: E swings the panel open (shortcutGate swing
+precedent), the gate cell reverts to a walk-in cell, the player WALKS through. Opened
+doors persist open for the run. Far-side barring unchanged. The four floor-pairs merge
+into single tall banded zones (watchtower, great-hall+gallery mezzanine, burnt manor,
+sunken chapel) — continuous stairs, stair-doors deleted; under-mezzanine space reads
+solid (arcade), crypt sinks beside-not-under (accepted trade-offs). Deleted zone ids get
+save-load aliases (owner's live save must survive). v1.2.0 tag HELD until this lands +
+owner playtest.
