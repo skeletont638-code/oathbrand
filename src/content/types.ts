@@ -15,7 +15,9 @@ export type ZoneId =
   | 'salt-road'
   // --- World Expansion v1.2 — the keep grows (Task 4): the keep's upper floors ---
   | 'hall-gallery'
-  | 'hall-barracks';
+  | 'hall-barracks'
+  // --- World Expansion v1.2 — the keep's chapel (Task 5) ---
+  | 'keep-chapel';
 
 export type EnemyKind = 'soldier' | 'archer' | 'wraith' | 'forsworn' | 'hound' | 'kneeler';
 

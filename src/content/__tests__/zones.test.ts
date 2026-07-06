@@ -89,10 +89,16 @@ describe('zone registry', () => {
 
   it('registers the keep\'s upper floors — the Hall Gallery + Hall Barracks (Task 4)', () => {
     // World Expansion v1.2: the keep grows upward (gallery) and outward
-    // (barracks). Eleven prior zones + the two keep floors = 13.
+    // (barracks).
     expect(ZONES['hall-gallery']).toBeDefined();
     expect(ZONES['hall-barracks']).toBeDefined();
-    expect(Object.keys(ZONES)).toHaveLength(13);
+  });
+
+  it('registers the keep chapel (Task 5), the phase\'s postern-payoff room', () => {
+    // World Expansion v1.2: the chapel off the Ramparts (the raised altar + the
+    // kneeler). Eleven prior zones + the two keep floors + the chapel = 14.
+    expect(ZONES['keep-chapel']).toBeDefined();
+    expect(Object.keys(ZONES)).toHaveLength(14);
   });
 
   it('zoneOrThrow returns every registered zone (the campaign is complete)', () => {

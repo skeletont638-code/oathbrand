@@ -261,6 +261,20 @@ export const LORE: Record<string, LoreEntry> = {
     body: 'Here the vigil was armed and here it swore: I burn that Vael need not. The stone by the door is chipped where a hundred gauntlets struck it to seal the words. The last hand to strike it struck twice — once to swear, and once, much later, to take the swearing back. Only the first blow was ever heard.',
   },
 
+  // ─── WORLD EXPANSION v1.2 — THE KEEP CHAPEL (Task 5, Act II) ───────────
+  // The vigil's chapel off the Ramparts: the raised altar, the pews, the hollow
+  // knelt at the altar-step. Act II's voice — Queen Maren's last vigil and the
+  // colder mercy she was granted — turned forward-dread: what knelt here, and
+  // what walks the halls above, are the same choice met from two sides.
+  'act2-chapel-a': {
+    title: "The Queen's Kneeler",
+    body: 'Here Queen Maren kept the last vigil, alone, while the sworn rode out to the cliff of embers. She did not pray for their return — the lending-rite had already shown her they would not come — but for the will to let them go. The kneeler before the altar is worn to the shape of her. Someone kneels there still, and does not lift its head for prayer. Dim your brand before you pass it.',
+  },
+  'act2-chapel-b': {
+    title: 'The Chancel Stone',
+    body: "Cut into the floor before the altar, in the Queen's own hand: I asked the flame for a mercy, and was granted a colder one. She set down nowhere which mercy she meant, nor which she was given — only that the two were not the same. The difference walks the halls above you now, wearing the faces of men who once knelt where you kneel.",
+  },
+
   // ─── NG+ (T16): the recontextualisations. Defined now, placed later. ────
   'ng-queen-knew': {
     ngOnly: true,

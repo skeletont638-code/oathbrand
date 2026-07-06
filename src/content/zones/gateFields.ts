@@ -29,7 +29,7 @@ import type { ZoneDef } from '../../world/zoneDef';
 export const GATE_FIELDS: ZoneDef = {
   id: 'gate-fields',
   grid: [
-    '#######11#######', // 0  N gate 11 [0,7],[0,8] → ashen-gate (postern)
+    '####5##11#######', // 0  N gate 11 [0,7],[0,8] → ashen-gate · gate 5 [0,4] → undercroft (the Postern, far-side barred)
     '#t,,,,,pp,,,,,t#', // 1
     '#,,,t,,pp,,,,,,#', // 2  +t NW dead-quadrant relief (realism density pass)
     '#,,,,t,pp,t,,,,#', // 3
@@ -119,6 +119,12 @@ export const GATE_FIELDS: ZoneDef = {
   ],
   doors: [
     { id: 'gf-to-gate', at: [0, 7], to: 'ashen-gate', lock: 'greatervael', pair: 'gate-fields-postern' },
+    // World Expansion v1.2 (Task 5). The far (Fields) end of THE POSTERN up into
+    // the castle Undercroft. The undercroft defines the door (far-side barred),
+    // so this end carries only the DoorDef; it stays sealed until the keeper
+    // opens it from inside the crypt, then reads as an open sally-port in the
+    // tree-line near the castle. Not a route the reachability guard needs.
+    { id: 'gf-to-undercroft', at: [0, 4], to: 'undercroft', pair: 'undercroft-postern' },
     { id: 'gf-to-village', at: [6, 0], to: 'cinder-village', pair: 'gf-village' },
     { id: 'gf-to-forest', at: [6, 15], to: 'ashen-forest-n', pair: 'gf-forest' },
     { id: 'gf-to-descent', at: [13, 7], to: 'pilgrims-descent', pair: 'gf-descent' },

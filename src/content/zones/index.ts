@@ -21,6 +21,7 @@ import { CINDER_VILLAGE } from './cinderVillage';
 import { PILGRIMS_DESCENT } from './pilgrimsDescent';
 import { HALL_GALLERY } from './hallGallery';
 import { HALL_BARRACKS } from './hallBarracks';
+import { KEEP_CHAPEL } from './keepChapel';
 
 /** Every built zone, by id. The seven-zone castle campaign (T11–T16) plus the
  *  first Greater Vael exteriors — the Gate Fields hub (Task 9), the Ashen
@@ -43,6 +44,8 @@ export const ZONES: Partial<Record<ZoneId, ZoneDef>> = {
   // ringing the Great Hall (shortcut loop #2 → ramparts) and the barracks off it.
   'hall-gallery': HALL_GALLERY,
   'hall-barracks': HALL_BARRACKS,
+  // World Expansion v1.2 (Task 5) — the keep's chapel, off the Ramparts.
+  'keep-chapel': KEEP_CHAPEL,
 };
 
 /**

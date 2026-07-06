@@ -10,12 +10,22 @@
  * false wall in the west (door 5) hides the Queen's Garden — sealed until
  * NG+ reveals it (T16); the brand flickers blue as you near it.
  *
- * Grid is the authored layout from the plan — copied faithfully. Letter
- * tiles: `W` marks the wraith haunt (three spawns placed below, one on the
- * cell), `K` the Gatekey pedestal (both plain floor). Annotations honored:
- * door 1 → great-hall (broken stair, pairs the hall's drop) · door 5 →
- * queens-garden (illusory, sealed) · banner (vision 3, T14) · 4 lore ·
- * 3 wraiths (NG+ 4) · 2 torches, WEST half only · ambient floor 0.06.
+ * World Expansion v1.2 (Task 5) adds ONE gate cell — THE POSTERN. Gate '2' on
+ * the south wall [7,3] reads as a low tunnel mouth in the crypt, and the
+ * undercroft side DEFINES the door: `{ gate: '2', label: 'Postern Gate',
+ * locked: 'far-side' }`. It is a sally-port OUT into the Gate Fields — passable
+ * from the crypt, but BARRED from the Fields until you first open it from inside
+ * (then permanently, persisted). So Vael lets you out before it lets you in: a
+ * lost keeper deep in the dark can surface back outside, but the way is a
+ * shortcut earned from within, never a route the reachability guard leans on
+ * (its one-way BFS reaches the Fields the front way regardless).
+ *
+ * Grid is otherwise the authored layout — copied faithfully. Letter tiles: `W`
+ * marks the wraith haunt (three spawns placed below, one on the cell), `K` the
+ * Gatekey pedestal (both plain floor). Annotations honored: door 1 → great-hall
+ * (broken stair, pairs the hall's drop) · door 5 → queens-garden (illusory,
+ * sealed) · door 2 → gate-fields (the Postern) · banner (vision 3, T14) · 4 lore
+ * · 3 wraiths (NG+ 4) · 2 torches, WEST half only · ambient floor 0.06.
  */
 import type { ZoneDef } from '../../world/zoneDef';
 
@@ -29,7 +39,7 @@ export const UNDERCROFT: ZoneDef = {
     '#....#.#.....#',
     '#.B..#.#..####',
     '#....1.#...S.#',
-    '##############',
+    '###2##########', // S wall — gate '2' [7,3] → gate-fields (THE POSTERN)
   ],
   cell: 2,
   // W = wraith haunt, K = Gatekey pedestal — both walkable floor (spawns and
@@ -84,7 +94,15 @@ export const UNDERCROFT: ZoneDef = {
     // dropping in lands the player here and climbing out lands them at the
     // hall's door 2 (great-hall's 'hall-to-undercroft').
     { id: 'undercroft-stair', at: [6, 5], to: 'great-hall', pair: 'hall-undercroft' },
+    // World Expansion v1.2 (Task 5). THE POSTERN out into the Gate Fields. This
+    // (defining) side is always passable; the Fields side is barred until the
+    // edge is first opened from here — see gateDoors below.
+    { id: 'uc-postern', at: [7, 3], to: 'gate-fields', pair: 'undercroft-postern' },
   ],
+  // The Postern decoration lives on THIS side of the edge (one side per edge):
+  // an iron-barred sally-port that opens outward only — barred from the Fields
+  // until first passed from the crypt (`locked: 'far-side'`; persisted).
+  gateDoors: [{ gate: '2', label: 'Postern Gate', locked: 'far-side' }],
   ambience: ['amb-crypt-drip', 'amb-wraith-whisper'],
   ambientFloor: 0.06,
   keyLightIntensity: 0, // the faint interior directional must NOT defeat the wraith showcase (spec §3)

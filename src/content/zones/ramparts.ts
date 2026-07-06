@@ -25,17 +25,22 @@
  * · 2 archers + 1 soldier (NG+ 3 archers + 1) · banner.glb ×6 along the south
  * wall · wind ambience.
  *
- * World Expansion v1.2 (Task 4) adds ONE gate cell — the ONLY change here (grid
- * otherwise byte-identical): gate '2' on the north wall [0,17], the far end of
- * shortcut loop #2 into the Hall Gallery. The gallery declares the unlocked
- * 'Gallery Door' decoration on its side; this file carries only the DoorDef.
+ * World Expansion v1.2 (Task 4) adds ONE gate cell — gate '2' on the north wall
+ * [0,17], the far end of shortcut loop #2 into the Hall Gallery. The gallery
+ * declares the unlocked 'Gallery Door' decoration on its side; this file carries
+ * only the DoorDef.
+ *
+ * World Expansion v1.2 (Task 5) adds ONE more gate cell (grid otherwise
+ * byte-identical): gate '3' on the north (inner, keep-side) wall [0,8], a door
+ * off the wall-walk into the Keep Chapel. The chapel declares the unlocked
+ * 'Chapel Door' decoration on its side; this file carries only the DoorDef.
  */
 import type { ZoneDef } from '../../world/zoneDef';
 
 export const RAMPARTS: ZoneDef = {
   id: 'ramparts',
   grid: [
-    '#################2##', // gate '2' [0,17] → hall-gallery (shortcut loop #2)
+    '########3########2##', // gate '3' [0,8] → keep-chapel · gate '2' [0,17] → hall-gallery
     '#S1..........#.....#',
     '#...#####....#.#5#.#',
     '#...#...#....#.....#',
@@ -99,6 +104,10 @@ export const RAMPARTS: ZoneDef = {
     // #2 up into the Hall Gallery; unlocked, so the keep is a ring from the
     // first visit. The gallery declares the 'Gallery Door' decoration.
     { id: 'ramparts-to-gallery', at: [0, 17], to: 'hall-gallery', pair: 'gallery-ramparts' },
+    // World Expansion v1.2 (Task 5). Chapel Door — off the wall-walk into the
+    // Keep Chapel; unlocked, so it opens from the first visit. The chapel declares
+    // the 'Chapel Door' decoration on its own side of the edge.
+    { id: 'ramparts-to-chapel', at: [0, 8], to: 'keep-chapel', pair: 'chapel-ramparts' },
   ],
   ambience: ['amb-rampart-wind', 'amb-banner-cloth'],
   ngPlus: {

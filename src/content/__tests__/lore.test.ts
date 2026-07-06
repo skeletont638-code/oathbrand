@@ -24,16 +24,17 @@ const base = loreEntries.filter(([, e]) => !e.ngOnly);
 const ng = loreEntries.filter(([, e]) => e.ngOnly);
 
 describe('LORE content', () => {
-  it('writes 54 placed base inscriptions + 8 NG+ inscriptions (62 total)', () => {
+  it('writes 56 placed base inscriptions + 8 NG+ inscriptions (64 total)', () => {
     // 25 castle-campaign base entries + the 5 Gate Fields inscriptions (Task 9)
     // + the 5 Ashen Forest N inscriptions (Task 10) + the 5 Cinder Village
     // inscriptions (Task 11) + the 4 Pilgrim's Descent inscriptions (Task 12)
     // + the 6 forward-dread inscriptions (P4 dread pass) + the 4 keep-floor
     // inscriptions (World Expansion v1.2, Task 4 — 2 Hall Gallery / Act III,
-    // 2 Hall Barracks / Act I) — the lore now warns, not only mourns.
-    expect(base.length).toBe(54);
+    // 2 Hall Barracks / Act I) + the 2 Keep Chapel inscriptions (Task 5, Act II
+    // — Queen Maren's last vigil) — the lore now warns, not only mourns.
+    expect(base.length).toBe(56);
     expect(ng.length).toBe(8);
-    expect(loreEntries.length).toBe(62);
+    expect(loreEntries.length).toBe(64);
   });
 
   it('every entry has a real title and body (no leftover placeholders)', () => {
