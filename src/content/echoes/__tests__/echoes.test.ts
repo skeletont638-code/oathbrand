@@ -38,7 +38,7 @@ const CANONICAL_IDS = [
 /** The staging blocks earlier tasks reserved (kept prop-free + test-locked); a
  *  scene in one of these zones must arm ONLY from cells inside its block. */
 const RESERVED_BLOCK: Partial<Record<string, GridPos[]>> = {
-  'tower-upper': [[2, 2], [2, 3], [3, 2], [3, 3]],
+  watchtower: [[2, 2], [2, 3], [3, 2], [3, 3]],
   'manor-ground': [[3, 3], [3, 4], [4, 3], [4, 4]],
   'chapel-nave': [[4, 3], [5, 3], [6, 3], [7, 3]],
   'hall-gallery': [[4, 6], [4, 7], [5, 6], [5, 7]],

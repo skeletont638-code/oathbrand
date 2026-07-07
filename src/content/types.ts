@@ -18,9 +18,10 @@ export type ZoneId =
   | 'hall-barracks'
   // --- World Expansion v1.2 — the keep's chapel (Task 5) ---
   | 'keep-chapel'
-  // --- World Expansion v1.2 — the Gate Fields watchtower (Task 6) ---
-  | 'tower-ground'
-  | 'tower-upper'
+  // --- World Expansion v1.2 — the Gate Fields watchtower (Task 6; the
+  //     tower-ground + tower-upper floor-zones merged into one continuous
+  //     climb in Task 13. The retired ids survive as save aliases, save.ts). ---
+  | 'watchtower'
   // --- World Expansion v1.2 — the Sunken Chapel, Ashen Forest N (Task 7) ---
   | 'chapel-nave'
   | 'chapel-crypt'

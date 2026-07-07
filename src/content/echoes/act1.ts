@@ -11,11 +11,12 @@
  * Exact on-screen orientation is the owner's eyeball (the pooled rigs share a
  * forward axis); these values keep each tableau internally consistent.
  *
- * Cells are authored against the live ZoneDefs (gateFields / towerUpper) and the
+ * Cells are authored against the live ZoneDefs (gateFields / watchtower) and the
  * reservations the earlier tasks test-locked: gate-fields keeps its dense arrays,
  * so the oath stages in the bare clearing '..' cells N of the oath-oak, clear of
- * every prop/enemy/lore/banner/scare; tower-upper's roof block [2,2],[2,3],[3,2],
- * [3,3] is the muster's reserved staging (kept prop-free by Task 6).
+ * every prop/enemy/lore/banner/scare; the watchtower's roof block [2,2],[2,3],[3,2],
+ * [3,3] is the muster's reserved staging (kept prop-free by Task 6, carried through
+ * the Task-13 merge into the single continuous-climb zone).
  */
 import type { EchoSceneDef } from '../../engine/EchoScene';
 
@@ -52,15 +53,16 @@ export const ACT1_OATH: EchoSceneDef = {
 };
 
 /**
- * ACT1-MUSTER — the watchtower roof-walk over the fields. The field-watch gather
- * at the north parapet and look out over the plain as the last host forms up
- * below; one soldier climbs up from the room to join them. Staged on the roof
- * block reserved by Task 6 (kept prop-free); trigger cells sit ON that block, the
- * step onto the parapet from the guardroom stair.
+ * ACT1-MUSTER — the watchtower roof-walk over the fields (now the crown of the
+ * single continuous-climb `watchtower` zone, Task 13). The field-watch gather at
+ * the north parapet and look out over the plain as the last host forms up below;
+ * one soldier climbs up from the upper room to join them. Staged on the roof block
+ * reserved since Task 6 (kept prop-free); trigger cells sit ON that block, the
+ * arrival onto the parapet at the top of the climb.
  */
 export const ACT1_MUSTER: EchoSceneDef = {
   id: 'act1-muster',
-  zone: 'tower-upper',
+  zone: 'watchtower',
   act: 1,
   triggerCells: [
     [2, 2],
@@ -72,10 +74,10 @@ export const ACT1_MUSTER: EchoSceneDef = {
   actors: [
     // The watch at the parapet edge, facing out over the plain (N).
     { rig: 'soldier', at: [1, 2], facing: N },
-    { rig: 'soldier', at: [1, 4], facing: N },
-    { rig: 'archer', at: [2, 4], facing: N },
-    { rig: 'soldier', at: [2, 1], facing: N },
-    // A latecomer climbs up from the guardroom to join the muster.
+    { rig: 'soldier', at: [1, 3], facing: N },
+    { rig: 'archer', at: [2, 1], facing: N },
+    { rig: 'soldier', at: [3, 1], facing: N },
+    // A latecomer climbs up from the upper room to join the muster on the roof.
     { rig: 'soldier', at: [5, 2], facing: N, keyframes: [{ tMs: 7000, at: [3, 4] }] },
   ],
 };

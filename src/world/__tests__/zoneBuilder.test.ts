@@ -501,15 +501,14 @@ describe('ZoneBuilder exterior ground coverage (H1)', () => {
   });
 });
 
-describe('The Watchtower builds through the full path (Task 6)', () => {
-  it('the guardroom (interior) and roof-walk (exterior) both build without throwing', () => {
-    const ground = new ZoneBuilder().build(ZONES['tower-ground']!, fakeAssets());
-    const upper = new ZoneBuilder().build(ZONES['tower-upper']!, fakeAssets());
-    expect(ground.group.children.length).toBeGreaterThan(0);
-    expect(upper.group.children.length).toBeGreaterThan(0);
-    // The exterior roof-walk gets a ground mesh (sky/moon path); the interior does not.
-    expect(meshNamed(upper.group, 'exterior-ground')).toBeDefined();
-    expect(meshNamed(ground.group, 'exterior-ground')).toBeUndefined();
+describe('The Watchtower builds through the full path (Task 6 / merged Task 13)', () => {
+  it('the merged continuous-climb zone builds without throwing', () => {
+    const tower = new ZoneBuilder().build(ZONES['watchtower']!, fakeAssets());
+    expect(tower.group.children.length).toBeGreaterThan(0);
+    // ONE exterior zone (guardroom + stair + roof merged): it gets the sky/moon
+    // ground mesh, and the banded heightGrid raises a terrain skirt for the climb.
+    expect(meshNamed(tower.group, 'exterior-ground')).toBeDefined();
+    expect(meshNamed(tower.group, 'exterior-terrain'), 'the banded climb raises a skirt').toBeDefined();
   });
 
   it('the off-grid tower-shell silhouette lands behind the Gate Fields Tower Door', () => {

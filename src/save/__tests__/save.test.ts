@@ -6,6 +6,8 @@ import {
   migrateV1toV2,
   secondVigilSave,
   greaterVaelCheckpoint,
+  resolveZoneAlias,
+  ZONE_ALIASES,
   SAVE_KEY,
 } from '../save';
 import type { SaveData, SaveDataV1 } from '../save';
@@ -488,5 +490,66 @@ describe('echoesWitnessed (world-expansion v1.2, Task 3)', () => {
   it('secondVigilSave drops echoesWitnessed — echoes re-arm in NG+', () => {
     const prev: SaveData = { ...SAMPLE_V2, echoesWitnessed: ['act1-oath'] };
     expect(secondVigilSave(prev, 5).echoesWitnessed).toBeUndefined();
+  });
+});
+
+describe('zone-id aliases — retired zones survive a merge (world-expansion v1.2, Task 13)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('localStorage', makeStorageStub());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('resolveZoneAlias maps the retired watchtower floor-zones to the merged zone', () => {
+    expect(resolveZoneAlias('tower-ground')).toBe('watchtower');
+    expect(resolveZoneAlias('tower-upper')).toBe('watchtower');
+    // The alias table is exactly the two retired watchtower ids (extensible in T14–16).
+    expect(ZONE_ALIASES).toEqual({ 'tower-ground': 'watchtower', 'tower-upper': 'watchtower' });
+  });
+
+  it('resolveZoneAlias is the identity for a current zone id', () => {
+    expect(resolveZoneAlias('watchtower')).toBe('watchtower');
+    expect(resolveZoneAlias('gate-fields')).toBe('gate-fields');
+    expect(resolveZoneAlias('great-hall')).toBe('great-hall');
+  });
+
+  it("a v2 save resuming in 'tower-upper' loads into 'watchtower' with NO data loss", () => {
+    // The owner's live localStorage may have checkpointed on the roof floor.
+    const legacy: SaveData = {
+      ...SAMPLE_V2,
+      zone: 'tower-upper' as SaveData['zone'],
+      bannerId: 'banner-fields',
+      embers: 2,
+      flags: ['gatekey', 'greater-vael-open'],
+      loreRead: ['act1-tower-a', 'act1-tower-b'],
+      echoesWitnessed: ['act1-muster'],
+    };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(legacy));
+    const loaded = loadGame();
+    expect(loaded).not.toBeNull();
+    expect(loaded!.zone).toBe('watchtower'); // remapped
+    // Every other field survives untouched.
+    expect(loaded!.bannerId).toBe('banner-fields');
+    expect(loaded!.embers).toBe(2);
+    expect(loaded!.flags).toEqual(['gatekey', 'greater-vael-open']);
+    expect(loaded!.loreRead).toEqual(['act1-tower-a', 'act1-tower-b']);
+    expect(loaded!.echoesWitnessed).toEqual(['act1-muster']);
+  });
+
+  it("a v2 save resuming in 'tower-ground' loads into 'watchtower'", () => {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ ...SAMPLE_V2, zone: 'tower-ground' }));
+    expect(loadGame()!.zone).toBe('watchtower');
+  });
+
+  it('a v1 save resuming in a retired zone migrates AND remaps, persisting the resolved id', () => {
+    // The alias is applied before migration, so the write-back stores 'watchtower'.
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ ...SAMPLE, zone: 'tower-upper' }));
+    const loaded = loadGame();
+    expect(loaded!.version).toBe(2); // migrated
+    expect(loaded!.zone).toBe('watchtower'); // remapped
+    // The next read sees the already-resolved id straight from storage.
+    expect(loadGame()!.zone).toBe('watchtower');
+    expect(JSON.parse(localStorage.getItem(SAVE_KEY)!).zone).toBe('watchtower');
   });
 });

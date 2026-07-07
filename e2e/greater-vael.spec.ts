@@ -119,7 +119,7 @@ async function bootInto(page: import('@playwright/test').Page, zone: string): Pr
     .toBe('playing');
 }
 
-test('the Tower Door swings open and you WALK gate-fields → tower-ground, fade-free', async ({ page }) => {
+test('the Tower Door swings open and you WALK gate-fields → watchtower, fade-free', async ({ page }) => {
   await bootInto(page, 'gate-fields');
   // OPEN the decorated Tower Door (gf-to-tower): it SWINGS open — it does NOT
   // teleport you (seamless traversal, T12; the fade is dead).
@@ -129,7 +129,7 @@ test('the Tower Door swings open and you WALK gate-fields → tower-ground, fade
   expect(await page.evaluate(() => (window as unknown as { __oathbrand: WorldHandle }).__oathbrand.zones.current)).toBe('gate-fields');
   // The far-side edge was recorded ON OPEN (persisted, additive doorsOpened).
   const openedIds = await page.evaluate(() => (window as unknown as { __oathbrand: WorldHandle }).__oathbrand.doorsOpened);
-  expect(openedIds.some((id) => id.includes('tower-ground'))).toBe(true);
+  expect(openedIds.some((id) => id.includes('watchtower'))).toBe(true);
   // WALK onto the now-passable door cell → the walk-in path carries you across.
   // The blackout overlay must never rise while the player moves (the fade is dead).
   const peakBlackout = await page.evaluate(() => {
@@ -144,12 +144,13 @@ test('the Tower Door swings open and you WALK gate-fields → tower-ground, fade
     return peak;
   });
   expect(peakBlackout, 'no blackout fade during a door crossing').toBe(0);
-  // The walk-in transition lands the player in tower-ground.
+  // The walk-in transition lands the player in the watchtower (the merged
+  // continuous-climb zone: enter the guardroom, then climb every step to the roof).
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __oathbrand: WorldHandle }).__oathbrand.zones.current), {
       timeout: 10_000,
     })
-    .toBe('tower-ground');
+    .toBe('watchtower');
 });
 
 test('stepping onto the oath trigger cell witnesses the act1-oath echo', async ({ page }) => {

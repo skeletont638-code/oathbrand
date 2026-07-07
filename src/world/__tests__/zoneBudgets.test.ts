@@ -52,20 +52,21 @@ function drawCalls(group: Group): number {
   return n;
 }
 
-/** The nine zones the World Expansion v1.2 content tasks (T4–T8) authored. */
+/** The World Expansion v1.2 interior/height zones (T4–T8). Task 13 merged the
+ *  two watchtower floor-zones (tower-ground + tower-upper) into the single
+ *  `watchtower` continuous-climb zone, so the list is nine → eight. */
 const NEW_ZONES = [
   'hall-gallery',
   'hall-barracks',
   'keep-chapel',
-  'tower-ground',
-  'tower-upper',
+  'watchtower',
   'chapel-nave',
   'chapel-crypt',
   'manor-ground',
   'manor-upper',
 ] as const;
 
-describe('per-zone draw-call budget — the nine new World Expansion zones (Task 10)', () => {
+describe('per-zone draw-call budget — the new World Expansion zones (Task 10)', () => {
   for (const id of NEW_ZONES) {
     it(`${id} builds and holds the ≤100 draw-call budget`, () => {
       const def = ZONES[id];

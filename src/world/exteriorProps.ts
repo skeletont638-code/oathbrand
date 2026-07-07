@@ -134,8 +134,8 @@ export function stumpGeometry(): BufferGeometry {
  * open, crenellated crown (a roof-WALK, not a spire — one merlon is missing for
  * the ruined read). Placed as an OFF-GRID backdrop prop behind the Tower Door in
  * the fields' treeline, so the tower READS from every field cell without being an
- * enterable structure in the exterior grid (the real interior is towerGround /
- * towerUpper). Cheap: ~84 tris, one draw call, vertex-coloured for the flat PS1
+ * enterable structure in the exterior grid (the real interior is the `watchtower`
+ * zone). Cheap: ~84 tris, one draw call, vertex-coloured for the flat PS1
  * look; base at y0 (never floats). Declared CC0 in assets/LICENSES.md. */
 export function towerShellGeometry(): BufferGeometry {
   const parts: BufferGeometry[] = [];

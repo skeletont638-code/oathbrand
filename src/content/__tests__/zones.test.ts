@@ -126,10 +126,12 @@ describe('zone registry', () => {
     expect(ZONES['keep-chapel']).toBeDefined();
   });
 
-  it('registers the Gate Fields watchtower — ground + roof-walk (Task 6)', () => {
-    // World Expansion v1.2: the first landscape ruin.
-    expect(ZONES['tower-ground']).toBeDefined();
-    expect(ZONES['tower-upper']).toBeDefined();
+  it('registers the Gate Fields watchtower — one continuous climb (Task 6 / merged Task 13)', () => {
+    // World Expansion v1.2: the first landscape ruin. Task 13 merged the two
+    // floor-zones (tower-ground + tower-upper) into the single `watchtower` zone.
+    expect(ZONES['watchtower']).toBeDefined();
+    expect(ZONES['tower-ground' as ZoneId]).toBeUndefined();
+    expect(ZONES['tower-upper' as ZoneId]).toBeUndefined();
   });
 
   it('registers the Sunken Chapel — nave + crypt (Task 7)', () => {
@@ -139,11 +141,12 @@ describe('zone registry', () => {
   });
 
   it('registers the Burnt Manor — ground + upper (Task 8)', () => {
-    // World Expansion v1.2: the third and final landscape ruin. The 18 prior zones
-    // + the manor's gutted hall & burnt gallery = 20.
+    // World Expansion v1.2: the third and final landscape ruin. The 17 prior zones
+    // + the manor's gutted hall & burnt gallery = 19 (Task 13 merged the two
+    // watchtower floor-zones into one, so the registry is 20 → 19).
     expect(ZONES['manor-ground']).toBeDefined();
     expect(ZONES['manor-upper']).toBeDefined();
-    expect(Object.keys(ZONES)).toHaveLength(20);
+    expect(Object.keys(ZONES)).toHaveLength(19);
   });
 
   it('zoneOrThrow returns every registered zone (the campaign is complete)', () => {
@@ -474,23 +477,23 @@ describe('Greater Vael Watcher sightings (finding 2)', () => {
   });
 });
 
-describe('The Watchtower (Task 6) — entry, stair, and roof-walk', () => {
+describe('The Watchtower (Task 6 / merged Task 13) — one continuous climb', () => {
   const fields = zoneOrThrow('gate-fields');
-  const ground = zoneOrThrow('tower-ground');
-  const upper = zoneOrThrow('tower-upper');
+  const tower = zoneOrThrow('watchtower');
 
-  it('the Tower Door pairs both ways between the Gate Fields and the guardroom', () => {
+  it('the Tower Door pairs both ways between the Gate Fields and the watchtower', () => {
     const gfToTower = fields.doors.find((d) => d.id === 'gf-to-tower');
-    const towerToFields = ground.doors.find((d) => d.id === 'tower-ground-to-fields');
+    const towerToFields = tower.doors.find((d) => d.id === 'watchtower-to-fields');
     expect(gfToTower, 'gate-fields is missing the gf-to-tower door').toBeDefined();
-    expect(towerToFields, 'tower-ground is missing the tower-ground-to-fields door').toBeDefined();
+    expect(towerToFields, 'watchtower is missing the watchtower-to-fields door').toBeDefined();
+    expect(gfToTower!.to).toBe('watchtower');
     expect(gfToTower!.pair).toBe('tower-door');
     expect(towerToFields!.pair).toBe('tower-door');
     expect(gfToTower!.lock, 'the Tower Door is unlocked').toBeUndefined();
     // The new gate cell '6' sits on the fields grid, not on any prior gate digit.
     expect(charAt(fields, [3, 0])).toBe('6');
-    expect(pairedDoor('gate-fields', gfToTower!, ground)?.to).toBe('gate-fields');
-    expect(pairedDoor('tower-ground', towerToFields!, fields)?.to).toBe('tower-ground');
+    expect(pairedDoor('gate-fields', gfToTower!, tower)?.to).toBe('gate-fields');
+    expect(pairedDoor('watchtower', towerToFields!, fields)?.to).toBe('watchtower');
   });
 
   it('the new Tower Door gate does not disturb any Gate Fields contract cell', () => {
@@ -507,64 +510,84 @@ describe('The Watchtower (Task 6) — entry, stair, and roof-walk', () => {
     expect(isPlainFloor(fields, [3, 1])).toBe(true);
   });
 
-  it('the Stair Door pairs both ways between the two tower floors', () => {
-    const groundUp = ground.doors.find((d) => d.id === 'tower-ground-to-upper');
-    const upperDown = upper.doors.find((d) => d.id === 'tower-upper-to-ground');
-    expect(groundUp?.pair).toBe('tower-stair');
-    expect(upperDown?.pair).toBe('tower-stair');
-    expect(pairedDoor('tower-ground', groundUp!, upper)?.to).toBe('tower-ground');
-    expect(pairedDoor('tower-upper', upperDown!, ground)?.to).toBe('tower-upper');
+  it('the Stair Door DIES with the merge — the watchtower has exactly one door (to the fields)', () => {
+    // No teleport in traversal: the two floor-zones + their Stair Door fade are
+    // gone; the stair is now a walked heightGrid climb inside one zone.
+    expect(tower.doors).toHaveLength(1);
+    expect(tower.doors[0].to).toBe('gate-fields');
+    expect(tower.doors.some((d) => d.pair === 'tower-stair')).toBe(false);
   });
 
-  it('the guardroom is a dread interior with 3 torches, 1 soldier, 1 Act-I inscription', () => {
-    expect(ground.dreadInterior).toBe(true);
-    expect(ground.kind ?? 'interior').toBe('interior');
-    expect(ground.torches?.length).toBe(3);
-    expect(ground.enemies.filter((e) => e.kind === 'soldier')).toHaveLength(1);
-    expect(ground.lore.map((l) => l.id)).toContain('act1-tower-a');
-    expect(LORE['act1-tower-a']).toBeDefined();
+  it('is ONE exterior (sky/moon) zone — open-air roof, dread native, no Stair-Door fade', () => {
+    // ONE zone, ONE kind: the roof MUST be open air (an interior black ceiling
+    // can't give sky/moon), and exterior is dread-native — the guardroom reads as
+    // a roofless burnt-tower shell (tower-upper precedent). No `dreadInterior`.
+    expect(tower.kind).toBe('exterior');
+    expect(tower.exteriorSky).toBe('field');
+    expect(tower.dreadInterior ?? false).toBe(false);
+    // Masonry is the custom `M` 'wall' letter (ruin-block, NOT a `#` treeline).
+    expect(tower.tiles.M).toBe('wall');
+    for (const row of tower.grid) expect(row.includes('#')).toBe(false);
   });
 
-  it('the roof-walk is an exterior (sky/moon) with a flat-band heightGrid rising to the parapet', () => {
-    // Roof-kind choice (see towerUpper docstring): exterior for the open-air
-    // sky/moon + dread default; FLAT heightGrid bands (PD precedent) so the
-    // undulation never fights the tower floor.
-    expect(upper.kind).toBe('exterior');
-    expect(upper.exteriorSky).toBe('field');
-    expect(upper.heightGrid, 'tower-upper needs a heightGrid').toBeDefined();
-    expect(upper.heightGrid!.length).toBe(upper.grid.length);
-    for (let r = 0; r < upper.heightGrid!.length; r++) {
-      expect(upper.heightGrid![r].length).toBe(upper.grid[r].length);
+  it('the heightGrid is a continuous banded climb: guardroom band 0 → roof band 4', () => {
+    expect(tower.heightGrid, 'watchtower needs a heightGrid').toBeDefined();
+    expect(tower.heightGrid!.length).toBe(tower.grid.length);
+    for (let r = 0; r < tower.heightGrid!.length; r++) {
+      expect(tower.heightGrid![r].length).toBe(tower.grid[r].length);
     }
-    // The room→roof rise auto-generates walkable ramps on the Δ1 seam, and the
-    // roof's band-2 lip drops to the surrounding `~` void as cliff faces.
-    const seams = buildHeightRamps(upper);
-    expect(seams.some((s) => s.kind === 'ramp'), 'the roof-walk step is a ramp').toBe(true);
+    // The bands the climb spans: guardroom floor at 0, roof-walk at 4.
+    const bands = new Set(tower.heightGrid!.join('').split(''));
+    expect(bands.has('0'), 'guardroom band 0').toBe(true);
+    expect(bands.has('4'), 'roof band 4').toBe(true);
+    // The whole climb auto-generates walkable ramps (the stair + the step onto the
+    // roof), and the roof's band-4 lip drops to the surrounding `~` void as cliffs.
+    const seams = buildHeightRamps(tower);
+    expect(seams.some((s) => s.kind === 'ramp'), 'the climb is a run of walkable ramps').toBe(true);
     expect(seams.some((s) => s.kind === 'cliff'), 'the parapet lip drops to void as a cliff').toBe(true);
-    // One archer holds the roof; one Act-I inscription reads the watcher's tally.
-    expect(upper.enemies.filter((e) => e.kind === 'archer')).toHaveLength(1);
-    expect(upper.lore.map((l) => l.id)).toContain('act1-tower-b');
+    // The guardroom is reachable from the roof by walking (flat 2D collision, no
+    // jump): every walkable interior cell floods from the spawn — no band is a wall.
+    const reach = walkableReach(tower);
+    for (const cell of [[9, 3], [7, 2], [5, 1], [2, 3]] as GridPos[]) {
+      expect(reach.has(String(cell)), `climb cell ${String(cell)} unreachable from spawn`).toBe(true);
+    }
+  });
+
+  it('keeps ALL prior content — 3 torches, 1 soldier + 1 archer, both Act-I inscriptions, NG+ wraith', () => {
+    expect(tower.torches?.length).toBe(3);
+    expect((tower.torches?.length ?? 0)).toBeLessThanOrEqual(6);
+    expect(tower.enemies.filter((e) => e.kind === 'soldier')).toHaveLength(1);
+    expect(tower.enemies.filter((e) => e.kind === 'archer')).toHaveLength(1);
+    const loreIds = tower.lore.map((l) => l.id);
+    expect(loreIds).toContain('act1-tower-a'); // the guardroom watch-roster
+    expect(loreIds).toContain('act1-tower-b'); // the upper-room tally-stone
+    expect(LORE['act1-tower-a']).toBeDefined();
+    expect(LORE['act1-tower-b']).toBeDefined();
+    // The Second Vigil keeps the guardroom wraith beside the hollow soldier.
+    expect((tower.ngPlus?.enemies ?? []).filter((e) => e.kind === 'wraith')).toHaveLength(1);
   });
 
   it('reserves the 2×2 muster-echo roof block prop-free (Task 9)', () => {
     const reserved: GridPos[] = [[2, 2], [2, 3], [3, 2], [3, 3]];
     const occupied = new Set<string>([
-      ...upper.props.map((p) => String(p.at)),
-      ...upper.enemies.map((e) => String(e.at)),
-      ...upper.lore.map((l) => String(l.at)),
+      ...tower.props.map((p) => String(p.at)),
+      ...tower.enemies.map((e) => String(e.at)),
+      ...tower.lore.map((l) => String(l.at)),
     ]);
     for (const cell of reserved) {
-      expect(isWalkable(upper, cell), `echo cell ${String(cell)} must be walkable roof`).toBe(true);
+      expect(isWalkable(tower, cell), `echo cell ${String(cell)} must be walkable roof`).toBe(true);
       expect(occupied.has(String(cell)), `echo cell ${String(cell)} must stay prop-free`).toBe(false);
     }
   });
 
-  it('both Tower doors resolve to labelled DoorInstances (Tower Door + Stair Door)', () => {
+  it('the Tower Door resolves to a labelled DoorInstance; the tower Stair Door is gone', () => {
     const byId = resolveDoorInstances(entries.map(([, d]) => d));
     expect(byId.get('gf-to-tower')?.label).toBe('Tower Door');
-    expect(byId.get('tower-ground-to-fields')?.label).toBe('Tower Door');
-    expect(byId.get('tower-ground-to-upper')?.label).toBe('Stair Door');
-    expect(byId.get('tower-upper-to-ground')?.label).toBe('Stair Door');
+    expect(byId.get('watchtower-to-fields')?.label).toBe('Tower Door');
+    // The tower's own stair doors are deleted (the merge killed them); their ids
+    // resolve to nothing. (Other zones keep their own 'Stair Door' labels.)
+    expect(byId.get('tower-ground-to-upper')).toBeUndefined();
+    expect(byId.get('tower-upper-to-ground')).toBeUndefined();
   });
 });
 

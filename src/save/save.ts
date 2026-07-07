@@ -88,6 +88,29 @@ export interface SaveData extends SaveDataBase {
 
 export const SAVE_KEY = 'oathbrand.save.v1';
 
+/**
+ * Zone-id aliases (world-expansion v1.2 seamless traversal). When a floor-pair
+ * merges into one continuous-climb zone, the retired ids may still live in a
+ * player's localStorage `zone` field — the owner's own save must survive the
+ * merge. `loadGame` rewrites `zone` through this table on read (before validation
+ * and migration, so the resolved id is what persists), and any zone the game no
+ * longer knows loads into its surviving replacement with no data loss.
+ *
+ * EXTENSIBLE: Task 13 merged the watchtower (tower-ground + tower-upper → the one
+ * `watchtower` zone). Tasks 14–16 add their own entries here as the hall-gallery,
+ * manor and chapel floor-pairs merge — one line per retired id.
+ */
+export const ZONE_ALIASES: Readonly<Record<string, ZoneId>> = {
+  'tower-ground': 'watchtower',
+  'tower-upper': 'watchtower',
+};
+
+/** Resolve a possibly-retired zone id to the surviving zone (identity for a
+ *  current id). Pure; the single seam every load path routes `zone` through. */
+export function resolveZoneAlias(zone: string): ZoneId {
+  return (Object.hasOwn(ZONE_ALIASES, zone) ? ZONE_ALIASES[zone] : zone) as ZoneId;
+}
+
 /** The full brand — the ember cap a fresh dread ledger defaults to (Task 5).
  *  Mirrors `TUNING.brand.maxEmbers`; kept as a literal so save.ts stays free of
  *  tuning/content imports (the load-site convention: absent ⇒ the full brand). */
@@ -248,6 +271,13 @@ export function loadGame(): SaveData | null {
     // Repair a malformed dread ledger first, so a corrupt block defaults to a
     // fresh ledger rather than sinking the whole save (Task 7).
     const o = repairGreaterVael(parsed as Record<string, unknown>);
+
+    // Rewrite a retired zone id to its surviving replacement BEFORE validation +
+    // migration (Task 13): a save that resumed in tower-ground/tower-upper loads
+    // into the merged `watchtower` zone, and the migration/write-back persists the
+    // resolved id so the next load is already current. Applied in place; a
+    // non-string zone falls through to isSaveData's rejection below.
+    if (typeof o.zone === 'string') o.zone = resolveZoneAlias(o.zone);
 
     // A version-1 payload is migrated to v2 and written back in place, so a
     // beaten-castle save carries into Greater Vael and the next load is already

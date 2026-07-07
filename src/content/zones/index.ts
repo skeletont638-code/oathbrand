@@ -22,8 +22,7 @@ import { PILGRIMS_DESCENT } from './pilgrimsDescent';
 import { HALL_GALLERY } from './hallGallery';
 import { HALL_BARRACKS } from './hallBarracks';
 import { KEEP_CHAPEL } from './keepChapel';
-import { TOWER_GROUND } from './towerGround';
-import { TOWER_UPPER } from './towerUpper';
+import { WATCHTOWER } from './watchtower';
 import { CHAPEL_NAVE } from './chapelNave';
 import { CHAPEL_CRYPT } from './chapelCrypt';
 import { MANOR_GROUND } from './manorGround';
@@ -52,10 +51,11 @@ export const ZONES: Partial<Record<ZoneId, ZoneDef>> = {
   'hall-barracks': HALL_BARRACKS,
   // World Expansion v1.2 (Task 5) — the keep's chapel, off the Ramparts.
   'keep-chapel': KEEP_CHAPEL,
-  // World Expansion v1.2 (Task 6) — the Gate Fields watchtower: the ruined
-  // guardroom and the open roof-walk over the fields.
-  'tower-ground': TOWER_GROUND,
-  'tower-upper': TOWER_UPPER,
+  // World Expansion v1.2 (Task 6, merged in Task 13) — the Gate Fields
+  // watchtower: ONE continuous climb from the ruined guardroom up the stair to
+  // the open roof-walk over the fields (the tower-ground + tower-upper floor-
+  // zones and their Stair Door fade are merged into this single banded zone).
+  watchtower: WATCHTOWER,
   // World Expansion v1.2 (Task 7) — the Sunken Chapel off the Ashen Forest road:
   // the half-collapsed nave (the queen's-walk echo room) and the crypt beneath.
   'chapel-nave': CHAPEL_NAVE,
