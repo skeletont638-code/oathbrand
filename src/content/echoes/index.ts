@@ -25,9 +25,11 @@ const ZONE_ACT: ReadonlyMap<string, 1 | 2 | 3> = new Map(ECHOES.map((s) => [s.zo
 /**
  * The banner-kneel memories (Task 9) — one whispered line per act, the three-act
  * story distilled to a breath, shown on kneel at a banner in a zone that carries
- * that act (the Gate Fields = I, the Ashen Gate = II, the Undercroft = III; every
- * other banner stays silent). A whisper, not a system: voice matches the T13
- * inscriptions — an image, then a turn that darkens it.
+ * that act (the Gate Fields = I, the Ashen Gate = II, the Undercroft = III; and,
+ * since Task 14 folded the king-hollows echo into the Great Hall as a mezzanine,
+ * the Great Hall = III too — kneeling at the hub whispers the forgetting that now
+ * stages above it). A whisper, not a system: voice matches the T13 inscriptions —
+ * an image, then a turn that darkens it.
  */
 const ACT_MEMORY: Readonly<Record<1 | 2 | 3, string>> = {
   1: 'They knelt in a field like this one and swore to burn, that Vael need not. The oath outlived every hand that kept it.',

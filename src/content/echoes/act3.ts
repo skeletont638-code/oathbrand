@@ -10,11 +10,14 @@
  * FACING (yaw, radians) — mesh.rotation.y (owner eyeballs the exact axis):
  *   N (−row) = Math.PI · S (+row) = 0 · E (+col) = Math.PI / 2 · W (−col) = −Math.PI / 2
  *
- * Cells are authored against hallGallery / undercroft. The gallery's echo dais
- * [4,6],[4,7],[5,6],[5,7] (the central spine over the wells) is kept prop-free by
- * Task 4 — the king-hollows stages there. The crown-down stages in the undercroft's
- * lit WEST half, clear of the east-half wraith spawns ([2,7],[1,10],[4,10]) and
- * every prop; its inscription (`act3-undercroft-a`) carries the same beat in stone.
+ * Cells are authored against great-hall / undercroft. Task 14 merged the Hall
+ * Gallery into the Great Hall as a mezzanine, so the king-hollows now stages on
+ * the gallery BALCONY: its echo dais [3,20],[3,21],[4,20],[4,21] (at the overlook
+ * rail, band 3) is kept prop/enemy/lore-free by great-hall — the king sets the
+ * crown down at the rail over the hall he can no longer place himself in. The
+ * crown-down stages in the undercroft's lit WEST half, clear of the east-half
+ * wraith spawns ([2,7],[1,10],[4,10]) and every prop; its inscription
+ * (`act3-undercroft-a`) carries the same beat in stone.
  */
 import type { EchoSceneDef } from '../../engine/EchoScene';
 
@@ -24,42 +27,44 @@ const E = Math.PI / 2;
 const W = -Math.PI / 2;
 
 /**
- * ACT3-KING-HOLLOWS — the Hall Gallery spine. King Osric stands at the rail over
- * the hall he ruled, then turns from it, wanders up the spine, and looks back —
- * lost, the crown still on him, the faces below no longer his to know. Two hollow
- * soldiers hold the walkways he no longer recognises; one of the sworn kneels at
- * the overlook where the crown was set. Staged on the reserved echo dais; trigger
- * cells ARE the dais, reached from either walkway across the spine.
+ * ACT3-KING-HOLLOWS — the Great Hall's gallery balcony (band 3). King Osric
+ * stands at the overlook rail above the hall he ruled, then turns from it,
+ * wanders up the walk, and looks back — lost, the crown still on him, the faces
+ * below no longer his to know. Two hollow soldiers hold the walk he no longer
+ * recognises; one of the sworn kneels at the overlook where the crown was set.
+ * Staged on the reserved echo dais at the rail; trigger cells ARE the dais.
+ * (The rail is the balcony's WEST edge (col 20) over the overlook well — W faces
+ * the hall.)
  */
 export const ACT3_KING_HOLLOWS: EchoSceneDef = {
   id: 'act3-king-hollows',
-  zone: 'hall-gallery',
+  zone: 'great-hall',
   act: 3,
   triggerCells: [
-    [4, 6],
-    [4, 7],
-    [5, 6],
-    [5, 7],
+    [3, 20],
+    [3, 21],
+    [4, 20],
+    [4, 21],
   ],
   durationMs: 15000,
   actors: [
-    // Osric: at the rail (looking down into the hall), then turns and drifts up
-    // the spine, then looks back — forgotten.
+    // Osric: at the rail (W, looking down into the hall), then turns and drifts
+    // north up the walk, then looks back — forgotten.
     {
       rig: 'king',
-      at: [5, 7],
-      facing: E,
+      at: [4, 20],
+      facing: W,
       keyframes: [
-        { tMs: 5000, at: [5, 6], facing: N }, // turns from the rail
-        { tMs: 9000, at: [3, 6] }, // wanders up the spine
+        { tMs: 5000, at: [3, 20], facing: N }, // turns from the rail, north up the walk
+        { tMs: 9000, at: [1, 20] }, // wanders up the gallery
         { tMs: 11000, facing: S }, // looks back, lost
       ],
     },
     // A hollow knelt at the overlook where the crown was set down.
-    { rig: 'kneeler', at: [4, 6], facing: E },
-    // Two of the hollowed court, holding the walkways he no longer knows.
-    { rig: 'soldier', at: [2, 6], facing: S },
-    { rig: 'soldier', at: [7, 6], facing: N },
+    { rig: 'kneeler', at: [4, 21], facing: W },
+    // Two of the hollowed court, holding the walk he no longer knows.
+    { rig: 'soldier', at: [1, 21], facing: S },
+    { rig: 'soldier', at: [6, 21], facing: N },
   ],
 };
 

@@ -54,9 +54,12 @@ function drawCalls(group: Group): number {
 
 /** The World Expansion v1.2 interior/height zones (T4–T8). Task 13 merged the
  *  two watchtower floor-zones (tower-ground + tower-upper) into the single
- *  `watchtower` continuous-climb zone, so the list is nine → eight. */
+ *  `watchtower` continuous-climb zone; Task 14 merged the Hall Gallery INTO the
+ *  Great Hall as a mezzanine, so `great-hall` (now a taller, banded hall) takes
+ *  the gallery's slot here — the ≤100-draw-call ceiling is still asserted for the
+ *  bigger hall. */
 const NEW_ZONES = [
-  'hall-gallery',
+  'great-hall',
   'hall-barracks',
   'keep-chapel',
   'watchtower',

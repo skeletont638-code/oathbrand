@@ -13,8 +13,10 @@ export type ZoneId =
   | 'pilgrims-descent'
   // Drop 2 target — authored-but-unbuilt, lives in FUTURE_ZONE_IDS.
   | 'salt-road'
-  // --- World Expansion v1.2 — the keep grows (Task 4): the keep's upper floors ---
-  | 'hall-gallery'
+  // --- World Expansion v1.2 — the keep grows (Task 4): the barracks off the
+  //     Great Hall. The Hall Gallery was folded INTO `great-hall` as a walked
+  //     mezzanine in Task 14 (its faded Stair Door died; the retired
+  //     `hall-gallery` id survives as a save alias, save.ts). ---
   | 'hall-barracks'
   // --- World Expansion v1.2 — the keep's chapel (Task 5) ---
   | 'keep-chapel'

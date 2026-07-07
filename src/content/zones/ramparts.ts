@@ -26,9 +26,10 @@
  * wall · wind ambience.
  *
  * World Expansion v1.2 (Task 4) adds ONE gate cell — gate '2' on the north wall
- * [0,17], the far end of shortcut loop #2 into the Hall Gallery. The gallery
- * declares the unlocked 'Gallery Door' decoration on its side; this file carries
- * only the DoorDef.
+ * [0,17], the far end of shortcut loop #2. Task 14 merged the Hall Gallery into
+ * the Great Hall as a mezzanine, so this gate now pairs to `great-hall` at the
+ * gallery balcony (the 'Gallery Door' decoration is declared on the great-hall
+ * side); this file carries only the DoorDef, its `to` retargeted to great-hall.
  *
  * World Expansion v1.2 (Task 5) adds ONE more gate cell (grid otherwise
  * byte-identical): gate '3' on the north (inner, keep-side) wall [0,8], a door
@@ -100,10 +101,11 @@ export const RAMPARTS: ZoneDef = {
       pair: 'hall-shortcut',
       kick: true,
     },
-    // World Expansion v1.2 (Task 4). Gallery Door — the far end of shortcut loop
-    // #2 up into the Hall Gallery; unlocked, so the keep is a ring from the
-    // first visit. The gallery declares the 'Gallery Door' decoration.
-    { id: 'ramparts-to-gallery', at: [0, 17], to: 'hall-gallery', pair: 'gallery-ramparts' },
+    // World Expansion v1.2 (Task 4, retargeted Task 14). Gallery Door — the far
+    // end of shortcut loop #2, now onto the Great Hall's gallery MEZZANINE
+    // (the Hall Gallery merged into great-hall); unlocked, so the keep is a ring
+    // from the first visit. Great-hall declares the 'Gallery Door' decoration.
+    { id: 'ramparts-to-gallery', at: [0, 17], to: 'great-hall', pair: 'gallery-ramparts' },
     // World Expansion v1.2 (Task 5). Chapel Door — off the wall-walk into the
     // Keep Chapel; unlocked, so it opens from the first visit. The chapel declares
     // the 'Chapel Door' decoration on its own side of the edge.

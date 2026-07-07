@@ -19,7 +19,6 @@ import { GATE_FIELDS } from './gateFields';
 import { ASHEN_FOREST_N } from './ashenForestN';
 import { CINDER_VILLAGE } from './cinderVillage';
 import { PILGRIMS_DESCENT } from './pilgrimsDescent';
-import { HALL_GALLERY } from './hallGallery';
 import { HALL_BARRACKS } from './hallBarracks';
 import { KEEP_CHAPEL } from './keepChapel';
 import { WATCHTOWER } from './watchtower';
@@ -45,9 +44,10 @@ export const ZONES: Partial<Record<ZoneId, ZoneDef>> = {
   'ashen-forest-n': ASHEN_FOREST_N,
   'cinder-village': CINDER_VILLAGE,
   'pilgrims-descent': PILGRIMS_DESCENT,
-  // World Expansion v1.2 (Task 4) — the keep grows upward/outward: the gallery
-  // ringing the Great Hall (shortcut loop #2 → ramparts) and the barracks off it.
-  'hall-gallery': HALL_GALLERY,
+  // World Expansion v1.2 (Task 4, merged in Task 14) — the keep grows outward:
+  // the barracks off the Great Hall. The Hall Gallery is no longer its own zone:
+  // Task 14 folded it into `great-hall` as a walked mezzanine (its faded Stair
+  // Door died; the retired id survives as a save alias, save.ts).
   'hall-barracks': HALL_BARRACKS,
   // World Expansion v1.2 (Task 5) — the keep's chapel, off the Ramparts.
   'keep-chapel': KEEP_CHAPEL,

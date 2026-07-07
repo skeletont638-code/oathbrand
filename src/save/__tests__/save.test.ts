@@ -501,11 +501,33 @@ describe('zone-id aliases — retired zones survive a merge (world-expansion v1.
     vi.unstubAllGlobals();
   });
 
-  it('resolveZoneAlias maps the retired watchtower floor-zones to the merged zone', () => {
+  it('resolveZoneAlias maps every retired floor-zone id to its merged zone', () => {
     expect(resolveZoneAlias('tower-ground')).toBe('watchtower');
     expect(resolveZoneAlias('tower-upper')).toBe('watchtower');
-    // The alias table is exactly the two retired watchtower ids (extensible in T14–16).
-    expect(ZONE_ALIASES).toEqual({ 'tower-ground': 'watchtower', 'tower-upper': 'watchtower' });
+    // Task 14: the Hall Gallery merged INTO the Great Hall as a mezzanine.
+    expect(resolveZoneAlias('hall-gallery')).toBe('great-hall');
+    // The alias table is exactly the retired ids (extensible in T15–16).
+    expect(ZONE_ALIASES).toEqual({
+      'tower-ground': 'watchtower',
+      'tower-upper': 'watchtower',
+      'hall-gallery': 'great-hall',
+    });
+  });
+
+  it("a v2 save resuming in 'hall-gallery' loads into 'great-hall' (Task 14 merge)", () => {
+    // The owner's live localStorage may have checkpointed on the old gallery floor;
+    // it lands in the hall — the closest surviving space — with no data loss.
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ ...SAMPLE_V2, zone: 'hall-gallery' }));
+    expect(loadGame()!.zone).toBe('great-hall'); // remapped
+  });
+
+  it("a v1 save resuming in 'hall-gallery' migrates AND remaps, persisting 'great-hall'", () => {
+    // The alias is applied before migration, so the write-back stores 'great-hall'.
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ ...SAMPLE, zone: 'hall-gallery' }));
+    const loaded = loadGame();
+    expect(loaded!.version).toBe(2); // migrated
+    expect(loaded!.zone).toBe('great-hall'); // remapped
+    expect(JSON.parse(localStorage.getItem(SAVE_KEY)!).zone).toBe('great-hall');
   });
 
   it('resolveZoneAlias is the identity for a current zone id', () => {

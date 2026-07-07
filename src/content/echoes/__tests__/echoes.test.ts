@@ -41,7 +41,9 @@ const RESERVED_BLOCK: Partial<Record<string, GridPos[]>> = {
   watchtower: [[2, 2], [2, 3], [3, 2], [3, 3]],
   'manor-ground': [[3, 3], [3, 4], [4, 3], [4, 4]],
   'chapel-nave': [[4, 3], [5, 3], [6, 3], [7, 3]],
-  'hall-gallery': [[4, 6], [4, 7], [5, 6], [5, 7]],
+  // Task 14: the king-hollows echo moved onto the Great Hall gallery mezzanine
+  // (the Hall Gallery merged into great-hall); the dais rides the overlook rail.
+  'great-hall': [[3, 20], [3, 21], [4, 20], [4, 21]],
 };
 
 /** Grid char at [row, col]; undefined when out of bounds. */
@@ -212,9 +214,16 @@ describe('banner-kneel whisper — rotates by the banner zone act', () => {
     expect(new Set([fields, gate, crypt]).size).toBe(3);
   });
 
+  it('the Great Hall now carries act III (the king-hollows echo merged in, Task 14)', () => {
+    // Task 14 folded the king-hollows echo into the Great Hall (the gallery is a
+    // mezzanine now), so the hub banner whispers the Act-III forgetting that
+    // stages above it. It shares the Act-III line with the Undercroft.
+    expect(bannerMemoryLine('great-hall')).toBe(bannerMemoryLine('undercroft'));
+    expect(bannerMemoryLine('great-hall')).toBeTruthy();
+  });
+
   it('a zone with no echo scene stays silent (undefined)', () => {
-    expect(bannerMemoryLine('great-hall')).toBeUndefined(); // has a banner, no scene
-    expect(bannerMemoryLine('summit')).toBeUndefined();
+    expect(bannerMemoryLine('summit')).toBeUndefined(); // has no scene
     expect(bannerMemoryLine('not-a-zone')).toBeUndefined();
   });
 });

@@ -113,11 +113,12 @@ describe('zone registry', () => {
     expect(ZONES['pilgrims-descent']).toBeDefined();
   });
 
-  it('registers the keep\'s upper floors — the Hall Gallery + Hall Barracks (Task 4)', () => {
-    // World Expansion v1.2: the keep grows upward (gallery) and outward
-    // (barracks).
-    expect(ZONES['hall-gallery']).toBeDefined();
+  it('registers the Hall Barracks; the Hall Gallery is merged into the Great Hall (Task 4 / merged Task 14)', () => {
+    // World Expansion v1.2: the keep grew outward (barracks). Task 14 folded the
+    // gallery into `great-hall` as a walked mezzanine, so it is no longer its own
+    // zone (its faded Stair Door died; the retired id survives as a save alias).
     expect(ZONES['hall-barracks']).toBeDefined();
+    expect(ZONES['hall-gallery' as ZoneId]).toBeUndefined();
   });
 
   it('registers the keep chapel (Task 5), the phase\'s postern-payoff room', () => {
@@ -141,12 +142,12 @@ describe('zone registry', () => {
   });
 
   it('registers the Burnt Manor — ground + upper (Task 8)', () => {
-    // World Expansion v1.2: the third and final landscape ruin. The 17 prior zones
-    // + the manor's gutted hall & burnt gallery = 19 (Task 13 merged the two
-    // watchtower floor-zones into one, so the registry is 20 → 19).
+    // World Expansion v1.2: the third and final landscape ruin. Task 13 merged the
+    // two watchtower floor-zones into one (20 → 19); Task 14 merged the Hall
+    // Gallery into the Great Hall as a mezzanine (19 → 18).
     expect(ZONES['manor-ground']).toBeDefined();
     expect(ZONES['manor-upper']).toBeDefined();
-    expect(Object.keys(ZONES)).toHaveLength(19);
+    expect(Object.keys(ZONES)).toHaveLength(18);
   });
 
   it('zoneOrThrow returns every registered zone (the campaign is complete)', () => {
@@ -806,6 +807,106 @@ describe('The Burnt Manor (Task 8) — entry, hearth vigil, and burnt gallery', 
 describe('Undercroft wraith-showcase guard (realism pass)', () => {
   it('the undercroft zeroes its realism-pass key light (wraith showcase guard)', () => {
     expect(UNDERCROFT.keyLightIntensity).toBe(0);
+  });
+});
+
+describe('The Great Hall gallery mezzanine (Task 14) — the gallery walked, not faded', () => {
+  const hall = zoneOrThrow('great-hall');
+  const ramparts = zoneOrThrow('ramparts');
+
+  it('the Hall Gallery is merged in: hall-gallery is unregistered, its Stair Door is gone', () => {
+    expect(ZONES['hall-gallery' as ZoneId]).toBeUndefined();
+    // No teleport in traversal: the gallery floor-zone + its faded Stair Door are
+    // gone; the stair is now a walked heightGrid climb inside the hall.
+    expect(hall.doors.some((d) => d.id === 'hall-to-gallery')).toBe(false);
+    expect((hall.gateDoors ?? []).some((g) => g.label === 'Stair Door')).toBe(false);
+  });
+
+  it('keeps every v1 hall-floor contract cell (the extension appends, never shifts)', () => {
+    // The statue/banner/spawn and every v1 gate keep their exact cells.
+    expect(hall.props.find((p) => p.kind === 'statue-knight')?.at).toEqual([1, 13]);
+    expect(hall.banner?.at).toEqual([5, 8]);
+    expect(charAt(hall, [8, 9])).toBe('S'); // spawn
+    expect(charAt(hall, [9, 9])).toBe('1'); // ashen-gate
+    expect(charAt(hall, [1, 5])).toBe('2'); // undercroft
+    expect(charAt(hall, [1, 16])).toBe('3'); // ramparts stair
+    expect(charAt(hall, [7, 6])).toBe('4'); // throne
+    expect(charAt(hall, [7, 11])).toBe('5'); // shortcut
+    expect(charAt(hall, [4, 0])).toBe('7'); // barracks
+    expect(charAt(hall, [0, 3])).toBe('#'); // the dead Stair Door gate reverted to wall
+  });
+
+  it('the Gallery Door pairs the mezzanine to the ramparts (the old gallery-ramparts edge)', () => {
+    const hallDoor = hall.doors.find((d) => d.id === 'hall-to-ramparts-gallery');
+    const rampDoor = ramparts.doors.find((d) => d.id === 'ramparts-to-gallery');
+    expect(hallDoor, 'great-hall is missing the mezzanine Gallery Door').toBeDefined();
+    expect(rampDoor?.to, 'the ramparts gate is retargeted from hall-gallery to great-hall').toBe('great-hall');
+    expect(hallDoor!.pair).toBe('gallery-ramparts');
+    expect(rampDoor!.pair).toBe('gallery-ramparts');
+    expect(hallDoor!.lock, 'the Gallery Door is unlocked').toBeUndefined();
+    // The gate '6' sits on the mezzanine, and arrivals land on the balcony (band 3).
+    expect(charAt(hall, [4, 24])).toBe('6');
+    const entry = doorEntry(hall, hallDoor!);
+    const [er, ec] = [Math.floor(entry.z / hall.cell), Math.floor(entry.x / hall.cell)];
+    expect([er, ec]).toEqual([4, 23]);
+    expect(Number(hall.heightGrid![er][ec]), 'the ramparts arrival lands on the mezzanine band').toBe(3);
+    expect(pairedDoor('great-hall', hallDoor!, ramparts)?.to).toBe('great-hall');
+    expect(pairedDoor('ramparts', rampDoor!, hall)?.to).toBe('ramparts');
+  });
+
+  it('the Gallery Door resolves to a labelled DoorInstance on both ends', () => {
+    const byId = resolveDoorInstances(entries.map(([, d]) => d));
+    expect(byId.get('hall-to-ramparts-gallery')?.label).toBe('Gallery Door');
+    expect(byId.get('ramparts-to-gallery')?.label).toBe('Gallery Door');
+  });
+
+  it('the heightGrid is a continuous banded climb: hall floor band 0 → gallery balcony band 3', () => {
+    expect(hall.heightGrid, 'great-hall needs a heightGrid').toBeDefined();
+    expect(hall.heightGrid!.length).toBe(hall.grid.length);
+    for (let r = 0; r < hall.heightGrid!.length; r++) {
+      expect(hall.heightGrid![r].length).toBe(hall.grid[r].length);
+    }
+    const bands = new Set(hall.heightGrid!.join('').split(''));
+    expect(bands.has('0'), 'hall floor band 0').toBe(true);
+    expect(bands.has('3'), 'gallery balcony band 3').toBe(true);
+    const seams = buildHeightRamps(hall);
+    expect(seams.some((s) => s.kind === 'ramp'), 'the grand stair is a run of walkable ramps').toBe(true);
+    expect(seams.some((s) => s.kind === 'cliff'), 'the overlook rail drops to the well as a cliff').toBe(true);
+    // Every mezzanine cell floods from the hall spawn by walking (flat collision,
+    // no jump): the stair mouth, the balcony ends, and the door approach.
+    const reach = walkableReach(hall);
+    for (const cell of [[6, 17], [6, 20], [1, 20], [6, 21], [4, 23]] as GridPos[]) {
+      expect(reach.has(String(cell)), `mezzanine cell ${String(cell)} unreachable from spawn`).toBe(true);
+    }
+  });
+
+  it('relocates ALL gallery content — 4 torches (≤6), 2 soldiers + 1 archer, both Act-III inscriptions, NG+ wraith', () => {
+    expect(hall.torches?.length).toBe(4);
+    expect((hall.torches?.length ?? 0)).toBeLessThanOrEqual(6);
+    // The gallery roster is added on top of the v1 hall roster.
+    expect(hall.enemies.filter((e) => e.kind === 'soldier')).toHaveLength(5); // 3 hall + 2 gallery
+    expect(hall.enemies.filter((e) => e.kind === 'archer')).toHaveLength(2); // 1 hall + 1 gallery
+    const loreIds = hall.lore.map((l) => l.id);
+    expect(loreIds).toContain('act3-gallery-a'); // the king's overlook
+    expect(loreIds).toContain('act3-gallery-b'); // the smooth stone
+    expect(LORE['act3-gallery-a']).toBeDefined();
+    expect(LORE['act3-gallery-b']).toBeDefined();
+    // The Second Vigil keeps a wraith on the hall floor AND one on the gallery spine.
+    expect((hall.ngPlus?.enemies ?? []).filter((e) => e.kind === 'wraith')).toHaveLength(2);
+  });
+
+  it('reserves the 2×2 king-hollows echo dais prop/enemy/lore-free (Task 9 / relocated Task 14)', () => {
+    const reserved: GridPos[] = [[3, 20], [3, 21], [4, 20], [4, 21]];
+    const occupied = new Set<string>([
+      ...hall.props.map((p) => String(p.at)),
+      ...hall.enemies.map((e) => String(e.at)),
+      ...(hall.ngPlus?.enemies ?? []).map((e) => String(e.at)),
+      ...hall.lore.map((l) => String(l.at)),
+    ]);
+    for (const cell of reserved) {
+      expect(isWalkable(hall, cell), `echo cell ${String(cell)} must be walkable balcony`).toBe(true);
+      expect(occupied.has(String(cell)), `echo cell ${String(cell)} must stay clear`).toBe(false);
+    }
   });
 });
 
