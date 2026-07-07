@@ -135,22 +135,26 @@ describe('zone registry', () => {
     expect(ZONES['tower-upper' as ZoneId]).toBeUndefined();
   });
 
-  it('registers the Sunken Chapel — nave + crypt (Task 7)', () => {
-    // World Expansion v1.2: the second landscape ruin.
-    expect(ZONES['chapel-nave']).toBeDefined();
-    expect(ZONES['chapel-crypt']).toBeDefined();
+  it('registers the Sunken Chapel — one walked descent (Task 7 / merged Task 16)', () => {
+    // World Expansion v1.2: the second landscape ruin. Task 16 merged the two
+    // chapel floor-zones (chapel-nave + chapel-crypt) into the single
+    // `sunken-chapel` walked descent. The retired ids survive as save aliases.
+    expect(ZONES['sunken-chapel']).toBeDefined();
+    expect(ZONES['chapel-nave' as ZoneId]).toBeUndefined();
+    expect(ZONES['chapel-crypt' as ZoneId]).toBeUndefined();
   });
 
   it('registers the Burnt Manor — one continuous climb (Task 8 / merged Task 15)', () => {
     // World Expansion v1.2: the third and final landscape ruin. Task 13 merged the
     // two watchtower floor-zones into one (20 → 19); Task 14 merged the Hall
     // Gallery into the Great Hall as a mezzanine (19 → 18); Task 15 merged the two
-    // manor floor-zones (manor-ground + manor-upper) into the single `burnt-manor`
-    // continuous-climb zone (18 → 17). The retired ids survive as save aliases.
+    // manor floor-zones into the single `burnt-manor` climb (18 → 17); Task 16
+    // merged the two chapel floor-zones (chapel-nave + chapel-crypt) into the
+    // single `sunken-chapel` descent (17 → 16). The retired ids survive as aliases.
     expect(ZONES['burnt-manor']).toBeDefined();
     expect(ZONES['manor-ground' as ZoneId]).toBeUndefined();
     expect(ZONES['manor-upper' as ZoneId]).toBeUndefined();
-    expect(Object.keys(ZONES)).toHaveLength(17);
+    expect(Object.keys(ZONES)).toHaveLength(16);
   });
 
   it('zoneOrThrow returns every registered zone (the campaign is complete)', () => {
@@ -595,27 +599,39 @@ describe('The Watchtower (Task 6 / merged Task 13) — one continuous climb', ()
   });
 });
 
-describe('The Sunken Chapel (Task 7) — entry, echo aisle, and crypt', () => {
+describe('The Sunken Chapel (Task 7 / merged Task 16) — one walked descent', () => {
   const forest = zoneOrThrow('ashen-forest-n');
-  const nave = zoneOrThrow('chapel-nave');
-  const crypt = zoneOrThrow('chapel-crypt');
+  const chapel = zoneOrThrow('sunken-chapel');
 
-  it('the Chapel Door pairs both ways between the Ashen Forest and the nave', () => {
-    const afToChapel = forest.doors.find((d) => d.id === 'af-to-chapel');
-    const naveToForest = nave.doors.find((d) => d.id === 'nave-to-forest');
-    expect(afToChapel, 'ashen-forest-n is missing the af-to-chapel door').toBeDefined();
-    expect(naveToForest, 'chapel-nave is missing the nave-to-forest door').toBeDefined();
-    expect(afToChapel!.pair).toBe('chapel-door');
-    expect(naveToForest!.pair).toBe('chapel-door');
-    expect(afToChapel!.lock, 'the Chapel Door is unlocked').toBeUndefined();
-    // The new gate cell '4' sits on the forest N wall, not on any prior gate digit.
-    expect(charAt(forest, [0, 3])).toBe('4');
-    expect(pairedDoor('ashen-forest-n', afToChapel!, nave)?.to).toBe('ashen-forest-n');
-    expect(pairedDoor('chapel-nave', naveToForest!, forest)?.to).toBe('chapel-nave');
+  it('the Sunken Chapel is merged in: chapel-nave/chapel-crypt unregistered, the Crypt Stair is gone', () => {
+    // No teleport in traversal: the two floor-zones + their Crypt Stair fade are
+    // gone; the crypt stair is now a walked heightGrid descent inside one zone.
+    expect(ZONES['chapel-nave' as ZoneId]).toBeUndefined();
+    expect(ZONES['chapel-crypt' as ZoneId]).toBeUndefined();
+    expect(chapel.doors).toHaveLength(1);
+    expect(chapel.doors[0].to).toBe('ashen-forest-n');
+    expect(chapel.doors.some((d) => d.pair === 'chapel-crypt-stair')).toBe(false);
+    expect((chapel.gateDoors ?? []).some((g) => g.label === 'Crypt Stair')).toBe(false);
   });
 
-  it('the new Chapel Door gate does not disturb any Ashen Forest contract cell', () => {
-    // The forest's spawn/spoke-door/banner and every beat/threshold cell keep theirs.
+  it('the Chapel Door pairs both ways between the Ashen Forest and the sunken chapel', () => {
+    const afToChapel = forest.doors.find((d) => d.id === 'af-to-chapel');
+    const chapelToForest = chapel.doors.find((d) => d.id === 'sunken-chapel-to-forest');
+    expect(afToChapel, 'ashen-forest-n is missing the af-to-chapel door').toBeDefined();
+    expect(chapelToForest, 'sunken-chapel is missing the sunken-chapel-to-forest door').toBeDefined();
+    expect(afToChapel!.to, 'the forest gate is retargeted from chapel-nave to sunken-chapel').toBe('sunken-chapel');
+    expect(afToChapel!.pair).toBe('chapel-door');
+    expect(chapelToForest!.pair).toBe('chapel-door');
+    expect(afToChapel!.lock, 'the Chapel Door is unlocked').toBeUndefined();
+    // The forest gate cell '4' is UNCHANGED (retarget only), on the forest N wall.
+    expect(charAt(forest, [0, 3])).toBe('4');
+    expect(pairedDoor('ashen-forest-n', afToChapel!, chapel)?.to).toBe('ashen-forest-n');
+    expect(pairedDoor('sunken-chapel', chapelToForest!, forest)?.to).toBe('sunken-chapel');
+  });
+
+  it('the retarget does not disturb any Ashen Forest contract cell', () => {
+    // The forest's spawn/spoke-door/banner and every beat/threshold cell keep theirs;
+    // only the door DEF target changed (chapel-nave → sunken-chapel).
     expect(charAt(forest, [2, 2])).toBe('S'); // spawn, untouched
     expect(charAt(forest, [1, 0])).toBe('3'); // the fields spoke door
     expect(forest.banner?.at).toEqual([5, 6]); // banner at the fog-line
@@ -630,67 +646,95 @@ describe('The Sunken Chapel (Task 7) — entry, echo aisle, and crypt', () => {
     expect(isWalkable(forest, [1, 3])).toBe(true);
   });
 
-  it('the Crypt Stair pairs both ways between the nave and the crypt', () => {
-    const naveDown = nave.doors.find((d) => d.id === 'nave-to-crypt');
-    const cryptUp = crypt.doors.find((d) => d.id === 'crypt-to-nave');
-    expect(naveDown?.pair).toBe('chapel-crypt-stair');
-    expect(cryptUp?.pair).toBe('chapel-crypt-stair');
-    expect(pairedDoor('chapel-nave', naveDown!, crypt)?.to).toBe('chapel-nave');
-    expect(pairedDoor('chapel-crypt', cryptUp!, nave)?.to).toBe('chapel-crypt');
+  it('is ONE near-black dread interior — the crypt\'s darkest floor wins, the wraith guard holds', () => {
+    // BOTH old halves were dread interiors; the merged zone keeps it. ONE zone ⇒
+    // ONE ambient floor: the crypt's darkest 0.06 wins (the nave was 0.1 — the
+    // descent gets DARKER), and keyLightIntensity 0 is KEPT from the crypt so the
+    // faint interior directional never defeats the wraith showcase.
+    expect(chapel.dreadInterior).toBe(true);
+    expect(chapel.kind ?? 'interior').toBe('interior');
+    expect(chapel.ambientFloor).toBe(0.06); // darkest wins (the Undercroft precedent)
+    expect(chapel.keyLightIntensity).toBe(0); // never defeat the crypt wraith showcase
   });
 
-  it('the nave is a dread interior with a raised altar, 2 lit torches, 2 Act-II inscriptions', () => {
-    expect(nave.dreadInterior).toBe(true);
-    expect(nave.kind ?? 'interior').toBe('interior');
+  it('the heightGrid inverts the height: crypt band 0 below, nave band 2, altar dais band 3', () => {
+    expect(chapel.heightGrid, 'sunken-chapel needs a heightGrid').toBeDefined();
+    expect(chapel.heightGrid!.length).toBe(chapel.grid.length);
+    for (let r = 0; r < chapel.heightGrid!.length; r++) {
+      expect(chapel.heightGrid![r].length).toBe(chapel.grid[r].length);
+    }
+    const bands = new Set(chapel.heightGrid!.join('').split(''));
+    expect(bands.has('0'), 'crypt floor band 0 (the low ground)').toBe(true);
+    expect(bands.has('2'), 'nave floor band 2 (the raised platform)').toBe(true);
+    expect(bands.has('3'), 'altar dais band 3').toBe(true);
+    // The altar step + the two-step descent are all walkable ramps; nothing is a
+    // cliff (the nave and crypt never touch directly — you can only WALK DOWN).
+    const seams = buildHeightRamps(chapel);
+    expect(seams.some((s) => s.kind === 'ramp'), 'the altar step + descent are walkable ramps').toBe(true);
+    expect(seams.some((s) => s.kind === 'cliff'), 'no walk-off cliff — the crypt is reached only by the stair').toBe(false);
+    // Every content cell floods from the nave spawn by walking (flat collision, no
+    // jump): up the altar ramp, down the descent, into the far crypt corner.
+    const reach = walkableReach(chapel);
+    for (const cell of [[1, 3], [3, 3], [5, 6], [5, 7], [5, 8], [10, 10]] as GridPos[]) {
+      expect(reach.has(String(cell)), `chapel cell ${String(cell)} unreachable from spawn`).toBe(true);
+    }
+  });
+
+  it('keeps ALL nave content — raised altar, 2 lit torches + 1 unlit, both Act-II nave inscriptions', () => {
     // The raised altar dais rides one band above the nave; the row2↔row3 seam is
     // the walkable ramp (mechanism A), the `stairs` prop the visible treads.
-    expect(nave.heightGrid, 'chapel-nave needs a heightGrid').toBeDefined();
-    expect(nave.heightGrid!.length).toBe(nave.grid.length);
-    for (let r = 0; r < nave.heightGrid!.length; r++) {
-      expect(nave.heightGrid![r].length).toBe(nave.grid[r].length);
-    }
-    expect(buildHeightRamps(nave).some((s) => s.kind === 'ramp'), 'the altar step is a ramp').toBe(true);
-    // Two LIT torches (the kit's `torches`) flank the altar; the unlit read is a
-    // bare `torch` bracket in `props` (no kit extension), at the collapsed south end.
-    expect(nave.torches?.length).toBe(2);
-    expect(nave.props.filter((p) => p.kind === 'torch')).toHaveLength(1);
-    expect(nave.lore.map((l) => l.id).sort()).toEqual(['act2-nave-a', 'act2-nave-b']);
+    expect(buildHeightRamps(chapel).some((s) => s.kind === 'ramp'), 'the altar step is a ramp').toBe(true);
+    expect(chapel.props.some((p) => p.kind === 'pillar' && String(p.at) === '1,3'), 'the altar block').toBe(true);
+    // The nave inscriptions (the dais front + the chancel stone) both relocated.
+    const loreIds = chapel.lore.map((l) => l.id);
+    expect(loreIds).toContain('act2-nave-a');
+    expect(loreIds).toContain('act2-nave-b');
     expect(LORE['act2-nave-a']).toBeDefined();
     expect(LORE['act2-nave-b']).toBeDefined();
   });
 
-  it('reserves the 4 contiguous aisle cells prop/enemy-free for the queen\'s-walk echo (Task 9)', () => {
+  it('keeps ALL crypt content — the wraith, bones scatter, the crypt inscription', () => {
+    // One brand-wraith holds the crypt's far dark corner (no nave enemies — the
+    // menace is below), sparse bones across the vault floor, the tomb-slab inscription.
+    expect(chapel.enemies.filter((e) => e.kind === 'wraith')).toHaveLength(1);
+    expect((chapel.scatter ?? []).some((s) => s.kind === 'bones')).toBe(true);
+    expect(chapel.lore.map((l) => l.id)).toContain('act2-crypt-a');
+    expect(LORE['act2-crypt-a']).toBeDefined();
+    // The Second Vigil keeps BOTH old floors' extra wraiths (nave pews + crypt bones)
+    // on top of the base crypt wraith — three in NG+ (ngPlus.enemies REPLACES base).
+    expect((chapel.ngPlus?.enemies ?? []).filter((e) => e.kind === 'wraith')).toHaveLength(3);
+  });
+
+  it('torches: 4 LIT (2 altar + 2 crypt stair-foot) + 1 UNLIT bare bracket, under the ≤6 cap', () => {
+    expect(chapel.torches?.length).toBe(4);
+    expect((chapel.torches?.length ?? 0)).toBeLessThanOrEqual(6);
+    // The unlit read is a bare `torch` bracket in `props` (no kit extension), at
+    // the dark collapsed south end.
+    expect(chapel.props.filter((p) => p.kind === 'torch')).toHaveLength(1);
+  });
+
+  it('reserves the 4 contiguous aisle cells prop/enemy/lore-free for the queen\'s-walk echo (Task 9)', () => {
+    // The aisle cells are UNCHANGED by the merge (col 3, rows 4–7).
     const reserved: GridPos[] = [[4, 3], [5, 3], [6, 3], [7, 3]];
     const occupied = new Set<string>([
-      ...nave.props.map((p) => String(p.at)),
-      ...nave.enemies.map((e) => String(e.at)),
-      ...(nave.ngPlus?.enemies ?? []).map((e) => String(e.at)),
-      ...nave.lore.map((l) => String(l.at)),
+      ...chapel.props.map((p) => String(p.at)),
+      ...chapel.enemies.map((e) => String(e.at)),
+      ...(chapel.ngPlus?.enemies ?? []).map((e) => String(e.at)),
+      ...chapel.lore.map((l) => String(l.at)),
     ]);
     for (const cell of reserved) {
-      expect(isWalkable(nave, cell), `echo cell ${String(cell)} must be walkable aisle`).toBe(true);
+      expect(isWalkable(chapel, cell), `echo cell ${String(cell)} must be walkable aisle`).toBe(true);
       expect(occupied.has(String(cell)), `echo cell ${String(cell)} must stay clear`).toBe(false);
     }
   });
 
-  it('the crypt is a near-black dread interior with 2 torches, 1 wraith, bones, 1 inscription', () => {
-    expect(crypt.dreadInterior).toBe(true);
-    expect(crypt.kind ?? 'interior').toBe('interior');
-    expect(crypt.ambientFloor).toBe(0.06); // the Undercroft's darkest precedent
-    expect(crypt.keyLightIntensity).toBe(0); // never defeat the wraith showcase
-    expect(crypt.torches?.length).toBe(2);
-    expect(crypt.enemies.filter((e) => e.kind === 'wraith')).toHaveLength(1);
-    expect((crypt.scatter ?? []).some((s) => s.kind === 'bones')).toBe(true);
-    expect(crypt.lore.map((l) => l.id)).toEqual(['act2-crypt-a']);
-    expect(LORE['act2-crypt-a']).toBeDefined();
-  });
-
-  it('both chapel doors resolve to labelled DoorInstances (Chapel Door + Crypt Stair)', () => {
+  it('the Chapel Door resolves to a labelled DoorInstance; the Crypt Stair is gone', () => {
     const byId = resolveDoorInstances(entries.map(([, d]) => d));
     expect(byId.get('af-to-chapel')?.label).toBe('Chapel Door');
-    expect(byId.get('nave-to-forest')?.label).toBe('Chapel Door');
-    expect(byId.get('nave-to-crypt')?.label).toBe('Crypt Stair');
-    expect(byId.get('crypt-to-nave')?.label).toBe('Crypt Stair');
+    expect(byId.get('sunken-chapel-to-forest')?.label).toBe('Chapel Door');
+    // The chapel's own crypt-stair doors are deleted (the merge killed them).
+    expect(byId.get('nave-to-crypt')).toBeUndefined();
+    expect(byId.get('crypt-to-nave')).toBeUndefined();
   });
 });
 

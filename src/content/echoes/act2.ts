@@ -14,10 +14,11 @@
  * Queen MAREN is the queen's-walk figure (queen rig = kneeler rig, pale). The
  * villagers reuse the soldier/kneeler rigs the manor's own vigil already uses.
  *
- * Cells are authored against ashenGate / burntManor / chapelNave and their
+ * Cells are authored against ashenGate / burntManor / sunkenChapel and their
  * test-locked reservations: the manor hearth block [6,3],[6,4],[7,3],[7,4] (the
- * merged `burnt-manor`, Task 15) and the nave aisle [4,3],[5,3],[6,3],[7,3] are
- * kept prop-free by Tasks 7–8/15, so the burning and the queen's walk stage there.
+ * merged `burnt-manor`, Task 15) and the chapel aisle [4,3],[5,3],[6,3],[7,3] (the
+ * merged `sunken-chapel`, Task 16) are kept prop-free, so the burning and the
+ * queen's walk stage there (the aisle cells are unchanged by the chapel merge).
  */
 import type { EchoSceneDef } from '../../engine/EchoScene';
 
@@ -95,16 +96,17 @@ export const ACT2_BURNING: EchoSceneDef = {
 };
 
 /**
- * ACT2-QUEENS-WALK — the Sunken Chapel nave. Queen Maren (queen rig, pale) paces
- * the central aisle her feet wore smooth: altar-ward to the foot of the dais,
- * then turns and walks back — turning before she reaches the door, as the nave's
- * inscription says. Two of the vigil's dead kneel on the dais she walks toward.
- * Staged on the aisle reserved by Task 7 (kept prop-free); trigger cells ARE the
+ * ACT2-QUEENS-WALK — the Sunken Chapel nave (the merged `sunken-chapel`, Task 16).
+ * Queen Maren (queen rig, pale) paces the central aisle her feet wore smooth:
+ * altar-ward to the foot of the dais, then turns and walks back — turning before
+ * she reaches the door, as the nave's inscription says. Two of the vigil's dead
+ * kneel on the dais she walks toward. Staged on the aisle reserved by Task 7/16
+ * (kept prop-free; the merge left the aisle cells unchanged); trigger cells ARE the
  * aisle, so the walk begins as the keeper steps onto it.
  */
 export const ACT2_QUEENS_WALK: EchoSceneDef = {
   id: 'act2-queens-walk',
-  zone: 'chapel-nave',
+  zone: 'sunken-chapel',
   act: 2,
   triggerCells: [
     [4, 3],

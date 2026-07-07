@@ -169,7 +169,7 @@ export function towerShellGeometry(): BufferGeometry {
  * that reads "chapel" across a dark treeline where a bare box would not. Placed
  * as an OFF-GRID backdrop prop behind the Chapel Door in the forest, so the ruin
  * READS from the road without being an enterable structure in the exterior grid
- * (the real interior is chapelNave / chapelCrypt, the tower-shell pattern). Cheap:
+ * (the real interior is the merged sunkenChapel zone, the tower-shell pattern). Cheap:
  * ~46 tris, one draw call, vertex-coloured for the flat PS1 look; base at y0
  * (never floats). Declared CC0 in assets/LICENSES.md. */
 export function chapelShellGeometry(): BufferGeometry {

@@ -42,7 +42,10 @@ const RESERVED_BLOCK: Partial<Record<string, GridPos[]>> = {
   // Task 15: the burning echo stages on the merged `burnt-manor` hearth block
   // (the manor-ground + manor-upper floor-zones are one continuous climb now).
   'burnt-manor': [[6, 3], [6, 4], [7, 3], [7, 4]],
-  'chapel-nave': [[4, 3], [5, 3], [6, 3], [7, 3]],
+  // Task 16: the queen's-walk echo stages on the merged `sunken-chapel` nave aisle
+  // (the chapel-nave + chapel-crypt floor-zones are one walked descent now; the
+  // merge left the aisle cells unchanged).
+  'sunken-chapel': [[4, 3], [5, 3], [6, 3], [7, 3]],
   // Task 14: the king-hollows echo moved onto the Great Hall gallery mezzanine
   // (the Hall Gallery merged into great-hall); the dais rides the overlook rail.
   'great-hall': [[3, 20], [3, 21], [4, 20], [4, 21]],

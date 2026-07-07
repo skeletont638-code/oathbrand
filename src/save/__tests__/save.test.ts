@@ -509,14 +509,29 @@ describe('zone-id aliases — retired zones survive a merge (world-expansion v1.
     // Task 15: the two manor floor-zones merged into the one `burnt-manor` climb.
     expect(resolveZoneAlias('manor-ground')).toBe('burnt-manor');
     expect(resolveZoneAlias('manor-upper')).toBe('burnt-manor');
-    // The alias table is exactly the retired ids (extensible in T16).
+    // Task 16: the two chapel floor-zones merged into the one `sunken-chapel` descent.
+    expect(resolveZoneAlias('chapel-nave')).toBe('sunken-chapel');
+    expect(resolveZoneAlias('chapel-crypt')).toBe('sunken-chapel');
+    // The alias table is exactly the retired ids.
     expect(ZONE_ALIASES).toEqual({
       'tower-ground': 'watchtower',
       'tower-upper': 'watchtower',
       'hall-gallery': 'great-hall',
       'manor-ground': 'burnt-manor',
       'manor-upper': 'burnt-manor',
+      'chapel-nave': 'sunken-chapel',
+      'chapel-crypt': 'sunken-chapel',
     });
+  });
+
+  it("a v2 save resuming in 'chapel-nave' or 'chapel-crypt' loads into 'sunken-chapel' (Task 16 merge)", () => {
+    // The owner's live localStorage may have checkpointed on either old chapel floor;
+    // both land in the merged descent — the closest surviving space — with no data loss.
+    for (const old of ['chapel-nave', 'chapel-crypt'] as const) {
+      localStorage.setItem(SAVE_KEY, JSON.stringify({ ...SAMPLE_V2, zone: old }));
+      const loaded = loadGame();
+      expect(loaded?.zone, `${old} → sunken-chapel`).toBe('sunken-chapel');
+    }
   });
 
   it("a v2 save resuming in 'hall-gallery' loads into 'great-hall' (Task 14 merge)", () => {

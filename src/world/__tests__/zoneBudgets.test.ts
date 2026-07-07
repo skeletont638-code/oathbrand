@@ -57,15 +57,16 @@ function drawCalls(group: Group): number {
  *  `watchtower` continuous-climb zone; Task 14 merged the Hall Gallery INTO the
  *  Great Hall as a mezzanine, so `great-hall` (now a taller, banded hall) takes
  *  the gallery's slot here; Task 15 merged the two manor floor-zones (manor-ground
- *  + manor-upper) into the single `burnt-manor` continuous-climb zone — the
- *  ≤100-draw-call ceiling is still asserted for the bigger, banded manor. */
+ *  + manor-upper) into the single `burnt-manor` continuous-climb zone; Task 16
+ *  merged the two chapel floor-zones (chapel-nave + chapel-crypt) into the single
+ *  `sunken-chapel` walked descent — the ≤100-draw-call ceiling is still asserted
+ *  for the bigger, banded chapel. */
 const NEW_ZONES = [
   'great-hall',
   'hall-barracks',
   'keep-chapel',
   'watchtower',
-  'chapel-nave',
-  'chapel-crypt',
+  'sunken-chapel',
   'burnt-manor',
 ] as const;
 

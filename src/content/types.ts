@@ -24,9 +24,10 @@ export type ZoneId =
   //     tower-ground + tower-upper floor-zones merged into one continuous
   //     climb in Task 13. The retired ids survive as save aliases, save.ts). ---
   | 'watchtower'
-  // --- World Expansion v1.2 — the Sunken Chapel, Ashen Forest N (Task 7) ---
-  | 'chapel-nave'
-  | 'chapel-crypt'
+  // --- World Expansion v1.2 — the Sunken Chapel, Ashen Forest N (Task 7; the
+  //     chapel-nave + chapel-crypt floor-zones merged into one walked descent in
+  //     Task 16. The retired ids survive as save aliases, save.ts). ---
+  | 'sunken-chapel'
   // --- World Expansion v1.2 — the Burnt Manor, Cinder Village (Task 8; the
   //     manor-ground + manor-upper floor-zones merged into one continuous climb
   //     in Task 15. The retired ids survive as save aliases, save.ts). ---

@@ -101,8 +101,9 @@ export const SAVE_KEY = 'oathbrand.save.v1';
  * mezzanine (`hall-gallery` → `great-hall`, so a save on the old gallery floor
  * lands in the hall — the closest surviving space); Task 15 merged the Burnt Manor
  * (manor-ground + manor-upper → the one `burnt-manor` zone, so a save on either
- * old manor floor lands in the merged climb). Task 16 adds its own entries here as
- * the chapel floor-pair merges — one line per retired id.
+ * old manor floor lands in the merged climb); Task 16 merged the Sunken Chapel
+ * (chapel-nave + chapel-crypt → the one `sunken-chapel` walked descent, so a save
+ * on either old chapel floor lands in the merged zone).
  */
 export const ZONE_ALIASES: Readonly<Record<string, ZoneId>> = {
   'tower-ground': 'watchtower',
@@ -110,6 +111,8 @@ export const ZONE_ALIASES: Readonly<Record<string, ZoneId>> = {
   'hall-gallery': 'great-hall',
   'manor-ground': 'burnt-manor',
   'manor-upper': 'burnt-manor',
+  'chapel-nave': 'sunken-chapel',
+  'chapel-crypt': 'sunken-chapel',
 };
 
 /** Resolve a possibly-retired zone id to the surviving zone (identity for a

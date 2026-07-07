@@ -22,8 +22,7 @@ import { PILGRIMS_DESCENT } from './pilgrimsDescent';
 import { HALL_BARRACKS } from './hallBarracks';
 import { KEEP_CHAPEL } from './keepChapel';
 import { WATCHTOWER } from './watchtower';
-import { CHAPEL_NAVE } from './chapelNave';
-import { CHAPEL_CRYPT } from './chapelCrypt';
+import { SUNKEN_CHAPEL } from './sunkenChapel';
 import { BURNT_MANOR } from './burntManor';
 
 /** Every built zone, by id. The seven-zone castle campaign (T11–T16) plus the
@@ -55,10 +54,13 @@ export const ZONES: Partial<Record<ZoneId, ZoneDef>> = {
   // the open roof-walk over the fields (the tower-ground + tower-upper floor-
   // zones and their Stair Door fade are merged into this single banded zone).
   watchtower: WATCHTOWER,
-  // World Expansion v1.2 (Task 7) — the Sunken Chapel off the Ashen Forest road:
-  // the half-collapsed nave (the queen's-walk echo room) and the crypt beneath.
-  'chapel-nave': CHAPEL_NAVE,
-  'chapel-crypt': CHAPEL_CRYPT,
+  // World Expansion v1.2 (Task 7, merged in Task 16) — the Sunken Chapel off the
+  // Ashen Forest road: ONE walked descent from the half-collapsed nave (the
+  // queen's-walk echo room, raised altar intact) down the crypt stair into the
+  // dark bone-vault sunk beside/below it (the chapel-nave + chapel-crypt floor-
+  // zones and their Crypt Stair fade are merged into this single banded zone; the
+  // retired ids survive as save aliases, save.ts).
+  'sunken-chapel': SUNKEN_CHAPEL,
   // World Expansion v1.2 (Task 8, merged in Task 15) — the Burnt Manor off the
   // Cinder Village plaza: ONE continuous climb from the fire-gutted tithe-hall
   // (the burning-echo room) up the stair to the burnt gallery whose rail overlooks

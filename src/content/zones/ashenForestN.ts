@@ -30,7 +30,7 @@ import type { ZoneDef } from '../../world/zoneDef';
 export const ASHEN_FOREST_N: ZoneDef = {
   id: 'ashen-forest-n',
   grid: [
-    '###4###########', // 0  N wall — Chapel Door '4' [0,3] → chapel-nave (Task 7, unlocked)
+    '###4###########', // 0  N wall — Chapel Door '4' [0,3] → sunken-chapel (Task 7/16, unlocked)
     '3ppt..t..tTtTT#', // 1  W door 3 [1,0] → gate-fields (pair 'gf-forest')
     '#.Spt.t.tTTTTT#', // 2  S spawn [2,2] (plain floor, the west road)
     '#t.pp.t.T.tTTT#', // 3
@@ -57,7 +57,7 @@ export const ASHEN_FOREST_N: ZoneDef = {
     // backdrop prop ([-1,3], one cell north of the Chapel Door '4' at [0,3], in
     // the treeline) so the half-collapsed chapel READS from the road WITHOUT
     // being an enterable structure in the exterior grid — its interior is
-    // chapelNave / chapelCrypt. A single ~46-tri procedural masonry shell (1 draw
+    // the merged sunkenChapel zone. A single ~46-tri procedural masonry shell (1 draw
     // call; PROCEDURAL_PROPS 'chapel-shell') — a roofless nave under a leaning
     // cross. Off-grid ⇒ unreachable set-dressing (the collider treats
     // out-of-bounds as solid), like the Gate Fields watchtower shell.
@@ -84,13 +84,14 @@ export const ASHEN_FOREST_N: ZoneDef = {
     // The spoke door — the road-end at the fog-line / Hag cairn is a dead-end,
     // so this is the only way back to the fields.
     { id: 'af-to-fields', at: [1, 0], to: 'gate-fields', pair: 'gf-forest' },
-    // World Expansion v1.2 (Task 7). The Chapel Door off the west road into the
-    // Sunken Chapel's nave (chapelNave). Unlocked; the 'Chapel Door' decoration is
-    // declared on the nave side (one side per edge), so this end renders the same
-    // door. New gate cell '4' on the N wall — no contract cell (spawn/banner/
-    // hounds/lore/beats/hag-glimpse) is disturbed; its inward entry [1,3] is clean
-    // road floor.
-    { id: 'af-to-chapel', at: [0, 3], to: 'chapel-nave', pair: 'chapel-door' },
+    // World Expansion v1.2 (Task 7; merged Task 16). The Chapel Door off the west
+    // road into the Sunken Chapel (sunkenChapel — nave + crypt, one walked descent).
+    // Unlocked; the 'Chapel Door' decoration is declared on the chapel side (one
+    // side per edge), so this end renders the same door. TARGET-only retarget
+    // (chapel-nave → sunken-chapel); the gate cell '4' on the N wall is UNTOUCHED —
+    // no contract cell (spawn/banner/hounds/lore/beats/hag-glimpse) is disturbed;
+    // its inward entry [1,3] is clean road floor.
+    { id: 'af-to-chapel', at: [0, 3], to: 'sunken-chapel', pair: 'chapel-door' },
   ],
   ambience: ['amb-forest-hush', 'amb-forest-wrong'],
   scares: [
