@@ -506,11 +506,16 @@ describe('zone-id aliases — retired zones survive a merge (world-expansion v1.
     expect(resolveZoneAlias('tower-upper')).toBe('watchtower');
     // Task 14: the Hall Gallery merged INTO the Great Hall as a mezzanine.
     expect(resolveZoneAlias('hall-gallery')).toBe('great-hall');
-    // The alias table is exactly the retired ids (extensible in T15–16).
+    // Task 15: the two manor floor-zones merged into the one `burnt-manor` climb.
+    expect(resolveZoneAlias('manor-ground')).toBe('burnt-manor');
+    expect(resolveZoneAlias('manor-upper')).toBe('burnt-manor');
+    // The alias table is exactly the retired ids (extensible in T16).
     expect(ZONE_ALIASES).toEqual({
       'tower-ground': 'watchtower',
       'tower-upper': 'watchtower',
       'hall-gallery': 'great-hall',
+      'manor-ground': 'burnt-manor',
+      'manor-upper': 'burnt-manor',
     });
   });
 

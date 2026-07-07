@@ -56,8 +56,9 @@ function drawCalls(group: Group): number {
  *  two watchtower floor-zones (tower-ground + tower-upper) into the single
  *  `watchtower` continuous-climb zone; Task 14 merged the Hall Gallery INTO the
  *  Great Hall as a mezzanine, so `great-hall` (now a taller, banded hall) takes
- *  the gallery's slot here — the ≤100-draw-call ceiling is still asserted for the
- *  bigger hall. */
+ *  the gallery's slot here; Task 15 merged the two manor floor-zones (manor-ground
+ *  + manor-upper) into the single `burnt-manor` continuous-climb zone — the
+ *  ≤100-draw-call ceiling is still asserted for the bigger, banded manor. */
 const NEW_ZONES = [
   'great-hall',
   'hall-barracks',
@@ -65,8 +66,7 @@ const NEW_ZONES = [
   'watchtower',
   'chapel-nave',
   'chapel-crypt',
-  'manor-ground',
-  'manor-upper',
+  'burnt-manor',
 ] as const;
 
 describe('per-zone draw-call budget — the new World Expansion zones (Task 10)', () => {

@@ -27,9 +27,10 @@ export type ZoneId =
   // --- World Expansion v1.2 — the Sunken Chapel, Ashen Forest N (Task 7) ---
   | 'chapel-nave'
   | 'chapel-crypt'
-  // --- World Expansion v1.2 — the Burnt Manor, Cinder Village (Task 8) ---
-  | 'manor-ground'
-  | 'manor-upper';
+  // --- World Expansion v1.2 — the Burnt Manor, Cinder Village (Task 8; the
+  //     manor-ground + manor-upper floor-zones merged into one continuous climb
+  //     in Task 15. The retired ids survive as save aliases, save.ts). ---
+  | 'burnt-manor';
 
 export type EnemyKind = 'soldier' | 'archer' | 'wraith' | 'forsworn' | 'hound' | 'kneeler';
 

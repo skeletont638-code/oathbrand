@@ -14,10 +14,10 @@
  * Queen MAREN is the queen's-walk figure (queen rig = kneeler rig, pale). The
  * villagers reuse the soldier/kneeler rigs the manor's own vigil already uses.
  *
- * Cells are authored against ashenGate / manorGround / chapelNave and their
- * test-locked reservations: the manor hearth block [3,3],[3,4],[4,3],[4,4] and
- * the nave aisle [4,3],[5,3],[6,3],[7,3] are kept prop-free by Tasks 7–8, so the
- * burning and the queen's walk stage there.
+ * Cells are authored against ashenGate / burntManor / chapelNave and their
+ * test-locked reservations: the manor hearth block [6,3],[6,4],[7,3],[7,4] (the
+ * merged `burnt-manor`, Task 15) and the nave aisle [4,3],[5,3],[6,3],[7,3] are
+ * kept prop-free by Tasks 7–8/15, so the burning and the queen's walk stage there.
  */
 import type { EchoSceneDef } from '../../engine/EchoScene';
 
@@ -64,33 +64,33 @@ export const ACT2_BETRAYAL: EchoSceneDef = {
 };
 
 /**
- * ACT2-BURNING — the Burnt Manor's tithe-hall. The villagers gather before the
- * caved hearth (the `pillar`/`rubble` cluster on the W wall) as the fire takes
- * the hall; one kneels to be counted rather than burn (echoing the manor's own
- * sanctioned kneeler at [4,2]); a last villager steps in from the south. Staged
- * on the hearth block reserved by Task 8 (kept prop-free); trigger cells sit ON
- * the block, the tread up from the Manor Door.
+ * ACT2-BURNING — the Burnt Manor's tithe-hall (the merged `burnt-manor`, Task 15).
+ * The villagers gather before the caved hearth (the `pillar`/`rubble` cluster on
+ * the W wall at [6,1]/[7,1]) as the fire takes the hall; one kneels to be counted
+ * rather than burn (echoing the manor's own sanctioned kneeler at [6,2]); a last
+ * villager steps in from the south, up from the Manor Door. Staged on the hearth
+ * block reserved by Tasks 8/15 (kept prop-free); trigger cells sit ON the block.
  */
 export const ACT2_BURNING: EchoSceneDef = {
   id: 'act2-burning',
-  zone: 'manor-ground',
+  zone: 'burnt-manor',
   act: 2,
   triggerCells: [
-    [3, 3],
-    [3, 4],
-    [4, 3],
-    [4, 4],
+    [6, 3],
+    [6, 4],
+    [7, 3],
+    [7, 4],
   ],
   durationMs: 14000,
   actors: [
     // Villagers gathered at the warmth, facing the hearth on the west wall.
-    { rig: 'soldier', at: [3, 3], facing: W },
-    { rig: 'soldier', at: [3, 4], facing: W },
-    { rig: 'soldier', at: [4, 4], facing: W },
+    { rig: 'soldier', at: [6, 3], facing: W },
+    { rig: 'soldier', at: [6, 4], facing: W },
+    { rig: 'soldier', at: [7, 4], facing: W },
     // The one who knelt to be counted rather than take the fire.
-    { rig: 'kneeler', at: [4, 3], facing: W },
+    { rig: 'kneeler', at: [7, 3], facing: W },
     // A last villager steps up toward the pyre from the door.
-    { rig: 'soldier', at: [6, 3], facing: N, keyframes: [{ tMs: 6000, at: [5, 3] }] },
+    { rig: 'soldier', at: [9, 3], facing: N, keyframes: [{ tMs: 6000, at: [8, 3] }] },
   ],
 };
 

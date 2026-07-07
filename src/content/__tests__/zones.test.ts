@@ -141,13 +141,16 @@ describe('zone registry', () => {
     expect(ZONES['chapel-crypt']).toBeDefined();
   });
 
-  it('registers the Burnt Manor — ground + upper (Task 8)', () => {
+  it('registers the Burnt Manor — one continuous climb (Task 8 / merged Task 15)', () => {
     // World Expansion v1.2: the third and final landscape ruin. Task 13 merged the
     // two watchtower floor-zones into one (20 → 19); Task 14 merged the Hall
-    // Gallery into the Great Hall as a mezzanine (19 → 18).
-    expect(ZONES['manor-ground']).toBeDefined();
-    expect(ZONES['manor-upper']).toBeDefined();
-    expect(Object.keys(ZONES)).toHaveLength(18);
+    // Gallery into the Great Hall as a mezzanine (19 → 18); Task 15 merged the two
+    // manor floor-zones (manor-ground + manor-upper) into the single `burnt-manor`
+    // continuous-climb zone (18 → 17). The retired ids survive as save aliases.
+    expect(ZONES['burnt-manor']).toBeDefined();
+    expect(ZONES['manor-ground' as ZoneId]).toBeUndefined();
+    expect(ZONES['manor-upper' as ZoneId]).toBeUndefined();
+    expect(Object.keys(ZONES)).toHaveLength(17);
   });
 
   it('zoneOrThrow returns every registered zone (the campaign is complete)', () => {
@@ -691,27 +694,39 @@ describe('The Sunken Chapel (Task 7) — entry, echo aisle, and crypt', () => {
   });
 });
 
-describe('The Burnt Manor (Task 8) — entry, hearth vigil, and burnt gallery', () => {
+describe('The Burnt Manor (Task 8 / merged Task 15) — one continuous climb', () => {
   const village = zoneOrThrow('cinder-village');
-  const ground = zoneOrThrow('manor-ground');
-  const upper = zoneOrThrow('manor-upper');
+  const manor = zoneOrThrow('burnt-manor');
+
+  it('the Burnt Manor is merged in: manor-ground/manor-upper unregistered, the Stair Door is gone', () => {
+    // No teleport in traversal: the two floor-zones + their Stair Door fade are
+    // gone; the stair is now a walked heightGrid climb inside one zone.
+    expect(ZONES['manor-ground' as ZoneId]).toBeUndefined();
+    expect(ZONES['manor-upper' as ZoneId]).toBeUndefined();
+    expect(manor.doors).toHaveLength(1);
+    expect(manor.doors[0].to).toBe('cinder-village');
+    expect(manor.doors.some((d) => d.pair === 'manor-stair')).toBe(false);
+    expect((manor.gateDoors ?? []).some((g) => g.label === 'Stair Door')).toBe(false);
+  });
 
   it('the Manor Door pairs both ways between the Cinder Village and the gutted hall', () => {
     const cvToManor = village.doors.find((d) => d.id === 'cv-to-manor');
-    const manorToVillage = ground.doors.find((d) => d.id === 'manor-ground-to-village');
+    const manorToVillage = manor.doors.find((d) => d.id === 'burnt-manor-to-village');
     expect(cvToManor, 'cinder-village is missing the cv-to-manor door').toBeDefined();
-    expect(manorToVillage, 'manor-ground is missing the manor-ground-to-village door').toBeDefined();
+    expect(manorToVillage, 'burnt-manor is missing the burnt-manor-to-village door').toBeDefined();
+    expect(cvToManor!.to, 'the village gate is retargeted from manor-ground to burnt-manor').toBe('burnt-manor');
     expect(cvToManor!.pair).toBe('manor-door');
     expect(manorToVillage!.pair).toBe('manor-door');
     expect(cvToManor!.lock, 'the Manor Door is unlocked').toBeUndefined();
-    // The new gate cell '1' sits in the central-plaza pocket, not on any prior gate.
+    // The village gate cell '1' is UNCHANGED (retarget only), in the plaza pocket.
     expect(charAt(village, [3, 8])).toBe('1');
-    expect(pairedDoor('cinder-village', cvToManor!, ground)?.to).toBe('cinder-village');
-    expect(pairedDoor('manor-ground', manorToVillage!, village)?.to).toBe('manor-ground');
+    expect(pairedDoor('cinder-village', cvToManor!, manor)?.to).toBe('cinder-village');
+    expect(pairedDoor('burnt-manor', manorToVillage!, village)?.to).toBe('burnt-manor');
   });
 
-  it('the new Manor Door gate does not disturb any Cinder Village contract cell', () => {
-    // The spawn/roads/banner and the frozen-procession cells keep theirs.
+  it('the retarget does not disturb any Cinder Village contract cell', () => {
+    // The village grid/spawn/roads/banner and the frozen-procession cells are all
+    // untouched — only the door DEF target changed (manor-ground → burnt-manor).
     expect(charAt(village, [4, 1])).toBe('S'); // spawn, untouched
     expect(charAt(village, [4, 0])).toBe('3'); // the fields road
     expect(charAt(village, [4, 14])).toBe('D'); // the sealed east arch
@@ -733,74 +748,94 @@ describe('The Burnt Manor (Task 8) — entry, hearth vigil, and burnt gallery', 
     expect(isPlainFloor(village, [4, 8])).toBe(true);
   });
 
-  it('the Stair Door pairs both ways between the two manor floors', () => {
-    const groundUp = ground.doors.find((d) => d.id === 'manor-ground-to-upper');
-    const upperDown = upper.doors.find((d) => d.id === 'manor-upper-to-ground');
-    expect(groundUp?.pair).toBe('manor-stair');
-    expect(upperDown?.pair).toBe('manor-stair');
-    expect(pairedDoor('manor-ground', groundUp!, upper)?.to).toBe('manor-ground');
-    expect(pairedDoor('manor-upper', upperDown!, ground)?.to).toBe('manor-upper');
+  it('is ONE dread interior — hearth-vigil hall below, burnt gallery above, no Stair-Door fade', () => {
+    // BOTH old halves were dread interiors; the merged zone keeps it (roofed
+    // masonry, near-void-black ambient so the torches pool and the hole stays black).
+    expect(manor.dreadInterior).toBe(true);
+    expect(manor.kind ?? 'interior').toBe('interior');
+    expect(manor.ambientFloor).toBe(0.08); // hall-gallery precedent — the hole stays black
   });
 
-  it('the gutted hall is a dread interior with a kneeler vigil, 3 torches (2 lit + 1 unlit), 1 Act-II inscription', () => {
-    expect(ground.dreadInterior).toBe(true);
-    expect(ground.kind ?? 'interior').toBe('interior');
-    // The sanctioned kneeler-vigil (T5) knelt by the hearth.
-    expect(ground.enemies.filter((e) => e.kind === 'kneeler')).toHaveLength(1);
-    // Torches ×3 as a mix: 2 LIT kit torches + 1 UNLIT bare `torch` bracket prop.
-    expect(ground.torches?.length).toBe(2);
-    expect(ground.props.filter((p) => p.kind === 'torch')).toHaveLength(1);
-    // The hearth read = a prop cluster (hearth-breast pillar + fallen chimney rubble).
-    expect(ground.props.some((p) => p.kind === 'pillar' && String(p.at) === '4,1')).toBe(true);
-    expect(ground.lore.map((l) => l.id)).toEqual(['act2-manor-a']);
-    expect(LORE['act2-manor-a']).toBeDefined();
-  });
-
-  it('reserves the 2×2 burning-echo block by the hearth prop/enemy-free (Scene 4, Task 9)', () => {
-    const reserved: GridPos[] = [[3, 3], [3, 4], [4, 3], [4, 4]];
-    const occupied = new Set<string>([
-      ...ground.props.map((p) => String(p.at)),
-      ...ground.enemies.map((e) => String(e.at)),
-      ...(ground.ngPlus?.enemies ?? []).map((e) => String(e.at)),
-      ...ground.lore.map((l) => String(l.at)),
-    ]);
-    for (const cell of reserved) {
-      expect(isWalkable(ground, cell), `echo cell ${String(cell)} must be walkable hall`).toBe(true);
-      expect(occupied.has(String(cell)), `echo cell ${String(cell)} must stay clear`).toBe(false);
+  it('the heightGrid is a continuous banded climb: ground hall band 0 → burnt gallery band 2', () => {
+    expect(manor.heightGrid, 'burnt-manor needs a heightGrid').toBeDefined();
+    expect(manor.heightGrid!.length).toBe(manor.grid.length);
+    for (let r = 0; r < manor.heightGrid!.length; r++) {
+      expect(manor.heightGrid![r].length).toBe(manor.grid[r].length);
+    }
+    const bands = new Set(manor.heightGrid!.join('').split(''));
+    expect(bands.has('0'), 'ground hall band 0').toBe(true);
+    expect(bands.has('2'), 'gallery balcony band 2').toBe(true);
+    const seams = buildHeightRamps(manor);
+    expect(seams.some((s) => s.kind === 'ramp'), 'the stair is a run of walkable ramps').toBe(true);
+    expect(seams.some((s) => s.kind === 'cliff'), 'the gallery rail drops to the well as a cliff').toBe(true);
+    // Every gallery cell floods from the hall spawn by walking (flat collision, no
+    // jump): the stair foot, the stair top, and the gallery rail over the hole.
+    const reach = walkableReach(manor);
+    for (const cell of [[5, 5], [4, 6], [3, 5], [2, 3], [3, 2]] as GridPos[]) {
+      expect(reach.has(String(cell)), `climb cell ${String(cell)} unreachable from spawn`).toBe(true);
     }
   });
 
-  it('the burnt gallery is a dread interior with missing-floor void, 1 soldier, 2 torches, 1 inscription', () => {
-    expect(upper.dreadInterior).toBe(true);
-    expect(upper.kind ?? 'interior').toBe('interior');
-    // The burned-through hole is authored as `~` void cells reading DOWN.
-    const voidCells = upper.grid.flatMap((row, r) =>
+  it('the missing-floor hole is a real `~` overlook well the gallery rail looks down into', () => {
+    // The T8 "missing floor" fiction is real geometry now: the burned-through hole
+    // is `~` void (band 0) the band-2 gallery rail drops Δ2 into (a cliff face).
+    const voidCells = manor.grid.flatMap((row, r) =>
       [...row].flatMap((ch, c) => (ch === '~' ? [[r, c] as GridPos] : [])),
     );
     expect(voidCells.length, 'the gallery needs missing-floor void cells').toBeGreaterThan(0);
     // A walkable route reaches every content cell without crossing the hole: BFS
-    // the walkable cells from the spawn and assert each door/enemy/lore/torch cell
-    // (or a walkable orthogonal neighbour, for wall-hung torches) is reached.
-    const reach = walkableReach(upper);
+    // from the spawn and assert each door/enemy/lore/torch cell (or a walkable
+    // orthogonal neighbour, for wall-hung torches) is reached.
+    const reach = walkableReach(manor);
     const near = (at: GridPos): boolean =>
       reach.has(String(at)) ||
       [[-1, 0], [1, 0], [0, -1], [0, 1]].some(([dr, dc]) => reach.has(String([at[0] + dr, at[1] + dc])));
-    for (const d of upper.doors) expect(near(d.at), `door ${d.id} unreachable`).toBe(true);
-    for (const e of upper.enemies) expect(near(e.at), `enemy @ ${String(e.at)} unreachable`).toBe(true);
-    for (const l of upper.lore) expect(near(l.at), `lore ${l.id} unreachable`).toBe(true);
-    for (const t of upper.torches ?? []) expect(near(t.at), `torch @ ${String(t.at)} unreachable`).toBe(true);
-    expect(upper.enemies.filter((e) => e.kind === 'soldier')).toHaveLength(1);
-    expect(upper.torches?.length).toBe(2);
-    expect(upper.lore.map((l) => l.id)).toEqual(['act2-manor-b']);
-    expect(LORE['act2-manor-b']).toBeDefined();
+    for (const d of manor.doors) expect(near(d.at), `door ${d.id} unreachable`).toBe(true);
+    for (const e of manor.enemies) expect(near(e.at), `enemy @ ${String(e.at)} unreachable`).toBe(true);
+    for (const l of manor.lore) expect(near(l.at), `lore ${l.id} unreachable`).toBe(true);
+    for (const t of manor.torches ?? []) expect(near(t.at), `torch @ ${String(t.at)} unreachable`).toBe(true);
   });
 
-  it('both manor doors resolve to labelled DoorInstances (Manor Door + Stair Door)', () => {
+  it('keeps ALL prior content — kneeler vigil + soldier, 4 lit + 1 unlit torch, both Act-II inscriptions, 2 NG+ wraiths', () => {
+    // The sanctioned kneeler-vigil (ground) + the hollow soldier (gallery).
+    expect(manor.enemies.filter((e) => e.kind === 'kneeler')).toHaveLength(1);
+    expect(manor.enemies.filter((e) => e.kind === 'soldier')).toHaveLength(1);
+    // Torches: 4 LIT kit torches (2 hall + 2 gallery) + 1 UNLIT bare `torch` prop —
+    // 5 brackets total, under the hard ≤6 cap.
+    expect(manor.torches?.length).toBe(4);
+    expect((manor.torches?.length ?? 0)).toBeLessThanOrEqual(6);
+    expect(manor.props.filter((p) => p.kind === 'torch')).toHaveLength(1);
+    // The hearth read = a prop cluster (hearth-breast pillar + fallen chimney rubble).
+    expect(manor.props.some((p) => p.kind === 'pillar' && String(p.at) === '6,1')).toBe(true);
+    // Both Act-II inscriptions relocated (the hall burning + the gallery waverers).
+    expect(manor.lore.map((l) => l.id).sort()).toEqual(['act2-manor-a', 'act2-manor-b']);
+    expect(LORE['act2-manor-a']).toBeDefined();
+    expect(LORE['act2-manor-b']).toBeDefined();
+    // The Second Vigil keeps BOTH old floors' wraiths (hall beams + gallery hole).
+    expect((manor.ngPlus?.enemies ?? []).filter((e) => e.kind === 'wraith')).toHaveLength(2);
+  });
+
+  it('reserves the 2×2 burning-echo block by the hearth prop/enemy-free (Scene 4, Task 9 / relocated Task 15)', () => {
+    const reserved: GridPos[] = [[6, 3], [6, 4], [7, 3], [7, 4]];
+    const occupied = new Set<string>([
+      ...manor.props.map((p) => String(p.at)),
+      ...manor.enemies.map((e) => String(e.at)),
+      ...(manor.ngPlus?.enemies ?? []).map((e) => String(e.at)),
+      ...manor.lore.map((l) => String(l.at)),
+    ]);
+    for (const cell of reserved) {
+      expect(isWalkable(manor, cell), `echo cell ${String(cell)} must be walkable hall`).toBe(true);
+      expect(occupied.has(String(cell)), `echo cell ${String(cell)} must stay clear`).toBe(false);
+    }
+  });
+
+  it('the Manor Door resolves to a labelled DoorInstance; the manor Stair Door is gone', () => {
     const byId = resolveDoorInstances(entries.map(([, d]) => d));
     expect(byId.get('cv-to-manor')?.label).toBe('Manor Door');
-    expect(byId.get('manor-ground-to-village')?.label).toBe('Manor Door');
-    expect(byId.get('manor-ground-to-upper')?.label).toBe('Stair Door');
-    expect(byId.get('manor-upper-to-ground')?.label).toBe('Stair Door');
+    expect(byId.get('burnt-manor-to-village')?.label).toBe('Manor Door');
+    // The manor's own stair doors are deleted (the merge killed them).
+    expect(byId.get('manor-ground-to-upper')).toBeUndefined();
+    expect(byId.get('manor-upper-to-ground')).toBeUndefined();
   });
 });
 

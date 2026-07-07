@@ -99,13 +99,17 @@ export const SAVE_KEY = 'oathbrand.save.v1';
  * EXTENSIBLE: Task 13 merged the watchtower (tower-ground + tower-upper → the one
  * `watchtower` zone); Task 14 merged the Hall Gallery INTO the Great Hall as a
  * mezzanine (`hall-gallery` → `great-hall`, so a save on the old gallery floor
- * lands in the hall — the closest surviving space). Tasks 15–16 add their own
- * entries here as the manor and chapel floor-pairs merge — one line per retired id.
+ * lands in the hall — the closest surviving space); Task 15 merged the Burnt Manor
+ * (manor-ground + manor-upper → the one `burnt-manor` zone, so a save on either
+ * old manor floor lands in the merged climb). Task 16 adds its own entries here as
+ * the chapel floor-pair merges — one line per retired id.
  */
 export const ZONE_ALIASES: Readonly<Record<string, ZoneId>> = {
   'tower-ground': 'watchtower',
   'tower-upper': 'watchtower',
   'hall-gallery': 'great-hall',
+  'manor-ground': 'burnt-manor',
+  'manor-upper': 'burnt-manor',
 };
 
 /** Resolve a possibly-retired zone id to the surviving zone (identity for a

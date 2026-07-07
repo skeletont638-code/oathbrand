@@ -39,7 +39,9 @@ const CANONICAL_IDS = [
  *  scene in one of these zones must arm ONLY from cells inside its block. */
 const RESERVED_BLOCK: Partial<Record<string, GridPos[]>> = {
   watchtower: [[2, 2], [2, 3], [3, 2], [3, 3]],
-  'manor-ground': [[3, 3], [3, 4], [4, 3], [4, 4]],
+  // Task 15: the burning echo stages on the merged `burnt-manor` hearth block
+  // (the manor-ground + manor-upper floor-zones are one continuous climb now).
+  'burnt-manor': [[6, 3], [6, 4], [7, 3], [7, 4]],
   'chapel-nave': [[4, 3], [5, 3], [6, 3], [7, 3]],
   // Task 14: the king-hollows echo moved onto the Great Hall gallery mezzanine
   // (the Hall Gallery merged into great-hall); the dais rides the overlook rail.

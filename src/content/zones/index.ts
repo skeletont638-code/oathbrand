@@ -24,8 +24,7 @@ import { KEEP_CHAPEL } from './keepChapel';
 import { WATCHTOWER } from './watchtower';
 import { CHAPEL_NAVE } from './chapelNave';
 import { CHAPEL_CRYPT } from './chapelCrypt';
-import { MANOR_GROUND } from './manorGround';
-import { MANOR_UPPER } from './manorUpper';
+import { BURNT_MANOR } from './burntManor';
 
 /** Every built zone, by id. The seven-zone castle campaign (T11–T16) plus the
  *  first Greater Vael exteriors — the Gate Fields hub (Task 9), the Ashen
@@ -60,10 +59,13 @@ export const ZONES: Partial<Record<ZoneId, ZoneDef>> = {
   // the half-collapsed nave (the queen's-walk echo room) and the crypt beneath.
   'chapel-nave': CHAPEL_NAVE,
   'chapel-crypt': CHAPEL_CRYPT,
-  // World Expansion v1.2 (Task 8) — the Burnt Manor off the Cinder Village plaza:
-  // the fire-gutted tithe-hall (the burning-echo room) and the burnt gallery above.
-  'manor-ground': MANOR_GROUND,
-  'manor-upper': MANOR_UPPER,
+  // World Expansion v1.2 (Task 8, merged in Task 15) — the Burnt Manor off the
+  // Cinder Village plaza: ONE continuous climb from the fire-gutted tithe-hall
+  // (the burning-echo room) up the stair to the burnt gallery whose rail overlooks
+  // the hall below (the manor-ground + manor-upper floor-zones and their Stair
+  // Door fade are merged into this single banded zone; the retired ids survive as
+  // save aliases, save.ts).
+  'burnt-manor': BURNT_MANOR,
 };
 
 /**
